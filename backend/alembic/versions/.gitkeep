@@ -1,0 +1,3 @@
+# Alembic migration versions directory
+# Migration files will be auto-generated here by:
+#   alembic revision --autogenerate -m "description"
