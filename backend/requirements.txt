@@ -1,0 +1,40 @@
+# ==============================================================
+# Auto-Apply Backend — Production Dependencies
+# ==============================================================
+# Tech Decisions:
+#   - FastAPI for async REST API
+#   - SQLAlchemy 2.0 (async) + asyncpg for PostgreSQL
+#   - Alembic for database migrations
+#   - OpenAI SDK for GPT-4 agent integration
+#   - Adzuna API accessed via httpx
+# ==============================================================
+
+# --- Web Framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# --- Database ---
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.1
+
+# --- Configuration ---
+pydantic-settings==2.7.1
+pydantic[email]==2.10.5
+
+# --- Authentication ---
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# --- File Handling ---
+python-multipart==0.0.20
+
+# --- HTTP Client (for Adzuna API) ---
+httpx==0.28.1
+
+# --- LLM Integration (OpenAI GPT-4) ---
+openai==1.59.7
+
+# --- PDF/DOCX Parsing (CV Profiler) ---
+PyPDF2==3.0.1
+python-docx==1.1.2
