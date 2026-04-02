@@ -159,11 +159,28 @@ function Login() {
             margin: 'var(--space-6) 0',
           }}
         >
-          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid var(--color-border)' }} />
-          <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+          <hr
+            style={{
+              flex: 1,
+              border: 'none',
+              borderTop: '1px solid var(--color-border)',
+            }}
+          />
+          <span
+            style={{
+              color: 'var(--color-text-muted)',
+              fontSize: 'var(--font-size-sm)',
+            }}
+          >
             or continue with
           </span>
-          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid var(--color-border)' }} />
+          <hr
+            style={{
+              flex: 1,
+              border: 'none',
+              borderTop: '1px solid var(--color-border)',
+            }}
+          />
         </div>
 
         {/* OAuth Buttons — Phase 2 */}

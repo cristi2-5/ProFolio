@@ -21,7 +21,12 @@ function Dashboard() {
       <div className="header-bar">
         <div>
           <h2>Dashboard</h2>
-          <p style={{ color: 'var(--color-text-secondary)', marginTop: 'var(--space-1)' }}>
+          <p
+            style={{
+              color: 'var(--color-text-secondary)',
+              marginTop: 'var(--space-1)',
+            }}
+          >
             Your AI-powered job hunting command center
           </p>
         </div>
@@ -89,10 +94,20 @@ function Dashboard() {
             color: 'var(--color-text-muted)',
           }}
         >
-          <p style={{ fontSize: 'var(--font-size-3xl)', marginBottom: 'var(--space-4)' }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-3xl)',
+              marginBottom: 'var(--space-4)',
+            }}
+          >
             🚀
           </p>
-          <p style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-medium)' }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-lg)',
+              fontWeight: 'var(--font-weight-medium)',
+            }}
+          >
             No jobs scanned yet
           </p>
           <p style={{ marginTop: 'var(--space-2)' }}>
@@ -119,7 +134,9 @@ function Dashboard() {
 function StatsCard({ icon, label, value, subtext, color }) {
   return (
     <div className="card" style={{ cursor: 'default' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}
+      >
         <div
           style={{
             width: 48,

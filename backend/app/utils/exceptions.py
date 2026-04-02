@@ -5,7 +5,7 @@ All custom exceptions inherit from a base AutoApplyError
 to enable consistent error boundary patterns across the API.
 """
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 
 
 class AutoApplyError(Exception):

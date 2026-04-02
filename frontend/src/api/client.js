@@ -84,5 +84,4 @@ export const patch = (endpoint, body) =>
  * @param {string} endpoint - API path.
  * @returns {Promise<Object>} Parsed response.
  */
-export const del = (endpoint) =>
-  apiRequest(endpoint, { method: 'DELETE' });
+export const del = (endpoint) => apiRequest(endpoint, { method: 'DELETE' });
