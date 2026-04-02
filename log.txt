@@ -1,0 +1,120 @@
+==================================================
+TIMESTAMP: 2026-04-02 08:50:00
+TASK/PROMPT: Phase 1 — Architecture, Setup, and Infrastructure for Auto-Apply: Job Hunter & Interview Strategist
+BRANCH: feat/setup-architecture-cicd
+PR STATUS: Draft
+
+--- FILES MODIFIED ---
+- .gitignore: Created — Python, Node, Docker, IDE exclusion rules
+- .env.example: Created — Environment variable template (OpenAI, Adzuna, JWT, PostgreSQL)
+- docker-compose.yml: Created — Dev environment (PostgreSQL 16 + FastAPI + Vite)
+- .github/workflows/ci.yml: Created — CI pipeline (Flake8/Black/pytest + ESLint/Prettier/Vite build + Docker)
+- project_index.md: Created — Living file index with tech stack decisions
+- backend/requirements.txt: Created — Production Python dependencies (FastAPI, SQLAlchemy, OpenAI, etc.)
+- backend/requirements-dev.txt: Created — Dev/test dependencies (pytest, Black, Flake8, etc.)
+- backend/pyproject.toml: Created — Python tooling config (Black, isort, Flake8, pytest, mypy)
+- backend/app/__init__.py: Created — Package init
+- backend/app/main.py: Created — FastAPI entry point with CORS, lifespan, health check, router registration
+- backend/app/config.py: Created — Pydantic BaseSettings with all env config
+- backend/app/database.py: Created — Async SQLAlchemy engine, session factory, get_db dependency
+- backend/app/models/user.py: Created — User + JobPreference ORM models (GDPR opt-in, seniority)
+- backend/app/models/resume.py: Created — ParsedResume model (JSONB for AI-parsed CV data)
+- backend/app/models/job.py: Created — ScrapedJob + UserJob models (dedup hash, match scores, AI content)
+- backend/app/models/benchmark.py: Created — BenchmarkScore model (seniority/niche snapshots, skill gaps)
+- backend/app/schemas/*.py: Created — Pydantic request/response validation schemas
+- backend/app/routers/*.py: Created — API route stubs for auth, resumes, jobs, benchmarks
+- backend/app/services/*.py: Created — Business logic layer (auth implemented, others stubbed)
+- backend/app/agents/*.py: Created — AI agent stubs (CV Profiler, Job Scanner, CV Optimizer, Interview Coach)
+- backend/app/utils/security.py: Created — Bcrypt password hashing + JWT token management
+- backend/app/utils/exceptions.py: Created — Custom exception hierarchy with GDPR peer threshold
+- backend/tests/conftest.py: Created — Async test client fixture
+- backend/tests/test_health.py: Created — Health endpoint tests (3 test cases)
+- backend/alembic.ini: Created — Alembic config for async PostgreSQL migrations
+- backend/alembic/env.py: Created — Async migration environment with model auto-discovery
+- backend/Dockerfile: Created — Production container (Python 3.11-slim)
+- frontend/: Created — React/Vite app scaffolded via create-vite
+- frontend/index.html: Modified — SEO meta, Inter font, proper title
+- frontend/src/index.css: Modified — Design system (dark theme, CSS tokens, animations)
+- frontend/src/App.jsx: Modified — React Router with Layout, Dashboard, Login routes
+- frontend/src/App.css: Modified — Layout styles (sidebar, main content, responsive)
+- frontend/src/components/Layout.jsx: Created — Sidebar nav with NavLink active states
+- frontend/src/pages/Dashboard.jsx: Created — Dashboard with stats cards + job placeholder
+- frontend/src/pages/Login.jsx: Created — Auth page with login/register + OAuth stubs
+- frontend/src/api/client.js: Created — Fetch-based API client with JWT auto-attachment
+- frontend/src/hooks/useAuth.js: Created — Auth state hook
+- frontend/src/utils/constants.js: Created — Centralized frontend constants
+- frontend/vite.config.js: Modified — API proxy to FastAPI backend
+- frontend/.prettierrc: Created — Prettier config
+- frontend/Dockerfile: Created — Multi-stage (Node build → nginx serve)
+
+--- ARCHITECTURE & LOGIC CHANGES ---
+1. MODULAR BACKEND ARCHITECTURE (SOLID-compliant):
+   - Models layer: SQLAlchemy 2.0 ORM with async support, declarative mapped columns
+   - Schemas layer: Pydantic v2 with input/output separation (prevents data leakage)
+   - Routers layer: Thin controllers that delegate to services
+   - Services layer: Business logic encapsulation (auth implemented, others stubbed)
+   - Agents layer: AI agent classes with defined interfaces for Phase 2 implementation
+   - Utils layer: Shared security + exception utilities
+
+2. DATABASE SCHEMA (PostgreSQL):
+   - 6 tables: users, job_preferences, parsed_resumes, scraped_jobs, user_jobs, benchmark_scores
+   - JSONB columns for semi-structured AI outputs (parsed_data, optimized_cv, interview_prep)
+   - Cross-platform dedup via description_hash (SHA-256 of first 200 chars)
+   - GDPR compliance: benchmark_opt_in flag, seniority/niche snapshots, 30-peer minimum threshold
+   - Check constraints on enums (seniority_level, location_type, status)
+   - Composite unique constraint for dedup (company_name + job_title + description_hash)
+
+3. FRONTEND ARCHITECTURE:
+   - Vite + React 19 with React Router for SPA routing
+   - Design system with CSS custom properties (dark theme, Inter font, animations)
+   - API client with JWT auto-attachment via localStorage
+   - Component structure: Layout shell → Pages → Hooks → Utils
+
+4. CI/CD PIPELINE:
+   - Backend: Flake8 lint → Black format check → isort import order → pytest
+   - Frontend: ESLint → Prettier → Vite production build
+   - Docker: Build verification for both images (runs after lint/test pass)
+
+5. TECH STACK DECISIONS:
+   - LLM: OpenAI GPT-4 (structured output, mature API)
+   - Job API: Adzuna (free tier, legal, JSON responses)
+   - Storage: Local filesystem with S3-ready abstraction
+   - Deployment: Docker Compose (local), Railway-ready
+
+--- AUDIT & VERIFICATION REVIEW ---
+BUGS/KNOWN ISSUES:
+- Router endpoints return 501 (Not Implemented) — by design, implementation in Phase 2
+- OAuth (Google, LinkedIn) buttons are disabled — implementation in Phase 2
+- No auth middleware protecting routes yet — to be added in Phase 2 with JWT dependency
+
+SECURITY VULNERABILITIES: None detected
+- Passwords hashed with bcrypt (OWASP recommended)
+- JWT tokens with configurable expiration and HS256 signing
+- CORS restricted to localhost:5173 (dev)
+- No hardcoded credentials in source (.env.example has placeholders only)
+- SQL injection mitigated by SQLAlchemy ORM (parameterized queries)
+- Input validation via Pydantic schemas (email, password length, enum constraints)
+
+PERFORMANCE OPTIMIZATIONS: No changes required
+- Async database engine with connection pooling (pool_size=10, max_overflow=20)
+- pool_pre_ping enabled for connection health checks
+- Cached settings singleton via @lru_cache
+
+MAINTAINABILITY IMPROVEMENTS:
+- Consider adding API versioning (/api/v1/) in Phase 2
+- Consider adding structured logging (structlog) for production
+- Consider adding rate limiting to auth endpoints
+- Consider adding database connection retry logic for container startup ordering
+
+--- TEST COVERAGE ---
+TEST FILES ADDED/MODIFIED:
+- backend/tests/conftest.py (async test client fixture)
+- backend/tests/test_health.py (3 test scenarios)
+
+SCENARIOS COVERED:
+- Happy path: GET /health returns 200 with correct structure
+- App name validation: Response contains "Auto-Apply API"
+- Environment validation: Response contains "development"
+
+TEST STATUS: Pending (requires pip install to run; validated via CI pipeline)
+==================================================

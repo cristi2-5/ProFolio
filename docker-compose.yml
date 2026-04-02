@@ -1,0 +1,63 @@
+# ==============================================================
+# Auto-Apply — Docker Compose (Development)
+# ==============================================================
+# Services: PostgreSQL 16, FastAPI backend, React/Vite frontend.
+# Usage: docker-compose up --build
+# ==============================================================
+
+services:
+  # --- PostgreSQL Database ---
+  db:
+    image: postgres:16-alpine
+    container_name: autoapply-db
+    environment:
+      POSTGRES_USER: autoapply
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: autoapply_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autoapply -d autoapply_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- FastAPI Backend ---
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: autoapply-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://autoapply:changeme@db:5432/autoapply_db
+      SECRET_KEY: dev-docker-secret-key
+      ENVIRONMENT: development
+      CORS_ORIGINS: '["http://localhost:5173"]'
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/app:/app/app  # Hot reload
+      - upload_data:/app/uploads
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # --- React/Vite Frontend ---
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: autoapply-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+    driver: local
+  upload_data:
+    driver: local
