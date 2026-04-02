@@ -1,0 +1,66 @@
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# ========================
+# Node.js / React
+# ========================
+node_modules/
+frontend/dist/
+frontend/build/
+*.tsbuildinfo
+
+# ========================
+# Environment & Secrets
+# ========================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ========================
+# IDE / Editors
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ========================
+# Docker
+# ========================
+docker-compose.override.yml
+
+# ========================
+# Testing & Coverage
+# ========================
+.coverage
+htmlcov/
+.pytest_cache/
+coverage/
+
+# ========================
+# Alembic
+# ========================
+alembic/versions/*.pyc
+
+# ========================
+# Logs
+# ========================
+*.log
+!log.txt
