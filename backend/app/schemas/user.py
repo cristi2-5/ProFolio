@@ -26,9 +26,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     full_name: Optional[str] = None
-    seniority_level: Optional[str] = Field(
-        None, pattern="^(intern|junior|mid|senior)$"
-    )
+    seniority_level: Optional[str] = Field(None, pattern="^(intern|junior|mid|senior)$")
     niche: Optional[str] = None
 
 
@@ -39,9 +37,7 @@ class UserUpdate(BaseModel):
     """
 
     full_name: Optional[str] = None
-    seniority_level: Optional[str] = Field(
-        None, pattern="^(intern|junior|mid|senior)$"
-    )
+    seniority_level: Optional[str] = Field(None, pattern="^(intern|junior|mid|senior)$")
     niche: Optional[str] = None
     benchmark_opt_in: Optional[bool] = None
 

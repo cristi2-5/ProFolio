@@ -22,9 +22,7 @@ class CVOptimizerAgent:
     - Generates a personalized cover letter (3-4 paragraphs).
     """
 
-    async def optimize_cv(
-        self, parsed_cv: dict, job_description: str
-    ) -> dict:
+    async def optimize_cv(self, parsed_cv: dict, job_description: str) -> dict:
         """Rewrite CV points for a specific job.
 
         Args:

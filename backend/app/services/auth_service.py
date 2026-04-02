@@ -37,9 +37,7 @@ class AuthService:
             DuplicateError: If email is already registered.
         """
         # Check for existing email
-        result = await db.execute(
-            select(User).where(User.email == user_data.email)
-        )
+        result = await db.execute(select(User).where(User.email == user_data.email))
         if result.scalar_one_or_none():
             raise DuplicateError("User", "email")
 
@@ -56,9 +54,7 @@ class AuthService:
         return user
 
     @staticmethod
-    async def authenticate(
-        db: AsyncSession, email: str, password: str
-    ) -> str:
+    async def authenticate(db: AsyncSession, email: str, password: str) -> str:
         """Authenticate a user and return a JWT token.
 
         Args:

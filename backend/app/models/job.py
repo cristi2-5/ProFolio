@@ -140,9 +140,7 @@ class UserJob(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "job_id", name="uq_user_job"),
-        CheckConstraint(
-            "match_score BETWEEN 0 AND 100", name="ck_userjob_match_score"
-        ),
+        CheckConstraint("match_score BETWEEN 0 AND 100", name="ck_userjob_match_score"),
         CheckConstraint(
             "status IN ('new', 'applied', 'saved', 'hidden', 'duplicate')",
             name="ck_userjob_status",

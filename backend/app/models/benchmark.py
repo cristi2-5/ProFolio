@@ -73,17 +73,13 @@ class BenchmarkScore(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship(  # noqa: F821
-        back_populates="benchmark_scores"
-    )
+    user: Mapped["User"] = relationship(back_populates="benchmark_scores")  # noqa: F821
     job: Mapped["ScrapedJob | None"] = relationship(  # noqa: F821
         back_populates="benchmark_scores"
     )
 
     __table_args__ = (
-        CheckConstraint(
-            "score BETWEEN 0 AND 100", name="ck_benchmark_score_range"
-        ),
+        CheckConstraint("score BETWEEN 0 AND 100", name="ck_benchmark_score_range"),
     )
 
     def __repr__(self) -> str:

@@ -70,7 +70,4 @@ class ParsedResume(Base):
 
     def __repr__(self) -> str:
         """Return string representation of ParsedResume."""
-        return (
-            f"<ParsedResume(id={self.id}, "
-            f"filename='{self.original_filename}')>"
-        )
+        return f"<ParsedResume(id={self.id}, " f"filename='{self.original_filename}')>"
