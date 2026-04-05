@@ -28,8 +28,14 @@ from app.schemas.interview_coach import (
     AdditionalQuestionsResponse,
     InterviewPrepListResponse,
 )
+from app.schemas.benchmark import (
+    BenchmarkCalculateRequest,
+    BenchmarkScoreResponse,
+    InsufficientPeersResponse,
+)
 from app.services.job_service import JobService
 from app.services.interview_coach_service import InterviewCoachService
+from app.services.benchmark_service import BenchmarkService, InsufficientPeersError
 
 router = APIRouter(prefix="/api/jobs", tags=["Jobs"])
 
@@ -37,6 +43,7 @@ router = APIRouter(prefix="/api/jobs", tags=["Jobs"])
 logger = logging.getLogger(__name__)
 job_service = JobService()
 interview_coach_service = InterviewCoachService()
+benchmark_service = BenchmarkService()
 
 
 # ================================================================
@@ -620,4 +627,153 @@ async def list_user_interview_preps(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve interview preparations",
+        )
+
+
+# ================================================================
+# Benchmark Scoring & Competitive Analysis
+# ================================================================
+
+@router.post(
+    "/{job_id}/calculate-benchmark",
+    response_model=BenchmarkScoreResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Calculate GDPR-compliant benchmark score for a job",
+    responses={
+        422: {"model": InsufficientPeersResponse, "description": "Not enough peers for reliable scoring"},
+        400: {"description": "User not opted into benchmarking"},
+    }
+)
+async def calculate_benchmark_score(
+    job_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> BenchmarkScoreResponse:
+    """Calculate competitive benchmark score for a user and specific job.
+
+    Compares user's skills and experience against anonymized peer group
+    to generate percentile ranking. Requires user to be opted into
+    benchmarking and minimum 30 eligible peers.
+
+    Args:
+        job_id: UUID of the target job.
+        current_user: Authenticated user (injected).
+        db: Database session (injected).
+
+    Returns:
+        BenchmarkScoreResponse: Complete benchmark analysis with score and skill gaps.
+
+    Raises:
+        HTTPException: 404 if job not found, 400 if not opted in,
+                      422 if insufficient peers, 500 if calculation fails.
+    """
+    try:
+        # Get job details
+        job = await db.get(ScrapedJob, job_id)
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Job not found",
+            )
+
+        # Calculate benchmark score using service
+        benchmark_score = await benchmark_service.calculate_benchmark_score(
+            user=current_user,
+            job=job,
+            db=db,
+        )
+
+        # Extract required skills for response
+        job_requirements = benchmark_service._extract_job_requirements(job)
+        user_profile = await benchmark_service._get_user_profile(current_user, db)
+        user_skills = benchmark_service._extract_user_skills(user_profile) if user_profile else []
+
+        # Find matched skills
+        matched_skills = []
+        if user_skills and job_requirements["required_skills"]:
+            user_skills_lower = [skill.lower() for skill in user_skills]
+            matched_skills = [
+                skill for skill in job_requirements["required_skills"]
+                if skill.lower() in user_skills_lower
+            ]
+
+        # Calculate match score for response
+        match_score = benchmark_service._calculate_match_score(
+            user_profile, job_requirements, current_user.seniority_level
+        ) if user_profile else 0
+
+        # Convert skill gaps to response format
+        skill_gaps = []
+        if benchmark_score.benchmark_data and benchmark_score.benchmark_data.get("skill_gaps"):
+            for gap in benchmark_score.benchmark_data["skill_gaps"]:
+                skill_gaps.append({
+                    "skill": gap["skill"],
+                    "priority": gap["priority"],
+                    "peer_frequency": gap["peer_frequency"],
+                    "recommendation": gap["recommendation"],
+                })
+
+        # Create peer group metadata
+        peer_group_metadata = {
+            "size": benchmark_score.benchmark_data.get("peer_group_size", 0),
+            "seniority_level": current_user.seniority_level,
+            "niche_filters": [],  # Could extract from benchmark_data if needed
+            "benchmark_opt_in_required": True,
+            "min_peers_required": benchmark_service.MINIMUM_PEER_COUNT,
+        }
+
+        return BenchmarkScoreResponse(
+            id=str(benchmark_score.id),
+            user_id=str(current_user.id),
+            job_id=str(job.id),
+            job_title=job.job_title,
+            company_name=job.company_name,
+            score=benchmark_score.score,
+            match_score=match_score,
+            peer_group=peer_group_metadata,
+            skill_gaps=skill_gaps,
+            matched_skills=matched_skills,
+            total_skills_analyzed=len(user_skills),
+            calculated_at=benchmark_score.calculated_at,
+            privacy_compliant=True,
+        )
+
+    except InsufficientPeersError as e:
+        # Extract peer count from error message
+        import re
+        match = re.search(r'(\d+) users found', str(e))
+        peers_found = int(match.group(1)) if match else 0
+
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "insufficient_peers",
+                "message": str(e),
+                "peers_found": peers_found,
+                "peers_required": benchmark_service.MINIMUM_PEER_COUNT,
+                "suggestions": [
+                    "Wait for more users to join the platform",
+                    "Try again later when more users have opted into benchmarking",
+                    f"Consider expanding to a broader seniority level if you're {current_user.seniority_level}",
+                ]
+            }
+        )
+
+    except ValueError as e:
+        if "not opted into benchmarking" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You must opt into benchmarking to calculate competitive scores. Update your preferences in account settings.",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to calculate benchmark for job {job_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to calculate benchmark score. Please try again later.",
         )
