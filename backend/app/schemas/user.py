@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserCreate(BaseModel):
@@ -82,3 +82,52 @@ class LoginRequest(BaseModel):
 
     email: EmailStr
     password: str
+
+
+class JobPreferenceCreate(BaseModel):
+    """Schema for creating/updating job preferences.
+
+    Attributes:
+        desired_title: Target job title (e.g., 'Frontend Developer').
+        location_type: Work location preference.
+        keywords: Array of 3-5 search keywords.
+    """
+
+    desired_title: str = Field(..., min_length=2, max_length=255)
+    location_type: str = Field(..., pattern="^(remote|hybrid|onsite)$")
+    keywords: list[str] = Field(..., min_length=3, max_length=5)
+
+    @field_validator("keywords")
+    @classmethod
+    def validate_keywords(cls, v):
+        """Validate keywords are non-empty and reasonable length."""
+        if not v:
+            raise ValueError("At least 3 keywords required")
+        for keyword in v:
+            if not keyword.strip():
+                raise ValueError("Keywords cannot be empty")
+            if len(keyword) > 50:
+                raise ValueError("Keywords must be 50 characters or less")
+        return [keyword.strip() for keyword in v]
+
+
+class JobPreferenceResponse(BaseModel):
+    """Schema for job preferences in API responses.
+
+    Attributes:
+        id: Preference UUID.
+        user_id: Owner's user ID.
+        desired_title: Target job title.
+        location_type: Work location preference.
+        keywords: Search keywords array.
+        created_at: Creation timestamp.
+    """
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    desired_title: str
+    location_type: Optional[str]
+    keywords: Optional[list[str]]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
