@@ -93,18 +93,35 @@ async def login(
 ) -> Token:
     """Authenticate a user and return a JWT access token.
 
+    Validates email format, authenticates credentials, and returns
+    JWT token for subsequent API calls. Rate limiting recommended
+    via @limiter.limit("5/minute") decorator.
+
     Args:
         credentials: Login payload with email and password.
         db: Async database session (injected).
 
     Returns:
-        Token: JWT access token for subsequent API calls.
+        Token: JWT access token with "bearer" type for Authorization header.
 
     Raises:
-        HTTPException 401: If credentials are invalid.
+        HTTPException 400: If email format is invalid.
+        HTTPException 401: If credentials are invalid or user not found.
     """
-    # TODO: Implement via AuthService in Phase 2
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Login endpoint — implementation in Phase 2.",
-    )
+    try:
+        # Validate and sanitize email
+        sanitized_email = sanitize_email(credentials.email)
+
+        # Authenticate via service layer
+        access_token = await AuthService.authenticate(db, sanitized_email, credentials.password)
+
+        return Token(access_token=access_token, token_type="bearer")
+
+    except UnauthorizedError as e:
+        raise_http_exception(e)
+    except ValueError as e:
+        # Email validation errors from sanitize_email()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
