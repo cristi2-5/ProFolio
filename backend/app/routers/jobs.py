@@ -250,7 +250,7 @@ async def update_job_status(
         )
 
 
-@router.get(
+@router.post(
     "/scan",
     response_model=dict,
     summary="Trigger job scan for current user",
@@ -274,8 +274,6 @@ async def trigger_job_scan(
     Raises:
         HTTPException: 400 if no preferences set, 500 if scan fails.
     """
-    from app.agents.job_scanner import JobScannerAgent
-
     try:
         # Check if user has preferences
         stmt = select(JobPreference).where(JobPreference.user_id == current_user.id)
@@ -288,15 +286,32 @@ async def trigger_job_scan(
                 detail="Please set job preferences before scanning for jobs",
             )
 
-        # Trigger scan
-        scanner = JobScannerAgent()
-        new_jobs = await scanner.scan(str(current_user.id), db)
+        # TODO: Temporarily return mock data for testing
+        # This bypasses the Adzuna API which requires valid credentials
+        logger.info(f"Job scan triggered for user {current_user.id} (mock mode)")
+
+        mock_jobs = [
+            {
+                "id": "mock-1",
+                "company_name": "TechCorp Inc.",
+                "job_title": "Senior Python Developer",
+                "location": "Remote",
+                "external_url": "https://example.com/job1"
+            },
+            {
+                "id": "mock-2",
+                "company_name": "StartupXYZ",
+                "job_title": "Full Stack Engineer",
+                "location": "Remote",
+                "external_url": "https://example.com/job2"
+            }
+        ]
 
         return {
             "status": "success",
-            "jobs_found": len(new_jobs),
-            "message": f"Found {len(new_jobs)} new jobs matching your preferences",
-            "jobs": new_jobs[:5] if new_jobs else [],  # Return first 5 as preview
+            "jobs_found": len(mock_jobs),
+            "message": f"Found {len(mock_jobs)} new jobs matching your preferences (mock data)",
+            "jobs": mock_jobs,
         }
 
     except HTTPException:

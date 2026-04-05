@@ -33,10 +33,44 @@ class InterviewCoachAgent:
         if not settings.openai_api_key:
             raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
 
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        # Handle development/test mode with placeholder API keys
+        self.is_development = settings.openai_api_key.startswith("test-") or settings.environment == "development"
+
+        if not self.is_development:
+            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        else:
+            # In development mode, create a mock client that won't make real API calls
+            self.client = None
+            logger.warning("Running in development mode with test API key. AI features will return mock responses.")
+
         self.model = "gpt-4o-mini"  # Cost-effective model for content generation
         self.max_tokens = 4000      # Extended output for comprehensive materials
         self.temperature = 0.4      # Balanced creativity for diverse but relevant content
+
+    async def _make_api_call(self, system_prompt: str, user_prompt: str, mock_response_type: str = "questions") -> str:
+        """Make API call with mock response handling for development mode."""
+        if self.is_development:
+            # Return mock responses based on type
+            mock_responses = {
+                "questions": '{"questions": [{"question": "Tell me about your experience with Python", "type": "technical", "difficulty": "medium", "answer_guide": "Discuss your Python projects and frameworks"}]}',
+                "prep": '{"preparation_strategy": "Mock interview preparation", "company_research": "Research this company online", "key_points": ["Technical skills", "Problem solving"]}',
+                "behavioral": '{"questions": [{"question": "Describe a challenging project", "type": "behavioral", "answer_guide": "Use STAR method"}]}',
+                "research": '{"company_info": "Mock company research data", "culture_notes": "Company culture insights", "interview_tips": ["Be prepared", "Ask questions"]}',
+                "cheat_sheet": '{"technical_concepts": {"Python": "High-level programming language", "API": "Application Programming Interface"}, "common_questions": ["What is your experience?"]}'
+            }
+            return mock_responses.get(mock_response_type, '{"mock": "response"}')
+
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            response_format={"type": "json_object"}
+        )
+        return response.choices[0].message.content
 
     async def generate_interview_prep_materials(
         self,
@@ -148,19 +182,10 @@ class InterviewCoachAgent:
                 job_description, job_title, user_experience_level, user_background
             )
 
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format={"type": "json_object"}
-            )
+            response_content = await self._make_api_call(system_prompt, user_prompt, "questions")
 
             import json
-            questions_data = json.loads(response.choices[0].message.content)
+            questions_data = json.loads(response_content)
 
             # Validate and return technical questions
             technical_questions = questions_data.get("technical_questions", [])

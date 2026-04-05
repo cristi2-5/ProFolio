@@ -35,7 +35,7 @@ function Resumes() {
   const fetchResumes = async () => {
     try {
       setLoading(true);
-      const data = await get('/resumes');
+      const data = await get('/resumes/');
       setResumes(data.resumes || []);
     } catch (err) {
       setError('Failed to load resumes');

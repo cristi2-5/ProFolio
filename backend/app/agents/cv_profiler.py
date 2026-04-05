@@ -25,7 +25,17 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 # OpenAI client initialization
-openai_client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+# Only create client for valid API keys (not test/development keys)
+is_development_mode = (
+    not settings.openai_api_key or
+    settings.openai_api_key.startswith("test-") or
+    settings.environment == "development"
+)
+
+openai_client = None if is_development_mode else AsyncOpenAI(api_key=settings.openai_api_key)
+
+if is_development_mode:
+    logger.warning("Running CV Profiler in development mode. Real parsing disabled.")
 
 
 # =====================================================================

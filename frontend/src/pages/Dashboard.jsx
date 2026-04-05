@@ -47,7 +47,7 @@ function Dashboard() {
       setLoading(true);
 
       // Fetch resumes count
-      const resumeData = await get('/resumes');
+      const resumeData = await get('/resumes/');
       const resumeCount = resumeData.resumes?.length || 0;
 
       // Try to fetch job preferences
@@ -63,7 +63,7 @@ function Dashboard() {
       // Try to fetch jobs count
       let jobsData = { total_count: 0, jobs: [] };
       try {
-        jobsData = await get('/jobs');
+        jobsData = await get('/jobs/');
       } catch (err) {
         // Might fail if no preferences set
         jobsData = { total_count: 0, jobs: [] };

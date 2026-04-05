@@ -33,7 +33,16 @@ class CVOptimizerAgent:
         if not settings.openai_api_key:
             raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
 
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        # Handle development/test mode with placeholder API keys
+        self.is_development = settings.openai_api_key.startswith("test-") or settings.environment == "development"
+
+        if not self.is_development:
+            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        else:
+            # In development mode, create a mock client that won't make real API calls
+            self.client = None
+            logger.warning("Running in development mode with test API key. AI features will return mock responses.")
+
         self.model = "gpt-4o-mini"  # Cost-effective model for text optimization
         self.max_tokens = 3000      # Longer output for optimized CVs
         self.temperature = 0.3      # Balanced creativity for professional content
@@ -94,6 +103,24 @@ class CVOptimizerAgent:
             )
 
             # Call OpenAI API for CV optimization
+            if self.is_development:
+                # Return mock response in development mode
+                logger.info("Returning mock CV optimization response for development mode")
+                import json
+                mock_response = {
+                    "summary": f"Experienced professional optimized for {job_title} role at {company_name}",
+                    "experience": [
+                        {
+                            "company": "Previous Company",
+                            "role": "Senior Developer",
+                            "description": f"Led development projects relevant to {job_title} requirements"
+                        }
+                    ],
+                    "skills": ["Python", "JavaScript", "React", "FastAPI", "Machine Learning"],
+                    "optimized_keywords": ["Python", "API Development", "Full Stack"]
+                }
+                return mock_response
+
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[

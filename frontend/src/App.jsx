@@ -13,6 +13,7 @@ import Resumes from './pages/Resumes';
 import Jobs from './pages/Jobs';
 import JobDetail from './pages/JobDetail';
 import Benchmarks from './pages/Benchmarks';
+import Interview from './pages/Interview';
 import Login from './pages/Login';
 import './App.css';
 
@@ -74,6 +75,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Benchmarks />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/interview"
+              element={
+                <ProtectedRoute>
+                  <Interview />
                 </ProtectedRoute>
               }
             />

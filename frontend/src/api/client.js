@@ -48,7 +48,23 @@ export async function apiRequest(endpoint, options = {}) {
     const error = await response.json().catch(() => ({
       detail: 'An unexpected error occurred.',
     }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
+
+    // Handle validation errors (arrays) vs single error messages
+    let errorMessage = 'An unexpected error occurred.';
+
+    if (error.detail) {
+      if (Array.isArray(error.detail)) {
+        // FastAPI validation errors - extract user-friendly messages
+        errorMessage = error.detail
+          .map(err => err.msg || err.message || 'Validation error')
+          .join(', ');
+      } else {
+        // Single error message
+        errorMessage = error.detail;
+      }
+    }
+
+    throw new Error(errorMessage);
   }
 
   return response.json();
