@@ -3,7 +3,7 @@
 > Living index of all project files, their purposes, and dependencies.
 > Updated per `rules.md` §2 whenever files are created, deleted, renamed, or substantially modified.
 >
-> **Last Updated:** 2026-04-02
+> **Last Updated:** 2026-04-05
 
 ---
 
@@ -43,6 +43,21 @@
 | `backend/app/main.py` | FastAPI entry point, CORS, lifespan, health check, router registration | `config`, `routers/*` |
 | `backend/app/config.py` | Pydantic BaseSettings — loads all env vars | `pydantic-settings` |
 | `backend/app/database.py` | SQLAlchemy async engine, session factory, `get_db` dependency | `config`, `sqlalchemy`, `asyncpg` |
+
+### Dependencies (`/backend/app/dependencies/`)
+
+| File | Purpose | Dependencies |
+|------|---------|-------------|
+| `dependencies/__init__.py` | Package init for dependency injection modules | — |
+| `dependencies/auth.py` | JWT authentication dependency (`get_current_user`, `get_current_active_user`) | `jose`, `models/user`, `database` |
+
+### Middleware (`/backend/app/middleware/`)
+
+| File | Purpose | Dependencies |
+|------|---------|-------------|
+| `middleware/__init__.py` | Package init for middleware modules | — |
+| `middleware/rate_limit.py` | Rate limiting middleware (100/min default, slowapi) | `slowapi` |
+| `middleware/security_headers.py` | OWASP security headers middleware (XSS, clickjacking protection) | `starlette` |
 
 ### ORM Models (`/backend/app/models/`)
 
@@ -107,13 +122,19 @@
 | File | Purpose | Dependencies |
 |------|---------|-------------|
 | `backend/tests/__init__.py` | Package init | — |
-| `backend/tests/conftest.py` | Pytest fixtures — async HTTP test client | `httpx`, `app.main` |
+| `backend/tests/conftest.py` | Pytest fixtures — test database with transaction rollback, async session | `httpx`, `app.main`, `database` |
 | `backend/tests/test_health.py` | `/health` endpoint tests (happy path + validation) | `conftest` |
+| `backend/tests/test_migrations.py` | Database migration validation tests (27 scenarios: constraints, indexes, CASCADE) | `conftest`, `models/*` |
+| `backend/tests/test_auth_middleware.py` | Auth middleware tests (16 scenarios: JWT validation, rate limiting, security headers) | `conftest`, `dependencies/auth`, `middleware/*` |
 | `backend/pyproject.toml` | Black, isort, Flake8, pytest, mypy config | — |
 | `backend/requirements.txt` | Production Python dependencies | — |
 | `backend/requirements-dev.txt` | Dev/test Python dependencies | `requirements.txt` |
 | `backend/alembic.ini` | Alembic migration config | — |
 | `backend/alembic/env.py` | Async migration environment | `database`, `models/*` |
+| `backend/alembic/versions/001_create_users_and_job_preferences.py` | Migration for users & job_preferences tables | `alembic` |
+| `backend/alembic/versions/002_create_parsed_resumes.py` | Migration for parsed_resumes table with JSONB + GIN index | `alembic` |
+| `backend/alembic/versions/003_create_scraped_jobs_and_user_jobs.py` | Migration for scraped_jobs & user_jobs with dedup hash | `alembic` |
+| `backend/alembic/versions/004_create_benchmark_scores.py` | Migration for benchmark_scores table (GDPR-compliant) | `alembic` |
 | `backend/Dockerfile` | Production Docker image (Python 3.11-slim) | `requirements.txt` |
 
 ---
