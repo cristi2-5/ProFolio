@@ -25,6 +25,7 @@ pydantic[email]==2.10.5
 # --- Authentication ---
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+slowapi==0.1.9
 
 # --- File Handling ---
 python-multipart==0.0.20
