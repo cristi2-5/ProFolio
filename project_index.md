@@ -126,6 +126,7 @@
 | `backend/tests/test_health.py` | `/health` endpoint tests (happy path + validation) | `conftest` |
 | `backend/tests/test_migrations.py` | Database migration validation tests (27 scenarios: constraints, indexes, CASCADE) | `conftest`, `models/*` |
 | `backend/tests/test_auth_middleware.py` | Auth middleware tests (16 scenarios: JWT validation, rate limiting, security headers) | `conftest`, `dependencies/auth`, `middleware/*` |
+| `backend/tests/test_auth_endpoints.py` | Auth endpoint tests (20 scenarios: registration, login, JWT integration) | `conftest`, `routers/auth`, `services/auth_service` |
 | `backend/pyproject.toml` | Black, isort, Flake8, pytest, mypy config | — |
 | `backend/requirements.txt` | Production Python dependencies | — |
 | `backend/requirements-dev.txt` | Dev/test Python dependencies | `requirements.txt` |
