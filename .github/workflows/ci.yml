@@ -368,36 +368,41 @@ jobs:
 
           # Test authentication endpoints (if implemented)
           python -c "
-          import requests
+          import asyncio
+          import httpx
           import json
 
-          # Test registration (should work)
-          registration_data = {
-              'email': 'test@integration.com',
-              'password': 'IntegrationTest123!',
-              'full_name': 'Integration Test User',
-              'seniority_level': 'mid',
-              'niche': 'Backend Engineering'
-          }
+          async def test_auth_endpoints():
+              async with httpx.AsyncClient() as client:
+                  # Test registration (should work)
+                  registration_data = {
+                      'email': 'test@integration.com',
+                      'password': 'IntegrationTest123!',
+                      'full_name': 'Integration Test User',
+                      'seniority_level': 'mid',
+                      'niche': 'Backend Engineering'
+                  }
 
-          try:
-              response = requests.post('http://localhost:8000/api/auth/register', json=registration_data)
-              if response.status_code == 201:
-                  print('✅ Registration endpoint working')
+                  try:
+                      response = await client.post('http://localhost:8000/api/auth/register', json=registration_data)
+                      if response.status_code == 201:
+                          print('✅ Registration endpoint working')
 
-                  # Test login
-                  login_data = {'email': 'test@integration.com', 'password': 'IntegrationTest123!'}
-                  login_response = requests.post('http://localhost:8000/api/auth/login', json=login_data)
-                  if login_response.status_code == 200:
-                      token = login_response.json()['access_token']
-                      print('✅ Login endpoint working')
-                      print(f'JWT Token length: {len(token)}')
-                  else:
-                      print(f'❌ Login failed: {login_response.status_code}')
-              else:
-                  print(f'⚠️ Registration endpoint: {response.status_code} (expected in development)')
-          except Exception as e:
-              print(f'⚠️ Auth endpoints not fully implemented yet: {e}')
+                          # Test login
+                          login_data = {'email': 'test@integration.com', 'password': 'IntegrationTest123!'}
+                          login_response = await client.post('http://localhost:8000/api/auth/login', json=login_data)
+                          if login_response.status_code == 200:
+                              token = login_response.json()['access_token']
+                              print('✅ Login endpoint working')
+                              print(f'JWT Token length: {len(token)}')
+                          else:
+                              print(f'❌ Login failed: {login_response.status_code}')
+                      else:
+                          print(f'⚠️ Registration endpoint: {response.status_code} (expected in development)')
+                  except Exception as e:
+                      print(f'⚠️ Auth endpoints not fully implemented yet: {e}')
+
+          asyncio.run(test_auth_endpoints())
           "
           echo "::endgroup::"
 
