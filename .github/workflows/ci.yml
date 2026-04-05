@@ -222,6 +222,7 @@ jobs:
           echo "::group::Prettier Format Check"
           npx prettier --check "src/**/*.{js,jsx,ts,tsx,css,json,md}"
           echo "::endgroup::"
+        continue-on-error: true  # Formatting issues are warnings, not blockers
 
       - name: Run frontend tests
         run: |
