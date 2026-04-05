@@ -107,13 +107,18 @@
 | File | Purpose | Dependencies |
 |------|---------|-------------|
 | `backend/tests/__init__.py` | Package init | — |
-| `backend/tests/conftest.py` | Pytest fixtures — async HTTP test client | `httpx`, `app.main` |
+| `backend/tests/conftest.py` | Pytest fixtures — async HTTP test client, test database session with transaction rollback | `httpx`, `app.main`, `sqlalchemy` |
 | `backend/tests/test_health.py` | `/health` endpoint tests (happy path + validation) | `conftest` |
+| `backend/tests/test_migrations.py` | Migration validation tests — constraints, indexes, cascades, deduplication | `conftest`, `models/*` |
 | `backend/pyproject.toml` | Black, isort, Flake8, pytest, mypy config | — |
 | `backend/requirements.txt` | Production Python dependencies | — |
 | `backend/requirements-dev.txt` | Dev/test Python dependencies | `requirements.txt` |
 | `backend/alembic.ini` | Alembic migration config | — |
 | `backend/alembic/env.py` | Async migration environment | `database`, `models/*` |
+| `backend/alembic/versions/001_*.py` | Migration — users and job_preferences tables | `alembic` |
+| `backend/alembic/versions/002_*.py` | Migration — parsed_resumes table with JSONB GIN index | `alembic` |
+| `backend/alembic/versions/003_*.py` | Migration — scraped_jobs and user_jobs tables with dedup constraints | `alembic` |
+| `backend/alembic/versions/004_*.py` | Migration — benchmark_scores table with GDPR compliance | `alembic` |
 | `backend/Dockerfile` | Production Docker image (Python 3.11-slim) | `requirements.txt` |
 
 ---
