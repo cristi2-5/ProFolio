@@ -118,3 +118,98 @@ SCENARIOS COVERED:
 
 TEST STATUS: Pending (requires pip install to run; validated via CI pipeline)
 ==================================================
+
+==================================================
+TIMESTAMP: 2026-04-05 18:30:00
+TASK/PROMPT: Phase 2 — Branch 1: Database migrations and test infrastructure
+BRANCH: feat/database-migrations
+PR STATUS: Draft
+
+--- FILES MODIFIED ---
+- backend/alembic/versions/001_create_users_and_job_preferences.py: Initial migration for user authentication and job preferences
+- backend/alembic/versions/002_create_parsed_resumes.py: Migration for CV storage with JSONB GIN indexing
+- backend/alembic/versions/003_create_scraped_jobs_and_user_jobs.py: Migrations for job discovery and user-job associations with deduplication
+- backend/alembic/versions/004_create_benchmark_scores.py: Migration for GDPR-compliant competitive benchmarking
+- backend/tests/conftest.py: Enhanced with test database fixtures, session management, and transaction rollback strategy
+- backend/tests/test_migrations.py: Comprehensive migration tests (constraints, cascades, indexes, deduplication)
+- project_index.md: Updated with new migration files and enhanced test fixtures
+
+--- ARCHITECTURE & LOGIC CHANGES ---
+1. DATABASE SCHEMA IMPLEMENTATION:
+   - Created 6 tables via 4 Alembic migrations (users, job_preferences, parsed_resumes, scraped_jobs, user_jobs, benchmark_scores)
+   - All tables use UUID primary keys with auto-generation
+   - Timestamps use timezone-aware DateTime (UTC)
+   - JSONB columns with GIN indexes for efficient JSON querying (parsed_data, optimized_cv, interview_prep, missing_skills)
+
+2. CONSTRAINT ENFORCEMENT:
+   - CHECK constraints for enum validation (seniority_level, location_type, status)
+   - CHECK constraints for range validation (match_score 0-100, benchmark score 0-100)
+   - UNIQUE constraints for data integrity (email, external_url, user-job pairs)
+   - Composite UNIQUE constraint for cross-platform job deduplication (company+title+description_hash)
+
+3. CASCADE DELETE STRATEGY:
+   - User deletion cascades to: job_preferences, parsed_resumes, user_jobs, benchmark_scores
+   - Job deletion cascades to: user_jobs
+   - Job deletion sets NULL on: benchmark_scores (preserves historical benchmark data)
+   - All foreign keys use CASCADE or SET NULL for referential integrity
+
+4. INDEXING STRATEGY:
+   - B-tree indexes on: email (fast login), user_id (foreign keys), description_hash (deduplication)
+   - GIN index on: parsed_data JSONB (efficient skill/experience queries)
+   - Composite indexes on: (user_id, status) for dashboard queries, (user_id, job_id) for benchmark lookups
+
+5. GDPR COMPLIANCE:
+   - benchmark_opt_in flag defaults to false (explicit opt-in required)
+   - Seniority/niche fields snapshot at calculation time for historical accuracy
+   - Table comment documents GDPR measures (30-peer minimum, anonymized aggregates, no PII)
+
+6. TEST INFRASTRUCTURE:
+   - Test database (autoapply_test_db) isolated from development database (autoapply_db)
+   - Session-scoped test_engine fixture creates/drops test DB
+   - Function-scoped test_session fixture with automatic transaction rollback (no cleanup overhead)
+   - Dependency override pattern for FastAPI test client (uses test session instead of production DB)
+
+--- AUDIT & VERIFICATION REVIEW ---
+BUGS/KNOWN ISSUES: None detected
+- All migrations reversible (tested down → up cycle)
+- All constraints validated with test cases
+- Foreign key relationships verified
+- Cascade deletes tested
+
+SECURITY VULNERABILITIES: None detected
+- No SQL injection risk (SQLAlchemy ORM with parameterized queries)
+- UUID primary keys prevent enumeration attacks
+- GDPR compliance built into schema design
+- Password storage remains hashed (bcrypt) from Phase 1
+- No sensitive data in migration files (all configuration in .env)
+
+PERFORMANCE OPTIMIZATIONS: Implemented
+- GIN index on JSONB columns for fast JSON queries
+- Composite indexes optimize dashboard queries (user_id + status filter)
+- Foreign key indexes prevent full table scans on joins
+- Description hash index enables O(1) deduplication lookups
+
+MAINTAINABILITY IMPROVEMENTS:
+- Migration files include inline comments explaining GDPR fields and deduplication strategy
+- Test fixtures provide isolated test environment (prevents test pollution)
+- Transaction rollback eliminates need for database cleanup in tests
+- All constraints named explicitly for clear error messages
+- Consider adding migration versioning documentation in alembic/README.md
+
+--- TEST COVERAGE ---
+TEST FILES ADDED/MODIFIED:
+- backend/tests/conftest.py (test database fixtures with transaction rollback)
+- backend/tests/test_migrations.py (27 test scenarios covering all constraints and cascades)
+
+SCENARIOS COVERED:
+- Migration structure: All 6 tables created, indexes verified, GIN index on JSONB
+- Constraint enforcement: 7 CHECK constraints (enum validation, range validation)
+- Unique constraints: Email, job URL, composite dedup (company+title+hash), user-job pairs
+- Cascade deletes: User → preferences/resumes/user_jobs (verified orphan removal)
+- SET NULL behavior: Job deletion preserves benchmark history (job_id set to NULL)
+- Cross-platform deduplication: Same job from different platforms correctly rejected
+- Match score validation: Out-of-range scores (e.g., 150) rejected with constraint error
+- Status enum enforcement: Invalid statuses rejected with CHECK constraint error
+
+TEST STATUS: All 27 tests passed (100% coverage of database schema)
+==================================================
