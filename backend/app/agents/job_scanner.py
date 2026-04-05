@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from app.clients.adzuna import adzuna_client, AdzunaAPIError
 from app.models.job import ScrapedJob
 from app.models.user import JobPreference, User
+from app.services.job_service import JobService
 from app.utils.hashing import create_description_hash
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ class JobScannerAgent:
         """Initialize Job Scanner with configuration."""
         self.max_jobs_per_scan = 50  # Adzuna API limit per request
         self.max_days_old = 7  # Only recent jobs
+        self.job_service = JobService()  # For job-user matching
 
     async def scan(self, user_id: str, db: AsyncSession) -> list[dict]:
         """Scan for new jobs matching a user's preferences.
@@ -95,10 +97,12 @@ class JobScannerAgent:
 
             # Process and deduplicate jobs
             new_jobs = []
+            scraped_jobs = []
             for job_data in jobs:
                 try:
                     scraped_job = await self._process_and_deduplicate_job(job_data, db)
                     if scraped_job:
+                        scraped_jobs.append(scraped_job)
                         new_jobs.append({
                             "id": str(scraped_job.id),
                             "company_name": scraped_job.company_name,
@@ -109,6 +113,14 @@ class JobScannerAgent:
                 except Exception as e:
                     logger.error(f"Error processing job: {e}")
                     continue
+
+            # Match new jobs to user and calculate scores
+            if scraped_jobs:
+                try:
+                    user_jobs = await self.job_service.match_jobs_to_user(user, scraped_jobs, db)
+                    logger.info(f"Created {len(user_jobs)} job matches for user {user_id}")
+                except Exception as e:
+                    logger.error(f"Error matching jobs to user {user_id}: {e}")
 
             await db.commit()
             logger.info(f"Scan complete for user {user_id}: {len(new_jobs)} new jobs saved")
