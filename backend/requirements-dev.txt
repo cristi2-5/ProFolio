@@ -9,7 +9,6 @@ pytest-asyncio==0.25.2
 pytest-cov==6.0.0
 pytest-benchmark==4.0.0
 pytest-mock==3.12.0
-httpx==0.28.1
 
 # --- Linting & Formatting ---
 flake8==7.1.1
