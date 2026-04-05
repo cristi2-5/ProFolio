@@ -1,39 +1,102 @@
 /**
  * Auto-Apply Frontend — Root Application Component.
  *
- * Sets up React Router with page-level routing.
- * Wraps all routes in the Layout shell (nav + sidebar).
+ * Sets up React Router with page-level routing and global authentication state.
+ * Wraps all routes in AuthProvider for global auth state management.
  */
 
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider, ProtectedRoute } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
+import Resumes from './pages/Resumes';
+import Jobs from './pages/Jobs';
+import JobDetail from './pages/JobDetail';
+import Benchmarks from './pages/Benchmarks';
 import Login from './pages/Login';
 import './App.css';
 
 /**
- * Root application component with client-side routing.
+ * Root application component with client-side routing and authentication.
  *
  * Routes:
+ *   /login      → Authentication page (public)
+ *   /dashboard  → Main dashboard (protected)
  *   /           → Redirects to /dashboard
- *   /dashboard  → Main dashboard (job listings, stats)
- *   /login      → Authentication page
  *   *           → 404 redirect to dashboard
  *
- * @returns {JSX.Element} The routed application.
+ * @returns {JSX.Element} The routed application wrapped with AuthProvider.
  */
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route element={<Layout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+
+          {/* Protected routes */}
+          <Route element={<Layout />}>
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/resumes"
+              element={
+                <ProtectedRoute>
+                  <Resumes />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jobs"
+              element={
+                <ProtectedRoute>
+                  <Jobs />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jobs/:jobId"
+              element={
+                <ProtectedRoute>
+                  <JobDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/benchmarks"
+              element={
+                <ProtectedRoute>
+                  <Benchmarks />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Navigate to="/dashboard" replace />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="*"
+              element={
+                <ProtectedRoute>
+                  <Navigate to="/dashboard" replace />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

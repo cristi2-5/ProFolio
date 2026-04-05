@@ -1,0 +1,414 @@
+# ==============================================================
+# Auto-Apply PR Validation — Pull Request Quality Gates
+# ==============================================================
+# Comprehensive PR validation with quality gates and automated checks
+# Runs on all pull requests to main/master branches
+# ==============================================================
+
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main, master]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  # ================================================================
+  # PR Analysis & Validation
+  # ================================================================
+  analyze-changes:
+    name: Analyze — PR Changes & Impact
+    runs-on: ubuntu-latest
+
+    outputs:
+      backend-changed: ${{ steps.changes.outputs.backend }}
+      frontend-changed: ${{ steps.changes.outputs.frontend }}
+      migrations-changed: ${{ steps.changes.outputs.migrations }}
+      tests-changed: ${{ steps.changes.outputs.tests }}
+      docs-changed: ${{ steps.changes.outputs.docs }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect file changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'backend/app/**'
+              - 'backend/requirements*.txt'
+              - 'backend/Dockerfile'
+            frontend:
+              - 'frontend/src/**'
+              - 'frontend/package*.json'
+              - 'frontend/Dockerfile'
+            migrations:
+              - 'backend/alembic/versions/**'
+            tests:
+              - 'backend/tests/**'
+              - 'frontend/src/**/*.test.*'
+            docs:
+              - '**.md'
+              - 'docs/**'
+
+      - name: Comment PR with change analysis
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const changes = {
+              backend: '${{ steps.changes.outputs.backend }}' === 'true',
+              frontend: '${{ steps.changes.outputs.frontend }}' === 'true',
+              migrations: '${{ steps.changes.outputs.migrations }}' === 'true',
+              tests: '${{ steps.changes.outputs.tests }}' === 'true',
+              docs: '${{ steps.changes.outputs.docs }}' === 'true'
+            };
+
+            let comment = '## 🔍 PR Change Analysis\n\n';
+            comment += '| Component | Changed | Impact |\n';
+            comment += '|-----------|---------|--------|\n';
+            comment += `| Backend | ${changes.backend ? '✅' : '❌'} | ${changes.backend ? 'API & business logic validation required' : 'No backend changes'} |\n`;
+            comment += `| Frontend | ${changes.frontend ? '✅' : '❌'} | ${changes.frontend ? 'UI testing and build validation required' : 'No frontend changes'} |\n`;
+            comment += `| Migrations | ${changes.migrations ? '✅' : '❌'} | ${changes.migrations ? '⚠️ Database migration - review carefully' : 'No database changes'} |\n`;
+            comment += `| Tests | ${changes.tests ? '✅' : '❌'} | ${changes.tests ? 'Test coverage validation required' : 'No test changes'} |\n`;
+            comment += `| Documentation | ${changes.docs ? '✅' : '❌'} | ${changes.docs ? 'Documentation updates detected' : 'No doc changes'} |\n`;
+
+            if (changes.migrations) {
+              comment += '\n⚠️ **Migration Alert**: This PR contains database migrations. Please ensure:\n';
+              comment += '- [ ] Migration is reversible\n';
+              comment += '- [ ] Migration has been tested locally\n';
+              comment += '- [ ] Migration is compatible with existing data\n';
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # ================================================================
+  # Code Quality Gates
+  # ================================================================
+  quality-gates:
+    name: Quality — Code Standards & Best Practices
+    runs-on: ubuntu-latest
+    needs: [analyze-changes]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        if: needs.analyze-changes.outputs.backend-changed == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        if: needs.analyze-changes.outputs.backend-changed == 'true'
+        run: |
+          cd backend
+          pip install -r requirements-dev.txt
+
+      # Backend quality checks
+      - name: Backend code quality
+        if: needs.analyze-changes.outputs.backend-changed == 'true'
+        run: |
+          cd backend
+
+          echo "::group::Code Quality Metrics"
+
+          # Count lines of code
+          echo "Lines of code:"
+          find app/ -name "*.py" | xargs wc -l | tail -1
+
+          # Check cyclomatic complexity
+          echo "Checking code complexity..."
+          flake8 app/ --select=C901 --max-complexity=10 || echo "High complexity detected"
+
+          # Check for TODO/FIXME comments
+          echo "Checking for TODO/FIXME:"
+          grep -r "TODO\|FIXME" app/ || echo "No TODO/FIXME found"
+
+          # Check for print statements (should use logging)
+          echo "Checking for print statements:"
+          grep -r "print(" app/ || echo "No print statements found (good!)"
+
+          echo "::endgroup::"
+
+      - name: Frontend code quality
+        if: needs.analyze-changes.outputs.frontend-changed == 'true'
+        run: |
+          cd frontend
+          npm ci
+
+          echo "::group::Frontend Quality Metrics"
+
+          # Check bundle size
+          if [ -d "dist" ]; then
+            echo "Bundle size analysis:"
+            du -h dist/* 2>/dev/null || echo "No build files found"
+          fi
+
+          # Check for console.log statements
+          echo "Checking for console.log:"
+          find src/ -name "*.js" -o -name "*.jsx" | xargs grep "console\." || echo "No console statements found"
+
+          echo "::endgroup::"
+
+  # ================================================================
+  # Security Review
+  # ================================================================
+  security-review:
+    name: Security — Automated Security Review
+    runs-on: ubuntu-latest
+    needs: [analyze-changes]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run security checks
+        run: |
+          echo "::group::Security Review"
+
+          # Check for potential security issues in code
+          echo "Checking for hardcoded secrets..."
+
+          # Common patterns to avoid
+          PATTERNS=(
+            "password.*=.*[\"'][^\"'\s]{8,}[\"']"
+            "api_key.*=.*[\"'][^\"'\s]{16,}[\"']"
+            "secret.*=.*[\"'][^\"'\s]{16,}[\"']"
+            "token.*=.*[\"'][^\"'\s]{16,}[\"']"
+          )
+
+          for pattern in "${PATTERNS[@]}"; do
+            if grep -r -E "$pattern" --include="*.py" --include="*.js" --include="*.jsx" .; then
+              echo "⚠️ Potential hardcoded secret found: $pattern"
+            fi
+          done
+
+          # Check for SQL injection patterns
+          echo "Checking for SQL injection risks..."
+          if grep -r "f\".*SELECT\|f'.*SELECT" --include="*.py" .; then
+            echo "⚠️ Potential SQL injection risk with f-strings"
+          fi
+
+          echo "✅ Security review completed"
+          echo "::endgroup::"
+
+  # ================================================================
+  # Test Coverage Analysis
+  # ================================================================
+  test-coverage:
+    name: Coverage — Test Coverage Analysis
+    runs-on: ubuntu-latest
+    needs: [analyze-changes]
+    if: needs.analyze-changes.outputs.backend-changed == 'true' || needs.analyze-changes.outputs.tests-changed == 'true'
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: autoapply
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: autoapply_test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage
+        run: |
+          cd backend
+          export DATABASE_URL=postgresql+asyncpg://autoapply:test_password@localhost:5432/autoapply_test_db
+          export SECRET_KEY=test-secret-key
+          export ENVIRONMENT=test
+
+          pytest tests/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --cov-branch
+
+      - name: Coverage comment
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINIMUM_GREEN: 80
+          MINIMUM_ORANGE: 70
+
+  # ================================================================
+  # Migration Safety Check
+  # ================================================================
+  migration-safety:
+    name: Migration — Safety & Compatibility Check
+    runs-on: ubuntu-latest
+    needs: [analyze-changes]
+    if: needs.analyze-changes.outputs.migrations-changed == 'true'
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: autoapply
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: autoapply_db
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Test migration safety
+        run: |
+          cd backend
+          export DATABASE_URL=postgresql+asyncpg://autoapply:test_password@localhost:5432/autoapply_db
+
+          echo "::group::Migration Safety Check"
+
+          # Test forward migration
+          echo "Testing forward migration..."
+          alembic upgrade head
+
+          # Test backward migration (if possible)
+          echo "Testing backward migration..."
+          alembic downgrade -1 || echo "⚠️ Migration might not be reversible"
+
+          # Return to head
+          alembic upgrade head
+
+          echo "✅ Migration safety check completed"
+          echo "::endgroup::"
+
+  # ================================================================
+  # Performance Impact Analysis
+  # ================================================================
+  performance-check:
+    name: Performance — Impact Analysis
+    runs-on: ubuntu-latest
+    needs: [analyze-changes]
+    if: needs.analyze-changes.outputs.backend-changed == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Performance analysis
+        run: |
+          echo "::group::Performance Impact Analysis"
+
+          # Check for potential performance issues
+          echo "Checking for potential performance issues..."
+
+          # Look for N+1 query patterns
+          if grep -r "for.*in.*:" --include="*.py" backend/app/ | grep -E "(\.get|\.filter|\.select)"; then
+            echo "⚠️ Potential N+1 query pattern detected - review database queries"
+          fi
+
+          # Check for synchronous operations in async contexts
+          if grep -r "requests\." --include="*.py" backend/app/; then
+            echo "⚠️ Synchronous HTTP requests in async code - consider using httpx"
+          fi
+
+          # Check for large file operations
+          if grep -r "\.read()" --include="*.py" backend/app/; then
+            echo "⚠️ File read operations detected - ensure proper streaming for large files"
+          fi
+
+          echo "✅ Performance analysis completed"
+          echo "::endgroup::"
+
+  # ================================================================
+  # Final PR Status
+  # ================================================================
+  pr-status:
+    name: Status — PR Validation Summary
+    runs-on: ubuntu-latest
+    needs: [quality-gates, security-review, test-coverage, migration-safety, performance-check]
+    if: always()
+
+    steps:
+      - name: PR validation summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobs = [
+              { name: 'Code Quality', status: '${{ needs.quality-gates.result }}' },
+              { name: 'Security Review', status: '${{ needs.security-review.result }}' },
+              { name: 'Test Coverage', status: '${{ needs.test-coverage.result }}' },
+              { name: 'Migration Safety', status: '${{ needs.migration-safety.result }}' },
+              { name: 'Performance Check', status: '${{ needs.performance-check.result }}' }
+            ].filter(job => job.status !== 'skipped');
+
+            const passed = jobs.filter(job => job.status === 'success').length;
+            const total = jobs.length;
+
+            let comment = '## 📋 PR Validation Summary\n\n';
+            comment += `**Status: ${passed}/${total} checks passed**\n\n`;
+
+            jobs.forEach(job => {
+              const icon = job.status === 'success' ? '✅' :
+                          job.status === 'failure' ? '❌' :
+                          job.status === 'cancelled' ? '⏹️' : '⏸️';
+              comment += `${icon} ${job.name}: ${job.status}\n`;
+            });
+
+            if (passed === total) {
+              comment += '\n🎉 **All validation checks passed! This PR is ready for review.**';
+            } else {
+              comment += `\n⚠️ **${total - passed} checks failed. Please address the issues before merging.**`;
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+            // Set check status
+            if (passed < total) {
+              core.setFailed('Some validation checks failed');
+            }

@@ -1,35 +1,166 @@
 /**
- * Login Page — Authentication view.
+ * Login Page — Integrated Authentication View.
  *
- * Provides email/password login form with a registration link.
- * OAuth buttons (Google, LinkedIn) are stubbed for Phase 2.
+ * Provides real email/password authentication with backend integration.
+ * Handles login, registration, and validation with proper error display.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
- * Login/Registration page component.
+ * Login/Registration page component with full backend integration.
  *
  * Features:
- * - Email + password form with client-side validation.
- * - Toggle between login and registration modes.
- * - OAuth provider buttons (Google, LinkedIn) — Phase 2.
+ * - Real authentication via AuthContext
+ * - Form validation and error display
+ * - Auto-redirect to dashboard on success
+ * - Password strength validation for registration
+ * - Responsive design with loading states
  *
  * @returns {JSX.Element} The login page.
  */
 function Login() {
+  const navigate = useNavigate();
+  const { login, register, isLoading, error, clearError, isAuthenticated } = useAuth();
+
+  // Form state
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    full_name: '',
+    seniority_level: 'junior',
+    niche: '',
+  });
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Clear errors when switching modes
+  useEffect(() => {
+    clearError();
+    setValidationErrors({});
+  }, [isRegister, clearError]);
+
+  /**
+   * Handle form field changes.
+   */
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+
+    // Clear field-specific validation error
+    if (validationErrors[name]) {
+      setValidationErrors(prev => ({ ...prev, [name]: null }));
+    }
+  };
+
+  /**
+   * Validate form fields client-side.
+   */
+  const validateForm = () => {
+    const errors = {};
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email) {
+      errors.email = 'Email is required';
+    } else if (!emailRegex.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    // Password validation
+    if (!formData.password) {
+      errors.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters';
+    }
+
+    // Registration-specific validation
+    if (isRegister) {
+      if (!formData.full_name) {
+        errors.full_name = 'Full name is required';
+      }
+
+      // Password strength for registration
+      if (formData.password) {
+        const passwordErrors = [];
+        if (!/[A-Z]/.test(formData.password)) {
+          passwordErrors.push('one uppercase letter');
+        }
+        if (!/[0-9]/.test(formData.password)) {
+          passwordErrors.push('one number');
+        }
+        if (passwordErrors.length > 0) {
+          errors.password = `Password must contain ${passwordErrors.join(' and ')}`;
+        }
+      }
+
+      // Niche required for mid/senior levels
+      if (['mid', 'senior'].includes(formData.seniority_level) && !formData.niche) {
+        errors.niche = 'Specialization is required for mid/senior levels';
+      }
+    }
+
+    return errors;
+  };
 
   /**
    * Handle form submission.
-   * @param {Event} e - Form submit event.
    */
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // TODO: Implement auth API call in Phase 2
-    console.log(isRegister ? 'Register' : 'Login', { email, password });
+    clearError();
+
+    // Validate form
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
+    try {
+      if (isRegister) {
+        // Registration
+        await register({
+          email: formData.email,
+          password: formData.password,
+          full_name: formData.full_name,
+          seniority_level: formData.seniority_level,
+          niche: formData.niche || null,
+        });
+      } else {
+        // Login
+        await login(formData.email, formData.password);
+      }
+
+      // Success - AuthContext will handle redirect via useEffect
+    } catch (err) {
+      // Error is handled by AuthContext and displayed via error state
+      console.error('Auth error:', err);
+    }
+  };
+
+  /**
+   * Toggle between login and register modes.
+   */
+  const toggleMode = () => {
+    setIsRegister(!isRegister);
+    setFormData({
+      email: '',
+      password: '',
+      full_name: '',
+      seniority_level: 'junior',
+      niche: '',
+    });
+    setValidationErrors({});
   };
 
   return (
@@ -69,84 +200,168 @@ function Login() {
           </p>
         </div>
 
+        {/* Global Error */}
+        {error && (
+          <div
+            style={{
+              background: 'var(--color-error-bg)',
+              border: '1px solid var(--color-error)',
+              borderRadius: 'var(--radius-md)',
+              padding: 'var(--space-3)',
+              marginBottom: 'var(--space-4)',
+              color: 'var(--color-error)',
+              fontSize: 'var(--font-size-sm)',
+            }}
+          >
+            {error}
+          </div>
+        )}
+
         {/* Form */}
         <form onSubmit={handleSubmit}>
           {isRegister && (
-            <div style={{ marginBottom: 'var(--space-4)' }}>
-              <label
-                htmlFor="fullname"
-                style={{
-                  display: 'block',
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: 'var(--font-weight-medium)',
-                  color: 'var(--color-text-secondary)',
-                  marginBottom: 'var(--space-2)',
-                }}
-              >
-                Full Name
-              </label>
-              <input
-                type="text"
-                id="fullname"
-                placeholder="Enter your full name"
-                style={inputStyle}
-              />
-            </div>
+            <>
+              <div style={{ marginBottom: 'var(--space-4)' }}>
+                <label htmlFor="full_name" style={labelStyle}>
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  id="full_name"
+                  name="full_name"
+                  value={formData.full_name}
+                  onChange={handleChange}
+                  placeholder="Enter your full name"
+                  style={{
+                    ...inputStyle,
+                    ...(validationErrors.full_name && errorInputStyle),
+                  }}
+                />
+                {validationErrors.full_name && (
+                  <div style={errorStyle}>{validationErrors.full_name}</div>
+                )}
+              </div>
+
+              <div style={{ marginBottom: 'var(--space-4)' }}>
+                <label htmlFor="seniority_level" style={labelStyle}>
+                  Experience Level
+                </label>
+                <select
+                  id="seniority_level"
+                  name="seniority_level"
+                  value={formData.seniority_level}
+                  onChange={handleChange}
+                  style={inputStyle}
+                >
+                  <option value="intern">Intern</option>
+                  <option value="junior">Junior</option>
+                  <option value="mid">Mid-level</option>
+                  <option value="senior">Senior</option>
+                </select>
+              </div>
+
+              {['mid', 'senior'].includes(formData.seniority_level) && (
+                <div style={{ marginBottom: 'var(--space-4)' }}>
+                  <label htmlFor="niche" style={labelStyle}>
+                    Specialization
+                  </label>
+                  <input
+                    type="text"
+                    id="niche"
+                    name="niche"
+                    value={formData.niche}
+                    onChange={handleChange}
+                    placeholder="e.g., Frontend Development, DevOps"
+                    style={{
+                      ...inputStyle,
+                      ...(validationErrors.niche && errorInputStyle),
+                    }}
+                  />
+                  {validationErrors.niche && (
+                    <div style={errorStyle}>{validationErrors.niche}</div>
+                  )}
+                </div>
+              )}
+            </>
           )}
+
           <div style={{ marginBottom: 'var(--space-4)' }}>
-            <label
-              htmlFor="email"
-              style={{
-                display: 'block',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--font-weight-medium)',
-                color: 'var(--color-text-secondary)',
-                marginBottom: 'var(--space-2)',
-              }}
-            >
+            <label htmlFor="email" style={labelStyle}>
               Email
             </label>
             <input
               type="email"
               id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
               placeholder="your@email.com"
               required
-              style={inputStyle}
-            />
-          </div>
-          <div style={{ marginBottom: 'var(--space-6)' }}>
-            <label
-              htmlFor="password"
               style={{
-                display: 'block',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--font-weight-medium)',
-                color: 'var(--color-text-secondary)',
-                marginBottom: 'var(--space-2)',
+                ...inputStyle,
+                ...(validationErrors.email && errorInputStyle),
               }}
-            >
+            />
+            {validationErrors.email && (
+              <div style={errorStyle}>{validationErrors.email}</div>
+            )}
+          </div>
+
+          <div style={{ marginBottom: 'var(--space-6)' }}>
+            <label htmlFor="password" style={labelStyle}>
               Password
             </label>
             <input
               type="password"
               id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Min. 8 characters"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              placeholder={isRegister ? "Min. 8 chars, 1 upper, 1 number" : "Enter your password"}
               required
               minLength={8}
-              style={inputStyle}
+              style={{
+                ...inputStyle,
+                ...(validationErrors.password && errorInputStyle),
+              }}
             />
+            {validationErrors.password && (
+              <div style={errorStyle}>{validationErrors.password}</div>
+            )}
           </div>
+
           <button
             type="submit"
+            disabled={isLoading}
             className="btn btn-primary"
             id="auth-submit-btn"
-            style={{ width: '100%', padding: 'var(--space-4)' }}
+            style={{
+              width: '100%',
+              padding: 'var(--space-4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 'var(--space-2)',
+              opacity: isLoading ? 0.7 : 1,
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+            }}
           >
-            {isRegister ? 'Create Account' : 'Sign In'}
+            {isLoading && (
+              <div
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid currentColor',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }}
+              />
+            )}
+            {isLoading
+              ? (isRegister ? 'Creating Account...' : 'Signing In...')
+              : (isRegister ? 'Create Account' : 'Sign In')
+            }
           </button>
         </form>
 
@@ -183,14 +398,14 @@ function Login() {
           />
         </div>
 
-        {/* OAuth Buttons — Phase 2 */}
+        {/* OAuth Buttons — Phase 3 */}
         <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
           <button
             className="btn btn-secondary"
             style={{ flex: 1 }}
             id="google-oauth-btn"
             disabled
-            title="Coming in Phase 2"
+            title="Coming in Phase 3"
           >
             🔵 Google
           </button>
@@ -199,7 +414,7 @@ function Login() {
             style={{ flex: 1 }}
             id="linkedin-oauth-btn"
             disabled
-            title="Coming in Phase 2"
+            title="Coming in Phase 3"
           >
             🔗 LinkedIn
           </button>
@@ -217,15 +432,17 @@ function Login() {
           {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
           <button
             type="button"
-            onClick={() => setIsRegister(!isRegister)}
+            onClick={toggleMode}
+            disabled={isLoading}
             style={{
               background: 'none',
               border: 'none',
               color: 'var(--color-accent)',
-              cursor: 'pointer',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
               fontWeight: 'var(--font-weight-semibold)',
               fontSize: 'inherit',
               fontFamily: 'inherit',
+              opacity: isLoading ? 0.5 : 1,
             }}
             id="toggle-auth-mode-btn"
           >
@@ -237,7 +454,15 @@ function Login() {
   );
 }
 
-/** @type {React.CSSProperties} Shared input field styles. */
+// Styles
+const labelStyle = {
+  display: 'block',
+  fontSize: 'var(--font-size-sm)',
+  fontWeight: 'var(--font-weight-medium)',
+  color: 'var(--color-text-secondary)',
+  marginBottom: 'var(--space-2)',
+};
+
 const inputStyle = {
   width: '100%',
   padding: 'var(--space-3) var(--space-4)',
@@ -249,6 +474,16 @@ const inputStyle = {
   fontFamily: 'var(--font-family)',
   outline: 'none',
   transition: 'border-color var(--transition-fast)',
+};
+
+const errorInputStyle = {
+  borderColor: 'var(--color-error)',
+};
+
+const errorStyle = {
+  color: 'var(--color-error)',
+  fontSize: 'var(--font-size-sm)',
+  marginTop: 'var(--space-1)',
 };
 
 export default Login;
