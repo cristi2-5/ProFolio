@@ -116,7 +116,7 @@ class AdditionalQuestionsRequest(BaseModel):
 
     question_type: str = Field(
         description="Type of questions to generate",
-        regex="^(technical|behavioral|company)$"
+        pattern="^(technical|behavioral|company)$"
     )
     count: int = Field(
         default=5,
