@@ -450,8 +450,6 @@ function StatsCard({ icon, label, value, subtext, color }) {
   );
 }
 
-export default Dashboard;
-
 /**
  * Stats card component for dashboard metrics.
  *
