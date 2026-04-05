@@ -12,6 +12,7 @@ import Dashboard from './pages/Dashboard';
 import Resumes from './pages/Resumes';
 import Jobs from './pages/Jobs';
 import JobDetail from './pages/JobDetail';
+import Benchmarks from './pages/Benchmarks';
 import Login from './pages/Login';
 import './App.css';
 
@@ -65,6 +66,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <JobDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/benchmarks"
+              element={
+                <ProtectedRoute>
+                  <Benchmarks />
                 </ProtectedRoute>
               }
             />
