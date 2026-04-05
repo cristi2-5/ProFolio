@@ -33,11 +33,13 @@
   --color-accent-hover: #818cf8;
   --color-accent-glow: rgba(99, 102, 241, 0.3);
   --color-success: #10b981;
+  --color-success-bg: rgba(16, 185, 129, 0.1);
   --color-warning: #f59e0b;
   --color-warning-bg: rgba(245, 158, 11, 0.1);
   --color-error: #ef4444;
   --color-error-bg: rgba(239, 68, 68, 0.1);
   --color-info: #3b82f6;
+  --color-info-bg: rgba(59, 130, 246, 0.1);
 
   /* Gradients */
   --gradient-primary: linear-gradient(135deg, #6366f1, #8b5cf6);
