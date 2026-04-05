@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import List, Tuple
 
-import PyPDF2
+import pypdf
 from docx import Document
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ def validate_cv_file(file_path: str, original_filename: str) -> Tuple[bool, str]
         # File integrity check (attempt to open with appropriate library)
         if file_extension == ".pdf":
             with open(file_path, 'rb') as pdf_file:
-                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                pdf_reader = pypdf.PdfReader(pdf_file)
                 if len(pdf_reader.pages) == 0:
                     return False, "PDF file contains no pages"
 
@@ -82,7 +82,7 @@ def validate_cv_file(file_path: str, original_filename: str) -> Tuple[bool, str]
 
         return True, ""
 
-    except PyPDF2.errors.PdfReadError as e:
+    except pypdf.errors.PdfReadError as e:
         return False, f"Invalid PDF file: {str(e)}"
     except Exception as e:
         return False, f"File validation error: {str(e)}"
@@ -127,7 +127,7 @@ def extract_text_from_pdf(file_path: str) -> str:
 
     except FileNotFoundError:
         raise FileNotFoundError(f"PDF file not found: {file_path}")
-    except PyPDF2.errors.PdfReadError as e:
+    except pypdf.errors.PdfReadError as e:
         raise ValueError(f"Invalid PDF file: {str(e)}")
     except Exception as e:
         raise ValueError(f"Failed to extract text from PDF: {str(e)}")
