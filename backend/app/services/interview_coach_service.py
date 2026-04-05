@@ -196,8 +196,8 @@ class InterviewCoachService:
         user: User,
         job: ScrapedJob,
         question_type: str,
-        count: int = 5,
         db: AsyncSession,
+        count: int = 5,
     ) -> Dict[str, Any]:
         """Generate additional interview questions of a specific type.
 
