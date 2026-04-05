@@ -5,7 +5,7 @@
  * Handles JWT token persistence, user profile fetching, and auto-login.
  */
 
-import { createContext, useContext, useEffect, useReducer } from 'react';
+import { createContext, useContext, useEffect, useReducer, useCallback } from 'react';
 import { get, post } from '../api/client';
 
 // Auth state management using useReducer
@@ -81,7 +81,7 @@ export function AuthProvider({ children }) {
   /**
    * Initialize authentication by checking for existing token and fetching user profile.
    */
-  const initializeAuth = async () => {
+  const initializeAuth = useCallback(async () => {
     const token = localStorage.getItem('access_token');
 
     if (!token) {
@@ -98,12 +98,12 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('access_token');
       dispatch({ type: AUTH_ACTIONS.LOGOUT });
     }
-  };
+  }, []);
 
   /**
    * Login with email and password.
    */
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: true });
 
     try {
@@ -122,12 +122,12 @@ export function AuthProvider({ children }) {
       dispatch({ type: AUTH_ACTIONS.SET_ERROR, payload: error.message });
       throw error;
     }
-  };
+  }, []);
 
   /**
    * Register new user account.
    */
-  const register = async (userData) => {
+  const register = useCallback(async (userData) => {
     dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: true });
 
     try {
@@ -149,29 +149,29 @@ export function AuthProvider({ children }) {
       dispatch({ type: AUTH_ACTIONS.SET_ERROR, payload: error.message });
       throw error;
     }
-  };
+  }, []);
 
   /**
    * Logout user and clear session.
    */
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('access_token');
     dispatch({ type: AUTH_ACTIONS.LOGOUT });
-  };
+  }, []);
 
   /**
    * Clear error state.
    */
-  const clearError = () => {
+  const clearError = useCallback(() => {
     dispatch({ type: AUTH_ACTIONS.CLEAR_ERROR });
-  };
+  }, []);
 
   /**
    * Update user profile in context (after profile changes).
    */
-  const updateUser = (userData) => {
+  const updateUser = useCallback((userData) => {
     dispatch({ type: AUTH_ACTIONS.SET_USER, payload: { ...state.user, ...userData } });
-  };
+  }, [state.user]);
 
   const value = {
     // State

@@ -57,7 +57,7 @@ function Jobs() {
       params.append('limit', jobsPerPage.toString());
       params.append('offset', ((currentPage - 1) * jobsPerPage).toString());
 
-      const data = await get(`/jobs?${params.toString()}`);
+      const data = await get(`/jobs/?${params.toString()}`);
       setJobs(data.jobs || []);
       setTotalJobs(data.total_count || 0);
 

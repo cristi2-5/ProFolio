@@ -17,8 +17,13 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# Bcrypt context for password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Bcrypt context for password hashing with explicit configuration
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=12,  # Secure but not excessive
+    bcrypt__ident="2b"  # Standard bcrypt identifier
+)
 
 
 def hash_password(password: str) -> str:
@@ -30,7 +35,21 @@ def hash_password(password: str) -> str:
     Returns:
         str: The bcrypt hash string.
     """
-    return pwd_context.hash(password)
+    try:
+        # Workaround for bcrypt version compatibility issue
+        # Manually truncate to 72 bytes to prevent the error
+        if len(password.encode('utf-8')) > 72:
+            password = password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
+
+        return pwd_context.hash(password)
+    except Exception as e:
+        # If bcrypt fails, try fallback approach
+        try:
+            import bcrypt
+            salt = bcrypt.gensalt()
+            return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+        except Exception as e2:
+            raise Exception(f"Password hashing failed: {e}")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -43,7 +62,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         bool: True if the password matches, False otherwise.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        # Fallback to direct bcrypt
+        try:
+            import bcrypt
+            return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+        except Exception as e2:
+            return False
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
@@ -88,13 +115,12 @@ def decode_access_token(token: str) -> dict | None:
 def validate_password_strength(password: str) -> Tuple[bool, List[str]]:
     """Validate password strength and complexity requirements.
 
-    Implements OWASP password strength recommendations:
+    Implements reasonable password requirements:
     - Minimum 8 characters
     - At least one uppercase letter
     - At least one lowercase letter
-    - At least one number
-    - At least one special character
-    - No common weak patterns
+    - At least one number OR special character (more flexible)
+    - Basic weak pattern checking (only obvious ones)
 
     Args:
         password: The plain-text password to validate.
@@ -116,8 +142,8 @@ def validate_password_strength(password: str) -> Tuple[bool, List[str]]:
         errors.append("Password must be at least 8 characters long")
 
     # Maximum length (prevent DoS via bcrypt)
-    if len(password) > 128:
-        errors.append("Password must be no more than 128 characters long")
+    if len(password) > 72:  # bcrypt actual limit
+        errors.append("Password must be no more than 72 characters long")
 
     # Character type requirements
     if not re.search(r'[A-Z]', password):
@@ -126,60 +152,46 @@ def validate_password_strength(password: str) -> Tuple[bool, List[str]]:
     if not re.search(r'[a-z]', password):
         errors.append("Password must contain at least one lowercase letter")
 
-    if not re.search(r'\d', password):
-        errors.append("Password must contain at least one number")
+    # Require either a number OR special character (more flexible)
+    has_number = bool(re.search(r'\d', password))
+    has_special = bool(re.search(r'[!@#$%^&*(),.?":{}|<>]', password))
 
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-        errors.append("Password must contain at least one special character (!@#$%^&*(),.?\":{}|<>)")
+    if not (has_number or has_special):
+        errors.append("Password must contain at least one number or special character")
 
-    # Common weak patterns
-    if _contains_weak_patterns(password):
-        errors.append("Password contains common weak patterns (avoid sequences like '123', 'abc', or repeated characters)")
+    # Only check for obvious weak patterns
+    if _contains_obvious_weak_patterns(password):
+        errors.append("Password contains weak patterns (avoid simple sequences like '123456' or 'password')")
 
     return len(errors) == 0, errors
 
 
-def _contains_weak_patterns(password: str) -> bool:
-    """Check for common weak patterns in passwords.
+def _contains_obvious_weak_patterns(password: str) -> bool:
+    """Check for only the most obvious weak patterns in passwords.
 
     Args:
         password: The password to check.
 
     Returns:
-        bool: True if weak patterns are found, False otherwise.
+        bool: True if obvious weak patterns are found, False otherwise.
     """
     password_lower = password.lower()
 
-    # Sequential numbers
-    sequential_numbers = [
-        "123", "234", "345", "456", "567", "678", "789", "890",
-        "012", "321", "432", "543", "654", "765", "876", "987"
+    # Only check for very obvious weak patterns
+    obvious_weak_patterns = [
+        "123456", "654321", "password", "123123", "qwerty", "111111", "000000",
+        "abcdef", "fedcba", "123abc", "abc123"
     ]
 
-    # Sequential letters
-    sequential_letters = [
-        "abc", "bcd", "cde", "def", "efg", "fgh", "ghi", "hij", "ijk", "jkl", "klm",
-        "lmn", "mno", "nop", "opq", "pqr", "qrs", "rst", "stu", "tuv", "uvw", "vwx",
-        "wxy", "xyz", "zyx", "yxw", "xwv", "wvu", "vut", "uts", "tsr", "srq", "rqp",
-        "qpo", "pon", "onm", "nml", "mlk", "lkj", "kji", "jih", "ihg", "hgf", "gfe",
-        "fed", "edc", "dcb", "cba"
-    ]
+    # Check for repeated characters (4+ in a row, not 3)
+    repeated_pattern = re.compile(r'(.)\1{3,}')
 
-    # Repeated characters (3+ in a row)
-    repeated_pattern = re.compile(r'(.)\1{2,}')
-
-    # Keyboard patterns
-    keyboard_patterns = [
-        "qwerty", "asdf", "zxcv", "qwertz", "azerty",
-        "123456", "654321", "111111", "000000"
-    ]
-
-    # Check for patterns
-    for pattern in sequential_numbers + sequential_letters + keyboard_patterns:
+    # Check obvious patterns
+    for pattern in obvious_weak_patterns:
         if pattern in password_lower:
             return True
 
-    # Check for repeated characters
+    # Check for 4+ repeated characters
     if repeated_pattern.search(password):
         return True
 

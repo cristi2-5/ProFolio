@@ -37,6 +37,10 @@ services:
       SECRET_KEY: dev-docker-secret-key
       ENVIRONMENT: development
       CORS_ORIGINS: '["http://localhost:5173"]'
+      OPENAI_API_KEY: test-key-for-development
+      ADZUNA_APP_ID: test-app-id
+      ADZUNA_APP_KEY: test-app-key
+      UPLOAD_DIR: ./uploads
     depends_on:
       db:
         condition: service_healthy
@@ -45,16 +49,19 @@ services:
       - upload_data:/app/uploads
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # --- React/Vite Frontend ---
+  # --- React/Vite Frontend (Development Mode) ---
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: node:20-alpine
     container_name: autoapply-frontend
     ports:
-      - "5173:80"
+      - "5173:5173"
     depends_on:
       - backend
+    volumes:
+      - ./frontend:/app  # Hot reload for development
+      - /app/node_modules  # Preserve node_modules in container
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"
 
 volumes:
   postgres_data:

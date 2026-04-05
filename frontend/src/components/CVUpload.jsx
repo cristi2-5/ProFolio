@@ -140,7 +140,7 @@ function CVUpload({ onUploadComplete }) {
    */
   const fetchResumes = async () => {
     try {
-      const data = await get('/resumes');
+      const data = await get('/resumes/');
       setResumes(data.resumes || []);
     } catch (err) {
       console.error('Failed to fetch resumes:', err);

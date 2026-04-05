@@ -9,7 +9,8 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
+import re
 
 
 class UserCreate(BaseModel):
@@ -23,11 +24,25 @@ class UserCreate(BaseModel):
         niche: Optional technical domain (required for mid/senior).
     """
 
-    email: EmailStr
+    email: str = Field(..., description="Valid email address")
     password: str = Field(..., min_length=8, max_length=128)
     full_name: Optional[str] = None
     seniority_level: Optional[str] = Field(None, pattern="^(intern|junior|mid|senior)$")
     niche: Optional[str] = None
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        """Basic email validation that's more permissive than EmailStr."""
+        if not isinstance(v, str):
+            raise ValueError('Email must be a string')
+
+        # Basic email pattern - allows .test, .local, etc for development
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError('Invalid email format')
+
+        return v.lower()
 
 
 class UserUpdate(BaseModel):
@@ -80,8 +95,22 @@ class LoginRequest(BaseModel):
         password: Plain-text password for verification.
     """
 
-    email: EmailStr
+    email: str = Field(..., description="User's registered email")
     password: str
+
+    @field_validator('email')
+    @classmethod
+    def validate_login_email(cls, v):
+        """Basic email validation for login."""
+        if not isinstance(v, str):
+            raise ValueError('Email must be a string')
+
+        # Basic email pattern - allows .test, .local, etc for development
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError('Invalid email format')
+
+        return v.lower()
 
 
 class JobPreferenceCreate(BaseModel):

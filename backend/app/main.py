@@ -15,7 +15,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.database import engine, Base
 from app.routers import auth, benchmarks, cv_optimizer, jobs, resumes
+
+# Import all models to ensure they're registered with Base.metadata
+from app.models.user import User, JobPreference
+from app.models.resume import ParsedResume
+from app.models.job import ScrapedJob, UserJob
+from app.models.benchmark import BenchmarkScore
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +39,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager — startup/shutdown hooks.
 
     Startup:
+        - Initialize database tables automatically.
         - Log configuration (environment, DB connection status).
         - Validate critical settings.
 
@@ -44,6 +52,17 @@ async def lifespan(app: FastAPI):
     # --- Startup ---
     logger.info("🚀 Starting %s in %s mode", settings.app_name, settings.environment)
     logger.info("📦 Database: %s", settings.database_url.split("@")[-1])
+
+    # Create database tables automatically
+    try:
+        logger.info("🔧 Initializing database tables...")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("✅ Database tables ready!")
+    except Exception as e:
+        logger.error("❌ Database initialization failed: %s", e)
+        raise
+
     yield
     # --- Shutdown ---
     logger.info("🛑 Shutting down %s", settings.app_name)
