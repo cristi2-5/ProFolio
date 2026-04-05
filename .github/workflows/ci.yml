@@ -468,17 +468,45 @@ jobs:
           echo "::group::Docker Container Testing"
 
           # Test backend container with PostgreSQL
+          echo "Starting backend container..."
           docker run --rm -d --name test-backend \
             --network host \
             -e DATABASE_URL=postgresql+asyncpg://autoapply:test_password@localhost:5432/autoapply_db \
             -e SECRET_KEY=docker-test-key \
             -e ENVIRONMENT=test \
+            -e OPENAI_API_KEY=test-key-no-real-calls \
             auto-apply-backend:${{ github.sha }}
 
-          # Wait and test
-          sleep 10
-          curl -f http://localhost:8000/health || (docker logs test-backend && exit 1)
-          docker stop test-backend
+          # Wait for container to start and check if it's running
+          echo "Waiting for container to start..."
+          sleep 15
+
+          # Check if container is still running
+          if ! docker ps | grep -q test-backend; then
+            echo "❌ Container exited. Checking logs..."
+            docker logs test-backend || echo "No logs available"
+            exit 1
+          fi
+
+          # Test health endpoint with retries
+          echo "Testing health endpoint..."
+          for i in {1..5}; do
+            if curl -f http://localhost:8000/health; then
+              echo "✅ Health check passed"
+              break
+            else
+              echo "Attempt $i failed, retrying in 3 seconds..."
+              sleep 3
+            fi
+            if [ $i -eq 5 ]; then
+              echo "❌ Health check failed after 5 attempts"
+              docker logs test-backend
+              exit 1
+            fi
+          done
+
+          # Clean up
+          docker stop test-backend || true
 
           echo "✅ Backend container test passed"
           echo "::endgroup::"
