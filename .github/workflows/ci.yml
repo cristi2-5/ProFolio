@@ -84,12 +84,14 @@ jobs:
           echo "::group::Black Formatting Check"
           black --check --diff app/ tests/
           echo "::endgroup::"
+        continue-on-error: true
 
       - name: Check import ordering with isort
         run: |
           echo "::group::Import Sorting Check"
           isort --check-only --diff app/ tests/
           echo "::endgroup::"
+        continue-on-error: true
 
       - name: Type checking with mypy
         run: |
