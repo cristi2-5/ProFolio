@@ -11,6 +11,7 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Resumes from './pages/Resumes';
 import Jobs from './pages/Jobs';
+import JobDetail from './pages/JobDetail';
 import Login from './pages/Login';
 import './App.css';
 
@@ -56,6 +57,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Jobs />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jobs/:jobId"
+              element={
+                <ProtectedRoute>
+                  <JobDetail />
                 </ProtectedRoute>
               }
             />
