@@ -40,3 +40,6 @@ openai==1.59.7
 # --- PDF/DOCX Parsing (CV Profiler) ---
 PyPDF2==3.0.1
 python-docx==1.1.2
+
+# --- PDF Generation (CV Optimizer) ---
+reportlab==4.2.7
