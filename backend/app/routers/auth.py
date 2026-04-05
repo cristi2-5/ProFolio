@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.schemas.user import LoginRequest, Token, UserCreate, UserResponse
+from app.services.auth_service import AuthService
+from app.utils.exceptions import DuplicateError, UnauthorizedError, raise_http_exception
+from app.utils.security import sanitize_email, validate_password_strength
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -24,7 +27,10 @@ async def register(
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
-    """Create a new user account.
+    """Create a new user account with validation.
+
+    Validates password strength, email format, and checks for duplicates.
+    Creates user with hashed password and returns public profile.
 
     Args:
         user_data: Registration payload with email, password, and profile info.
@@ -34,13 +40,46 @@ async def register(
         UserResponse: The created user's public profile.
 
     Raises:
+        HTTPException 400: If password requirements not met or email invalid.
         HTTPException 409: If email already exists.
+        HTTPException 422: If required fields missing for seniority level.
     """
-    # TODO: Implement via AuthService in Phase 2
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Registration endpoint — implementation in Phase 2.",
-    )
+    try:
+        # Validate and sanitize email
+        sanitized_email = sanitize_email(user_data.email)
+
+        # Validate password strength
+        is_valid, password_errors = validate_password_strength(user_data.password)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Password requirements not met: {', '.join(password_errors)}"
+            )
+
+        # Business rule: Mid/senior levels require niche specification
+        if user_data.seniority_level in ["mid", "senior"] and not user_data.niche:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{user_data.seniority_level.title()} level requires specifying your technical niche."
+            )
+
+        # Update user_data with sanitized email
+        user_data.email = sanitized_email
+
+        # Create user via service layer
+        user = await AuthService.register(db, user_data)
+        await db.commit()
+
+        return UserResponse.model_validate(user)
+
+    except DuplicateError as e:
+        raise_http_exception(e)
+    except ValueError as e:
+        # Email validation errors from sanitize_email()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.post(
@@ -54,18 +93,35 @@ async def login(
 ) -> Token:
     """Authenticate a user and return a JWT access token.
 
+    Validates email format, authenticates credentials, and returns
+    JWT token for subsequent API calls. Rate limiting recommended
+    via @limiter.limit("5/minute") decorator.
+
     Args:
         credentials: Login payload with email and password.
         db: Async database session (injected).
 
     Returns:
-        Token: JWT access token for subsequent API calls.
+        Token: JWT access token with "bearer" type for Authorization header.
 
     Raises:
-        HTTPException 401: If credentials are invalid.
+        HTTPException 400: If email format is invalid.
+        HTTPException 401: If credentials are invalid or user not found.
     """
-    # TODO: Implement via AuthService in Phase 2
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Login endpoint — implementation in Phase 2.",
-    )
+    try:
+        # Validate and sanitize email
+        sanitized_email = sanitize_email(credentials.email)
+
+        # Authenticate via service layer
+        access_token = await AuthService.authenticate(db, sanitized_email, credentials.password)
+
+        return Token(access_token=access_token, token_type="bearer")
+
+    except UnauthorizedError as e:
+        raise_http_exception(e)
+    except ValueError as e:
+        # Email validation errors from sanitize_email()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
