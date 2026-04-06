@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.job_scanner import JobScannerAgent
-from app.database import get_async_session
+from app.database import async_session_factory
 
 # Configure logging for cron environment
 logging.basicConfig(
@@ -47,8 +47,7 @@ async def run_daily_job_scan() -> dict:
         scanner = JobScannerAgent()
 
         # Get database session
-        async_session = get_async_session()
-        async with async_session() as db:
+        async with async_session_factory() as db:
             # Run scan for all users
             total_jobs = await scanner.scan_all_users(db)
 
@@ -96,9 +95,7 @@ async def run_user_scan(user_id: str) -> dict:
 
     try:
         scanner = JobScannerAgent()
-        async_session = get_async_session()
-
-        async with async_session() as db:
+        async with async_session_factory() as db:
             new_jobs = await scanner.scan(user_id, db)
 
         logger.info(f"User scan completed: {len(new_jobs)} new jobs for user {user_id}")

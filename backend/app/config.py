@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     # --- CORS ---
     cors_origins: List[str] = ["http://localhost:5173"]
 
+    # --- Job Scanner Scheduler ---
+    job_scan_interval_hours: int = 24  # How often the cron scans all users
+    job_scan_rate_limit_hours: int = 1  # Max manual scans per user per N hours
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -4,7 +4,7 @@ Job Pydantic Schemas — Request/Response validation.
 
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -38,7 +38,7 @@ class JobResponse(BaseModel):
 class UserJobResponse(BaseModel):
     """Schema for user-job relationship in API responses.
 
-    Includes match score, status, and AI-generated content.
+    Includes match score, status, applied_at timestamp, and AI-generated content.
     """
 
     id: uuid.UUID
@@ -49,11 +49,24 @@ class UserJobResponse(BaseModel):
     optimized_cv: Optional[dict[str, Any]]
     cover_letter: Optional[str]
     interview_prep: Optional[dict[str, Any]]
+    applied_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
     job: Optional[JobResponse] = None
 
     model_config = {"from_attributes": True}
+
+
+class UserJobListResponse(BaseModel):
+    """Paginated list of user-job relationships.
+
+    Attributes:
+        jobs: List of matched jobs for the current page.
+        total_count: Total number of jobs matching the query (for pagination).
+    """
+
+    jobs: List[UserJobResponse]
+    total_count: int
 
 
 class UserJobStatusUpdate(BaseModel):
@@ -64,3 +77,4 @@ class UserJobStatusUpdate(BaseModel):
     """
 
     status: str = Field(..., pattern="^(new|applied|saved|hidden|duplicate)$")
+

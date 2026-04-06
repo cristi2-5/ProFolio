@@ -11,11 +11,12 @@ Usage:
 import logging
 from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.database import engine, Base
+from app.database import engine, Base, async_session_factory
 from app.routers import auth, benchmarks, cv_optimizer, jobs, resumes
 
 # Import all models to ensure they're registered with Base.metadata
@@ -40,10 +41,11 @@ async def lifespan(app: FastAPI):
 
     Startup:
         - Initialize database tables automatically.
+        - Start APScheduler for daily job scan cron.
         - Log configuration (environment, DB connection status).
-        - Validate critical settings.
 
     Shutdown:
+        - Shut down APScheduler gracefully.
         - Clean up resources (DB connections, HTTP clients).
 
     Args:
@@ -63,9 +65,42 @@ async def lifespan(app: FastAPI):
         logger.error("❌ Database initialization failed: %s", e)
         raise
 
+    # --- APScheduler: daily job scan cron ---
+    scheduler = AsyncIOScheduler()
+
+    async def _daily_scan_job():
+        """Cron callback: scan all users and discover new jobs."""
+        from app.agents.job_scanner import JobScannerAgent
+        logger.info("⏰ APScheduler: starting daily job scan")
+        try:
+            async with async_session_factory() as db:
+                agent = JobScannerAgent()
+                total = await agent.scan_all_users(db)
+                await db.commit()
+            logger.info("✅ APScheduler: daily scan complete — %d new jobs", total)
+        except Exception as exc:
+            logger.error("❌ APScheduler: daily scan failed: %s", exc, exc_info=True)
+
+    scheduler.add_job(
+        _daily_scan_job,
+        trigger="interval",
+        hours=settings.job_scan_interval_hours,
+        id="daily_job_scan",
+        replace_existing=True,
+        misfire_grace_time=3600,  # Allow up to 1h late if server was down
+    )
+    scheduler.start()
+    logger.info(
+        "📅 Job scan scheduler started — interval: %dh",
+        settings.job_scan_interval_hours,
+    )
+
     yield
+
     # --- Shutdown ---
     logger.info("🛑 Shutting down %s", settings.app_name)
+    scheduler.shutdown(wait=False)
+    logger.info("✅ APScheduler stopped")
 
 
 # Create FastAPI application
