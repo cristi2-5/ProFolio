@@ -253,6 +253,9 @@ jobs:
           export DATABASE_URL=postgresql+asyncpg://autoapply:test_password@localhost:5432/autoapply_test_db
           export SECRET_KEY=test-secret-key
           export ENVIRONMENT=test
+          export OPENAI_API_KEY=sk-dummy-key-for-ci
+          export ADZUNA_APP_ID=dummy-adzuna-id
+          export ADZUNA_APP_KEY=dummy-adzuna-key
 
           pytest tests/ \
             --cov=app \

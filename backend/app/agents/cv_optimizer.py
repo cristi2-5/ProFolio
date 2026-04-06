@@ -30,18 +30,22 @@ class CVOptimizerAgent:
 
     def __init__(self):
         """Initialize CV Optimizer with OpenAI configuration."""
-        if not settings.openai_api_key:
-            raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
-
-        # Handle development/test mode with placeholder API keys
-        self.is_development = settings.openai_api_key.startswith("test-") or settings.environment == "development"
-
-        if not self.is_development:
-            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
-        else:
-            # In development mode, create a mock client that won't make real API calls
+        # Handle missing API key gracefully during initialization
+        api_key = settings.openai_api_key
+        if not api_key:
+            logger.warning("OpenAI API key not configured. AI features will be disabled. Set OPENAI_API_KEY environment variable.")
             self.client = None
-            logger.warning("Running in development mode with test API key. AI features will return mock responses.")
+            self.is_development = False
+        else:
+            # Handle development/test mode with placeholder API keys
+            self.is_development = api_key.startswith("test-") or settings.environment == "development"
+            
+            if not self.is_development:
+                self.client = AsyncOpenAI(api_key=api_key)
+            else:
+                # In development mode, create a mock client that won't make real API calls
+                self.client = None
+                logger.warning("Running in development mode with test API key. AI features will return mock responses.")
 
         self.model = "gpt-4o-mini"  # Cost-effective model for text optimization
         self.max_tokens = 3000      # Longer output for optimized CVs
@@ -87,6 +91,10 @@ class CVOptimizerAgent:
         logger.info(f"Starting CV optimization for {job_title} at {company_name}")
 
         try:
+            # Validate API configuration
+            if not self.client and not self.is_development:
+                raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY to use AI features.")
+
             # Validate input CV data
             if not parsed_cv or not isinstance(parsed_cv, dict):
                 raise ValueError("Invalid CV data: must be a non-empty dictionary")
@@ -191,6 +199,10 @@ class CVOptimizerAgent:
         logger.info(f"Generating cover letter for {job_title} at {company_name}")
 
         try:
+            # Validate API configuration
+            if not self.client and not self.is_development:
+                raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY to use AI features.")
+
             # Validate inputs
             if not parsed_cv:
                 raise ValueError("CV data is required for cover letter generation")
@@ -395,6 +407,10 @@ Keep it engaging, specific, and professional. Avoid generic language."""
         logger.info("Generating CV optimization suggestions")
 
         try:
+            # Validate API configuration
+            if not self.client and not self.is_development:
+                raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY to use AI features.")
+
             system_prompt = """You are an ATS expert providing CV improvement suggestions. Analyze the CV and job requirements to provide specific, actionable recommendations.
 
 Return suggestions as JSON with this structure:

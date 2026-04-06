@@ -30,18 +30,22 @@ class InterviewCoachAgent:
 
     def __init__(self):
         """Initialize Interview Coach with OpenAI configuration."""
-        if not settings.openai_api_key:
-            raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
-
-        # Handle development/test mode with placeholder API keys
-        self.is_development = settings.openai_api_key.startswith("test-") or settings.environment == "development"
-
-        if not self.is_development:
-            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
-        else:
-            # In development mode, create a mock client that won't make real API calls
+        # Handle missing API key gracefully during initialization
+        api_key = settings.openai_api_key
+        if not api_key:
+            logger.warning("OpenAI API key not configured. AI features will be disabled. Set OPENAI_API_KEY environment variable.")
             self.client = None
-            logger.warning("Running in development mode with test API key. AI features will return mock responses.")
+            self.is_development = False
+        else:
+            # Handle development/test mode with placeholder API keys
+            self.is_development = api_key.startswith("test-") or settings.environment == "development"
+            
+            if not self.is_development:
+                self.client = AsyncOpenAI(api_key=api_key)
+            else:
+                # In development mode, create a mock client that won't make real API calls
+                self.client = None
+                logger.warning("Running in development mode with test API key. AI features will return mock responses.")
 
         self.model = "gpt-4o-mini"  # Cost-effective model for content generation
         self.max_tokens = 4000      # Extended output for comprehensive materials
@@ -59,6 +63,10 @@ class InterviewCoachAgent:
                 "cheat_sheet": '{"technical_concepts": {"Python": "High-level programming language", "API": "Application Programming Interface"}, "common_questions": ["What is your experience?"]}'
             }
             return mock_responses.get(mock_response_type, '{"mock": "response"}')
+
+        # Validate API configuration for production
+        if not self.client:
+            raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY to use AI features.")
 
         response = await self.client.chat.completions.create(
             model=self.model,
