@@ -115,7 +115,9 @@ jobs:
           echo "DATABASE_URL=postgresql+asyncpg://autoapply:test_password@localhost:5432/autoapply_test_db" >> $GITHUB_ENV
           echo "SECRET_KEY=test-secret-key-github-actions" >> $GITHUB_ENV
           echo "ENVIRONMENT=test" >> $GITHUB_ENV
-          echo "OPENAI_API_KEY=test-key" >> $GITHUB_ENV
+          echo "OPENAI_API_KEY=sk-dummy-key-for-ci" >> $GITHUB_ENV
+          echo "ADZUNA_APP_ID=dummy-adzuna-id" >> $GITHUB_ENV
+          echo "ADZUNA_APP_KEY=dummy-adzuna-key" >> $GITHUB_ENV
 
       - name: Test database migrations
         run: |
@@ -338,7 +340,9 @@ jobs:
           echo "DATABASE_URL=postgresql+asyncpg://autoapply:test_password@localhost:5432/autoapply_db" >> $GITHUB_ENV
           echo "SECRET_KEY=integration-test-secret-key" >> $GITHUB_ENV
           echo "ENVIRONMENT=test" >> $GITHUB_ENV
-          echo "OPENAI_API_KEY=test-key-no-real-calls" >> $GITHUB_ENV
+          echo "OPENAI_API_KEY=sk-dummy-key-for-ci" >> $GITHUB_ENV
+          echo "ADZUNA_APP_ID=dummy-adzuna-id" >> $GITHUB_ENV
+          echo "ADZUNA_APP_KEY=dummy-adzuna-key" >> $GITHUB_ENV
           echo "UPLOAD_DIR=/tmp/test_uploads" >> $GITHUB_ENV
 
       - name: Run database migrations
@@ -474,7 +478,9 @@ jobs:
             -e DATABASE_URL=postgresql+asyncpg://autoapply:test_password@localhost:5432/autoapply_db \
             -e SECRET_KEY=docker-test-key \
             -e ENVIRONMENT=test \
-            -e OPENAI_API_KEY=test-key-no-real-calls \
+            -e OPENAI_API_KEY=sk-dummy-key-for-ci \
+            -e ADZUNA_APP_ID=dummy-adzuna-id \
+            -e ADZUNA_APP_KEY=dummy-adzuna-key \
             auto-apply-backend:${{ github.sha }}
 
           # Wait for container to start and check if it's running
@@ -573,6 +579,9 @@ jobs:
           export DATABASE_URL=postgresql+asyncpg://autoapply:test_password@localhost:5432/autoapply_db
           export SECRET_KEY=perf-test-key
           export ENVIRONMENT=test
+          export OPENAI_API_KEY=sk-dummy-key-for-ci
+          export ADZUNA_APP_ID=dummy-adzuna-id
+          export ADZUNA_APP_KEY=dummy-adzuna-key
           uvicorn app.main:app --host 0.0.0.0 --port 8000 &
           sleep 10
 
