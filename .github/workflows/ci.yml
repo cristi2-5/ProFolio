@@ -23,6 +23,11 @@ env:
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
   POSTGRES_VERSION: '16'
+  OPENAI_API_KEY: sk-dummy-key-for-ci
+  ADZUNA_APP_ID: dummy-adzuna-id
+  ADZUNA_APP_KEY: dummy-adzuna-key
+  SECRET_KEY: test-secret-key-global
+  ENVIRONMENT: test
 
 jobs:
   # ================================================================
