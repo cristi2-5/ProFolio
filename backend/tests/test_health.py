@@ -7,6 +7,7 @@ Tests:
 """
 
 import pytest
+from app.config import get_settings
 
 
 @pytest.mark.asyncio
@@ -32,7 +33,7 @@ async def test_health_check_app_name(client):
     """Test that /health returns the correct app name."""
     response = await client.get("/health")
     data = response.json()
-    assert data["app"] == "Auto-Apply API"
+    assert data["app"] == get_settings().app_name
 
 
 @pytest.mark.asyncio
@@ -40,4 +41,4 @@ async def test_health_check_environment(client):
     """Test that /health returns the environment setting."""
     response = await client.get("/health")
     data = response.json()
-    assert data["environment"] == "development"
+    assert data["environment"] == get_settings().environment
