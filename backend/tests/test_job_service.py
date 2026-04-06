@@ -307,3 +307,40 @@ class TestMatchJobsToUser:
 
         assert user_jobs == []
         db.add.assert_not_called()
+
+
+# ──────────────────────────────────────────────
+# Test: get_user_job_by_id
+# ──────────────────────────────────────────────
+
+class TestGetUserJobById:
+    """Tests for the individual job retrieval service method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_job_if_exists_and_belongs_to_user(self, service, mock_user_job):
+        """Returns the UserJob record when it matches both ID and owner."""
+        db = AsyncMock(spec=AsyncSession)
+        db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_user_job)))
+
+        result = await service.get_user_job_by_id(
+            user_job_id=str(mock_user_job.id),
+            user_id=str(mock_user_job.user_id),
+            db=db
+        )
+
+        assert result == mock_user_job
+        db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_returns_none_if_unauthorized_or_not_found(self, service):
+        """Returns None if the record does not exist or belongs to another user."""
+        db = AsyncMock(spec=AsyncSession)
+        db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+
+        result = await service.get_user_job_by_id(
+            user_job_id=str(uuid.uuid4()),
+            user_id=str(uuid.uuid4()),
+            db=db
+        )
+
+        assert result is None

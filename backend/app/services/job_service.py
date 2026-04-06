@@ -31,7 +31,7 @@ class JobService:
 
     def __init__(self):
         """Initialize Job Service with configuration."""
-        self.min_match_score = 0  # Only create UserJob if score >= threshold
+        self.min_match_score = 30  # Only create UserJob if score >= threshold
         self.max_jobs_per_user = 100  # Limit stored jobs per user
 
     async def match_jobs_to_user(
