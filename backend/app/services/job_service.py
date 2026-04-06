@@ -7,8 +7,8 @@ Works with the Job Scanner agent for automated discovery.
 
 import logging
 import re
-from typing import Any, Optional
-from sqlalchemy import and_, desc, select
+from typing import Any, Optional, Tuple
+from sqlalchemy import and_, desc, asc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -63,8 +63,7 @@ class JobService:
         active_resume = result.scalar_one_or_none()
 
         if not active_resume:
-            logger.warning(f"User {user.id} has no active resume for job matching")
-            return []
+            logger.warning(f"User {user.id} has no active resume. Jobs will be added with 0 match score.")
 
         user_jobs = []
         for job in jobs:
@@ -107,6 +106,30 @@ class JobService:
         logger.info(f"Created {len(user_jobs)} job matches for user {user.id}")
         return user_jobs
 
+    async def get_user_job_by_id(
+        self,
+        user_job_id: str,
+        user_id: str,
+        db: AsyncSession,
+    ) -> Optional[UserJob]:
+        """Fetch a single UserJob by ID for a specific user.
+
+        Args:
+            user_job_id: UUID of the UserJob record.
+            user_id: UUID of the owner.
+            db: Database session.
+
+        Returns:
+            Optional[UserJob]: The job record with joined ScrapedJob, or None.
+        """
+        stmt = (
+            select(UserJob)
+            .options(selectinload(UserJob.job))
+            .where(UserJob.id == user_job_id, UserJob.user_id == user_id)
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
     def _calculate_match_score(
         self,
         resume: ParsedResume,
@@ -124,6 +147,9 @@ class JobService:
         Returns:
             int: Match score from 0-100.
         """
+        if not resume:
+            return 0
+            
         score = 0
         parsed_cv = resume.parsed_data or {}
 
@@ -373,32 +399,70 @@ class JobService:
         user_id: str,
         db: AsyncSession,
         status_filter: Optional[str] = None,
+        search: Optional[str] = None,
+        sort_by: str = "match_score",
+        sort_order: str = "desc",
         limit: int = 50,
-    ) -> list[UserJob]:
-        """Retrieve jobs matched to a user with filtering options.
+        offset: int = 0,
+    ) -> Tuple[list[UserJob], int]:
+        """Retrieve jobs matched to a user with filtering, search, and pagination.
 
         Args:
             user_id: User's UUID.
             db: Database session.
             status_filter: Filter by job status (new, applied, etc.).
+            search: Case-insensitive search on job_title and company_name.
+            sort_by: Column to sort by (match_score, created_at, company_name, job_title).
+            sort_order: Sort direction — 'asc' or 'desc'.
             limit: Maximum number of jobs to return.
+            offset: Number of records to skip (for pagination).
 
         Returns:
-            list[UserJob]: User's matched jobs with scores and details.
+            Tuple[list[UserJob], int]: Matched jobs and total count matching the query.
         """
-        stmt = (
+        # Map UI sort keys to actual columns (joining through the related ScrapedJob)
+        sort_column_map = {
+            "match_score": UserJob.match_score,
+            "created_at": UserJob.created_at,
+            "company_name": ScrapedJob.company_name,
+            "job_title": ScrapedJob.job_title,
+        }
+        sort_col = sort_column_map.get(sort_by, UserJob.match_score)
+        order_expr = asc(sort_col) if sort_order == "asc" else desc(sort_col)
+
+        # Build base query with eager-loaded job relation
+        base_stmt = (
             select(UserJob)
             .options(selectinload(UserJob.job))
+            .join(ScrapedJob, UserJob.job_id == ScrapedJob.id)
             .where(UserJob.user_id == user_id)
-            .order_by(desc(UserJob.match_score), desc(UserJob.created_at))
-            .limit(limit)
         )
 
+        # Apply status filter
         if status_filter:
-            stmt = stmt.where(UserJob.status == status_filter)
+            base_stmt = base_stmt.where(UserJob.status == status_filter)
 
-        result = await db.execute(stmt)
-        return list(result.scalars().all())
+        # Apply search filter (case-insensitive on title or company)
+        if search:
+            pattern = f"%{search}%"
+            base_stmt = base_stmt.where(
+                or_(
+                    ScrapedJob.job_title.ilike(pattern),
+                    ScrapedJob.company_name.ilike(pattern),
+                )
+            )
+
+        # Count total matching rows (before pagination)
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        count_result = await db.execute(count_stmt)
+        total_count = count_result.scalar_one()
+
+        # Apply ordering and pagination
+        paged_stmt = base_stmt.order_by(order_expr, desc(UserJob.created_at)).limit(limit).offset(offset)
+        result = await db.execute(paged_stmt)
+        jobs = list(result.scalars().all())
+
+        return jobs, total_count
 
     async def update_job_status(
         self,
@@ -408,6 +472,9 @@ class JobService:
     ) -> Optional[UserJob]:
         """Update the status of a user-job relationship.
 
+        When transitioning to 'applied', automatically records `applied_at`
+        timestamp so the Application History tab can show when the user applied.
+
         Args:
             user_job_id: UserJob UUID.
             new_status: New status value.
@@ -416,11 +483,18 @@ class JobService:
         Returns:
             UserJob | None: Updated user-job or None if not found.
         """
+        from datetime import datetime, timezone  # local import to avoid circular
+
         user_job = await db.get(UserJob, user_job_id)
         if not user_job:
             return None
 
         user_job.status = new_status
+
+        # Record the exact moment the user clicked "Applied"
+        if new_status == "applied" and user_job.applied_at is None:
+            user_job.applied_at = datetime.now(timezone.utc)
+
         await db.commit()
         await db.refresh(user_job)
 

@@ -19,7 +19,7 @@ from app.dependencies.auth import get_current_user
 from app.models.user import JobPreference, User
 from app.models.job import UserJob, ScrapedJob
 from app.schemas.user import JobPreferenceCreate, JobPreferenceResponse
-from app.schemas.job import UserJobStatusUpdate, UserJobResponse
+from app.schemas.job import UserJobStatusUpdate, UserJobResponse, UserJobListResponse
 from app.schemas.interview_coach import (
     InterviewPrepGenerateRequest,
     InterviewPrepResponse,
@@ -36,6 +36,7 @@ from app.schemas.benchmark import (
 from app.services.job_service import JobService
 from app.services.interview_coach_service import InterviewCoachService
 from app.services.benchmark_service import BenchmarkService, InsufficientPeersError
+from app.agents.job_scanner import JobScannerAgent
 
 router = APIRouter(prefix="/api/jobs", tags=["Jobs"])
 
@@ -44,6 +45,13 @@ logger = logging.getLogger(__name__)
 job_service = JobService()
 interview_coach_service = InterviewCoachService()
 benchmark_service = BenchmarkService()
+job_scanner = JobScannerAgent()
+
+# ------------------------------------------------------------------
+# In-memory rate-limit cache for POST /jobs/scan
+# Key: user_id (str), Value: datetime of last scan
+# ------------------------------------------------------------------
+_scan_last_called: dict[str, datetime] = {}
 
 
 # ================================================================
@@ -130,48 +138,71 @@ async def get_job_preferences(
 
 @router.get(
     "/",
-    response_model=list[UserJobResponse],
+    response_model=UserJobListResponse,
     summary="List matched jobs for the current user",
 )
 async def list_jobs(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     status_filter: Annotated[Optional[str], Query(description="Filter by job status")] = None,
-    limit: Annotated[int, Query(ge=1, le=100, description="Maximum number of jobs to return")] = 50,
-) -> list[UserJobResponse]:
+    search: Annotated[Optional[str], Query(description="Search by title or company name")] = None,
+    sort_by: Annotated[str, Query(description="Sort column (match_score, created_at, company_name, job_title)")] = "match_score",
+    sort_order: Annotated[str, Query(description="Sort direction: asc or desc")] = "desc",
+    limit: Annotated[int, Query(ge=1, le=100, description="Page size")] = 20,
+    offset: Annotated[int, Query(ge=0, description="Pagination offset")] = 0,
+) -> UserJobListResponse:
     """List jobs matched to the authenticated user.
 
-    Returns jobs sorted by match score, with optional status filtering.
-    Jobs are ordered by match score (highest first) and creation date.
+    Returns a paginated, filterable, searchable list of job matches.
+    Jobs are ordered by the requested sort column and direction.
 
     Args:
         current_user: Authenticated user (injected).
         db: Database session (injected).
         status_filter: Optional status filter (new, applied, saved, hidden, duplicate).
-        limit: Maximum number of jobs to return (1-100).
+        search: Optional text search on job title and company name.
+        sort_by: Column to sort by.
+        sort_order: 'asc' or 'desc'.
+        limit: Page size (1-100).
+        offset: Number of records to skip.
 
     Returns:
-        list[UserJobResponse]: List of matched jobs with scores and status.
+        UserJobListResponse: Paginated job list with total count.
 
     Raises:
         HTTPException: 400 if invalid status filter provided.
     """
-    # Validate status filter if provided
+    # Validate inputs
     valid_statuses = {"new", "applied", "saved", "hidden", "duplicate"}
     if status_filter and status_filter not in valid_statuses:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid status filter. Must be one of: {', '.join(valid_statuses)}",
         )
+    valid_sort_cols = {"match_score", "created_at", "company_name", "job_title"}
+    if sort_by not in valid_sort_cols:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid sort_by. Must be one of: {', '.join(valid_sort_cols)}",
+        )
+    if sort_order not in {"asc", "desc"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="sort_order must be 'asc' or 'desc'",
+        )
 
     try:
-        user_jobs = await job_service.list_user_jobs(
+        jobs, total_count = await job_service.list_user_jobs(
             user_id=str(current_user.id),
             db=db,
             status_filter=status_filter,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
             limit=limit,
+            offset=offset,
         )
-        return user_jobs
+        return UserJobListResponse(jobs=jobs, total_count=total_count)
 
     except Exception as e:
         logger.error(f"Error listing jobs for user {current_user.id}: {e}")
@@ -179,6 +210,46 @@ async def list_jobs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch job listings",
         )
+
+
+@router.get(
+    "/{user_job_id}",
+    response_model=UserJobResponse,
+    summary="Get individual job details",
+)
+async def get_job_by_id(
+    user_job_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserJobResponse:
+    """Retrieve details for a single job by its UserJob ID.
+
+    Includes the scraped job content and current application status.
+
+    Args:
+        user_job_id: UUID of the UserJob record.
+        current_user: Authenticated user (injected).
+        db: Database session (injected).
+
+    Returns:
+        UserJobResponse: Detailed job information.
+
+    Raises:
+        HTTPException: 404 if job not found.
+    """
+    job = await job_service.get_user_job_by_id(
+        user_job_id=user_job_id,
+        user_id=str(current_user.id),
+        db=db,
+    )
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found",
+        )
+
+    return job
 
 
 @router.patch(
@@ -253,29 +324,53 @@ async def update_job_status(
 @router.post(
     "/scan",
     response_model=dict,
-    summary="Trigger job scan for current user",
+    summary="Trigger job scan for current user (rate-limited: 1/hour)",
 )
 async def trigger_job_scan(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
-    """Manually trigger job scan for the authenticated user.
+    """Manually trigger a job scan for the authenticated user.
 
-    Useful for testing or immediate job discovery without waiting for cron.
-    Requires user to have job preferences configured.
+    Calls the real Job Scanner Agent to fetch fresh results from the Adzuna API.
+    Rate-limited to once per hour per user to prevent API abuse.
+    Requires job preferences to be configured.
 
     Args:
         current_user: Authenticated user (injected).
         db: Database session (injected).
 
     Returns:
-        dict: Scan results with job count and status.
+        dict: Scan results with new job count and status.
 
     Raises:
-        HTTPException: 400 if no preferences set, 500 if scan fails.
+        HTTPException: 400 if no preferences set or rate limit exceeded.
+                      503 if Adzuna credentials not configured.
+                      500 if scan fails.
     """
+    from app.config import get_settings as _get_settings
+    settings = _get_settings()
+    user_id_str = str(current_user.id)
+
+    # --- Rate limiting (1 scan per hour, in-memory) ---
+    now = datetime.now(timezone.utc)
+    last_scan = _scan_last_called.get(user_id_str)
+    if last_scan is not None:
+        elapsed_seconds = (now - last_scan).total_seconds()
+        limit_seconds = settings.job_scan_rate_limit_hours * 3600
+        if elapsed_seconds < limit_seconds:
+            remaining = int((limit_seconds - elapsed_seconds) / 60)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Scan rate limit reached. You can trigger a new scan in "
+                    f"{remaining} minute(s). The daily cron runs automatically every "
+                    f"{settings.job_scan_interval_hours} hours."
+                ),
+            )
+
+    # --- Preferences check ---
     try:
-        # Check if user has preferences
         stmt = select(JobPreference).where(JobPreference.user_id == current_user.id)
         result = await db.execute(stmt)
         preferences = result.scalar_one_or_none()
@@ -286,38 +381,35 @@ async def trigger_job_scan(
                 detail="Please set job preferences before scanning for jobs",
             )
 
-        # TODO: Temporarily return mock data for testing
-        # This bypasses the Adzuna API which requires valid credentials
-        logger.info(f"Job scan triggered for user {current_user.id} (mock mode)")
+        # Mark the scan timestamp before running so concurrent requests are blocked
+        _scan_last_called[user_id_str] = now
 
-        mock_jobs = [
-            {
-                "id": "mock-1",
-                "company_name": "TechCorp Inc.",
-                "job_title": "Senior Python Developer",
-                "location": "Remote",
-                "external_url": "https://example.com/job1"
-            },
-            {
-                "id": "mock-2",
-                "company_name": "StartupXYZ",
-                "job_title": "Full Stack Engineer",
-                "location": "Remote",
-                "external_url": "https://example.com/job2"
-            }
-        ]
+        # --- Run real job scanner ---
+        logger.info(f"Manual job scan triggered for user {user_id_str}")
+        new_jobs = await job_scanner.scan(user_id_str, db)
 
         return {
             "status": "success",
-            "jobs_found": len(mock_jobs),
-            "message": f"Found {len(mock_jobs)} new jobs matching your preferences (mock data)",
-            "jobs": mock_jobs,
+            "jobs_found": len(new_jobs),
+            "message": f"Found {len(new_jobs)} new jobs matching your preferences",
+            "jobs": new_jobs,
         }
 
     except HTTPException:
-        raise  # Re-raise HTTP exceptions
+        # Restore rate-limit timestamp on HTTP errors so user can retry
+        _scan_last_called.pop(user_id_str, None)
+        raise
+    except ValueError as e:
+        # Adzuna credentials not configured
+        _scan_last_called.pop(user_id_str, None)
+        logger.error(f"Job scan config error for user {user_id_str}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Job scan service is not configured. Please contact support.",
+        )
     except Exception as e:
-        logger.error(f"Manual job scan failed for user {current_user.id}: {e}")
+        _scan_last_called.pop(user_id_str, None)
+        logger.error(f"Manual job scan failed for user {user_id_str}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Job scan failed. Please try again later.",

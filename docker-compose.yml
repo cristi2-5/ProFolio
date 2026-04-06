@@ -38,8 +38,8 @@ services:
       ENVIRONMENT: development
       CORS_ORIGINS: '["http://localhost:5173"]'
       OPENAI_API_KEY: test-key-for-development
-      ADZUNA_APP_ID: test-app-id
-      ADZUNA_APP_KEY: test-app-key
+      ADZUNA_APP_ID: 39ceffa1
+      ADZUNA_APP_KEY: 4c1f7a953ad74bcc8e3c755d8015d98d
       UPLOAD_DIR: ./uploads
     depends_on:
       db:

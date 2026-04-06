@@ -12,6 +12,15 @@ on:
     branches: [main, master]
     types: [opened, synchronize, reopened, ready_for_review]
 
+env:
+  PYTHON_VERSION: '3.11'
+  POSTGRES_VERSION: '16'
+  OPENAI_API_KEY: sk-dummy-key-for-ci
+  ADZUNA_APP_ID: dummy-adzuna-id
+  ADZUNA_APP_KEY: dummy-adzuna-key
+  SECRET_KEY: test-secret-key-global
+  ENVIRONMENT: test
+
 permissions:
   contents: read
   pull-requests: write
@@ -253,6 +262,9 @@ jobs:
           export DATABASE_URL=postgresql+asyncpg://autoapply:test_password@localhost:5432/autoapply_test_db
           export SECRET_KEY=test-secret-key
           export ENVIRONMENT=test
+          export OPENAI_API_KEY=sk-dummy-key-for-ci
+          export ADZUNA_APP_ID=dummy-adzuna-id
+          export ADZUNA_APP_KEY=dummy-adzuna-key
 
           pytest tests/ \
             --cov=app \
@@ -265,6 +277,7 @@ jobs:
         uses: py-cov-action/python-coverage-comment-action@v3
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COVERAGE_PATH: backend
           MINIMUM_GREEN: 80
           MINIMUM_ORANGE: 70
 
@@ -305,6 +318,9 @@ jobs:
         run: |
           cd backend
           export DATABASE_URL=postgresql+asyncpg://autoapply:test_password@localhost:5432/autoapply_db
+          export OPENAI_API_KEY=sk-dummy-key-for-ci
+          export ADZUNA_APP_ID=dummy-adzuna-id
+          export ADZUNA_APP_KEY=dummy-adzuna-key
 
           echo "::group::Migration Safety Check"
 

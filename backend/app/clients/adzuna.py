@@ -53,10 +53,6 @@ class AdzunaClient:
         self.timeout = 30.0
         self.max_retries = 3
 
-        # Validate configuration
-        if not self.app_id or not self.app_key:
-            raise ValueError("Adzuna API credentials not configured. Set ADZUNA_APP_ID and ADZUNA_APP_KEY.")
-
     @retry(
         retry=retry_if_exception_type((httpx.RequestError, httpx.TimeoutException)),
         stop=stop_after_attempt(3),
@@ -89,6 +85,13 @@ class AdzunaClient:
             AdzunaAPIError: If API request fails or returns error.
             ValueError: If API credentials are missing.
         """
+        # Validate credentials at call-time (not import-time)
+        if not self.app_id or not self.app_key:
+            raise ValueError(
+                "Adzuna API credentials not configured. "
+                "Set ADZUNA_APP_ID and ADZUNA_APP_KEY in your .env file."
+            )
+
         # Build search parameters
         params = {
             "app_id": self.app_id,
@@ -96,7 +99,6 @@ class AdzunaClient:
             "results_per_page": min(results_per_page, 50),  # Adzuna limit
             "what": query,
             "content-type": "application/json",
-            "page": page,
             "max_days_old": max_days_old,
         }
 
@@ -106,7 +108,7 @@ class AdzunaClient:
 
         # Country code (default to US, can be extended for international)
         country_code = "us"
-        endpoint = f"{self.base_url}/{country_code}/search"
+        endpoint = f"{self.base_url}/{country_code}/search/{page}"
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
@@ -237,5 +239,24 @@ class AdzunaClient:
             return False
 
 
-# Global client instance (initialized on first import)
-adzuna_client = AdzunaClient()
+_adzuna_client_instance: AdzunaClient | None = None
+
+
+def get_adzuna_client() -> AdzunaClient:
+    """Return the global AdzunaClient instance (lazy singleton).
+
+    Defers instantiation until first call so the module is safely
+    importable even when env vars are not set (e.g. during tests).
+
+    Returns:
+        AdzunaClient: The shared client instance.
+    """
+    global _adzuna_client_instance
+    if _adzuna_client_instance is None:
+        _adzuna_client_instance = AdzunaClient()
+    return _adzuna_client_instance
+
+
+# Backwards-compatible alias: callers use adzuna_client as a function
+# to get the shared instance. e.g. adzuna_client()
+adzuna_client = get_adzuna_client

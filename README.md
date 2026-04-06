@@ -10,6 +10,7 @@ Sistemul permite utilizatorilor să își încarce CV-ul de bază și să define
 - **Job Scanner**: Caută zilnic pe platformele de recrutare și aduce cele mai relevante oportunități direct într-un panou centralizat.
 - **CV Optimizer**: Analizează descrierea fiecărui job (JD) și reformulează dinamic CV-ul și Scrisoarea de Intenție pentru a trece de filtrele ATS (Applicant Tracking System), păstrând strictețea datelor reale ale candidatului.
 - **Interview Coach**: Generează materiale de pregătire personalizate (întrebări tehnice, comportamentale și fișe de recapitulare) bazate exact pe tehnologiile cerute de angajator.
+- **Job Scanner Engine**: Sistemul de descoperire automată a joburilor care utilizează API-uri externe (Adzuna) și algoritmi de deduplicare avansați pentru a menține un dashboard curat și relevant.
 
 În plus, aplicația oferă un sistem de evaluare comparativă (Competitive Benchmarking) pentru a arăta candidaților unde se situează față de cerințele pieței și ce abilități trebuie să mai dezvolte.
 

@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
-from app.clients.adzuna import adzuna_client, AdzunaAPIError
+from app.clients.adzuna import get_adzuna_client, AdzunaAPIError
 from app.models.job import ScrapedJob
 from app.models.user import JobPreference, User
 from app.services.job_service import JobService
@@ -81,16 +81,17 @@ class JobScannerAgent:
 
             # Search Adzuna API
             try:
-                adzuna_response = await adzuna_client.search_jobs(
+                api_client = get_adzuna_client()
+                adzuna_response = await api_client.search_jobs(
                     query=search_query,
                     location=location,
                     location_type=preferences.location_type,
                     results_per_page=self.max_jobs_per_scan,
                     max_days_old=self.max_days_old,
                 )
-            except AdzunaAPIError as e:
-                logger.error(f"Adzuna API error for user {user_id}: {e}")
-                raise
+            except ValueError as e:
+                logger.error(f"Adzuna not configured for user {user_id}: {e}")
+                return []
 
             jobs = adzuna_response.get("results", [])
             logger.info(f"Found {len(jobs)} jobs from Adzuna for user {user_id}")

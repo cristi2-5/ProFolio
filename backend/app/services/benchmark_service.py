@@ -518,9 +518,10 @@ class BenchmarkService:
 
     def _infer_job_level(self, description: str) -> str:
         """Infer job level from description."""
-        if any(word in description for word in ["senior", "lead", "principal", "staff"]):
+        desc_lower = description.lower()
+        if any(word in desc_lower for word in ["senior", "lead", "principal", "staff"]):
             return "senior"
-        elif any(word in description for word in ["junior", "entry", "graduate", "intern"]):
+        elif any(word in desc_lower for word in ["junior", "entry", "graduate", "intern"]):
             return "junior"
         else:
             return "mid"

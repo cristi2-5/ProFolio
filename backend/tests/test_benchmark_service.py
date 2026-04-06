@@ -8,7 +8,7 @@ skill gap analysis, and privacy compliance validation.
 import pytest
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 from app.models.job import ScrapedJob, UserJob
 from app.models.resume import ParsedResume
@@ -431,6 +431,8 @@ class TestBenchmarkService:
         # Should extract web-related keywords
         assert "web" in keywords
 
+    # Removed incorrectly applied helper method definition
+
     def test_infer_job_level(self, benchmark_service):
         """Test job level inference."""
         # Senior level
@@ -461,8 +463,10 @@ class TestBenchmarkService:
 
         mock_resume1 = Mock()
         mock_resume1.parsed_data = {"skills": ["React", "JavaScript"]}
-
-        mock_db.execute.return_value.all.return_value = [(mock_peer1, mock_resume1)]
+ 
+        mock_result = MagicMock()
+        mock_result.all.return_value = [(mock_peer1, mock_resume1)]
+        mock_db.execute.return_value = mock_result
 
         peer_group = await benchmark_service._get_peer_group(sample_user, sample_job, mock_db)
 

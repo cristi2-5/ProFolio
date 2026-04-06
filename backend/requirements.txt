@@ -43,3 +43,6 @@ python-docx==1.1.0
 
 # --- PDF Generation (CV Optimizer) ---
 reportlab==4.2.5
+
+# --- Job Scheduler (APScheduler) ---
+apscheduler==3.10.4

@@ -11,6 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from fastapi import Request, FastAPI
 
 # Initialize limiter with IP-based key function
+DEFAULT_RATE_LIMITS=["100/minute"]
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 
@@ -41,4 +42,5 @@ def setup_rate_limiting(app: FastAPI) -> None:
         - Limits reset on a sliding window (not fixed intervals)
     """
     app.state.limiter = limiter
+    app.state.default_limits = DEFAULT_RATE_LIMITS
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

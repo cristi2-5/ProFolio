@@ -14,29 +14,37 @@ import { patch } from '../api/client';
  * Features:
  * - Match score visualization
  * - Job status management (new, applied, saved, hidden)
- * - Quick action buttons
+ * - Quick action buttons with visual feedback
  * - Company and role information
- * - Salary and location display
+ * - applied_at date display for Application History
  *
  * @param {Object} props - Component props.
  * @param {Object} props.job - Job data object.
  * @param {boolean} props.compact - Whether to show compact view.
+ * @param {boolean} props.showAppliedAt - Show the applied date (used in history tab).
  * @param {Function} props.onClick - Handler for card click.
  * @param {Function} props.onStatusChange - Handler for status changes.
  * @returns {JSX.Element} The job card component.
  */
-function JobCard({ job, compact = false, onClick, onStatusChange }) {
+function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatusChange }) {
   const [status, setStatus] = useState(job.status || 'new');
   const [updating, setUpdating] = useState(false);
+  const [justApplied, setJustApplied] = useState(false);
 
   /**
-   * Update job status.
+   * Update job status via API and trigger visual feedback.
    */
   const updateStatus = async (newStatus) => {
     try {
       setUpdating(true);
       await patch(`/jobs/${job.id}/status`, { status: newStatus });
       setStatus(newStatus);
+
+      // Flash animation when marking as applied
+      if (newStatus === 'applied') {
+        setJustApplied(true);
+        setTimeout(() => setJustApplied(false), 1200);
+      }
 
       if (onStatusChange) {
         onStatusChange(job.id, newStatus);
@@ -90,6 +98,19 @@ function JobCard({ job, compact = false, onClick, onStatusChange }) {
   const statusInfo = getStatusInfo(status);
   const salary = formatSalary();
 
+  /**
+   * Format applied_at timestamp for display.
+   */
+  const formatAppliedAt = () => {
+    if (!job.applied_at) return null;
+    return new Date(job.applied_at).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  };
+
+  const appliedAtDisplay = formatAppliedAt();
+
   return (
     <div
       className="card"
@@ -97,7 +118,12 @@ function JobCard({ job, compact = false, onClick, onStatusChange }) {
         cursor: onClick ? 'pointer' : 'default',
         transition: 'all var(--transition-fast)',
         opacity: status === 'hidden' ? 0.6 : 1,
-        background: status === 'hidden' ? 'var(--color-bg-secondary)' : undefined,
+        background: justApplied
+          ? 'rgba(34, 197, 94, 0.08)'
+          : status === 'hidden'
+            ? 'var(--color-bg-secondary)'
+            : undefined,
+        outline: justApplied ? '1px solid var(--color-success)' : 'none',
       }}
       onClick={onClick}
     >
@@ -185,29 +211,37 @@ function JobCard({ job, compact = false, onClick, onStatusChange }) {
           marginBottom: 'var(--space-4)',
         }}>
           {salary && (
-            <div style={{
-              fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-text-primary)',
-              fontWeight: 'var(--font-weight-medium)',
-            }}>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-primary)', fontWeight: 'var(--font-weight-medium)' }}>
               💰 {salary}
             </div>
           )}
 
           {job.job_type && (
-            <div style={{
-              fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-text-secondary)',
-            }}>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
               ⏰ {job.job_type.replace('_', '-')}
             </div>
           )}
 
-          {job.created_at && (
+          {/* applied_at display — shown in Application History tab */}
+          {showAppliedAt && appliedAtDisplay && (
             <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 'var(--space-1)',
               fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-muted)',
+              color: 'var(--color-success)',
+              fontWeight: 'var(--font-weight-medium)',
+              background: 'var(--color-success-bg)',
+              padding: 'var(--space-1) var(--space-2)',
+              borderRadius: 'var(--radius-sm)',
+              width: 'fit-content',
             }}>
+              ✅ Applied {appliedAtDisplay}
+            </div>
+          )}
+
+          {job.created_at && (
+            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
               🕒 Found {new Date(job.created_at).toLocaleDateString()}
             </div>
           )}
@@ -237,13 +271,14 @@ function JobCard({ job, compact = false, onClick, onStatusChange }) {
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
           {status !== 'applied' && (
             <button
+              id={`btn-apply-${job.id}`}
               onClick={(e) => {
                 e.stopPropagation();
                 updateStatus('applied');
               }}
               disabled={updating}
               style={{
-                background: 'var(--color-success)',
+                background: justApplied ? 'var(--color-success)' : 'var(--color-success)',
                 color: 'white',
                 border: 'none',
                 padding: 'var(--space-1) var(--space-2)',
@@ -251,9 +286,11 @@ function JobCard({ job, compact = false, onClick, onStatusChange }) {
                 fontSize: 'var(--font-size-xs)',
                 cursor: updating ? 'not-allowed' : 'pointer',
                 opacity: updating ? 0.7 : 1,
+                transform: justApplied ? 'scale(1.05)' : 'scale(1)',
+                transition: 'transform 0.2s ease',
               }}
             >
-              ✓ Applied
+              {justApplied ? '🎉 Applied!' : 'Mark Applied'}
             </button>
           )}
 

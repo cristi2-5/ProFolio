@@ -30,18 +30,19 @@ class CVOptimizerAgent:
 
     def __init__(self):
         """Initialize CV Optimizer with OpenAI configuration."""
-        if not settings.openai_api_key:
-            raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
-
-        # Handle development/test mode with placeholder API keys
-        self.is_development = settings.openai_api_key.startswith("test-") or settings.environment == "development"
-
-        if not self.is_development:
-            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
-        else:
-            # In development mode, create a mock client that won't make real API calls
+        # Handle missing API key gracefully during initialization
+        api_key = settings.openai_api_key
+        if not api_key:
+            logger.warning("OpenAI API key not configured. AI features will be disabled. Set OPENAI_API_KEY environment variable.")
             self.client = None
-            logger.warning("Running in development mode with test API key. AI features will return mock responses.")
+            self.is_development = False
+        else:
+            # Handle development/test mode with placeholder API keys
+            self.is_development = api_key.startswith("test-") or settings.environment == "development"
+            self.client = AsyncOpenAI(api_key=api_key) if not self.is_development else None
+            
+            if self.is_development:
+                logger.warning("Running in development mode with test API key. AI features will return mock responses.")
 
         self.model = "gpt-4o-mini"  # Cost-effective model for text optimization
         self.max_tokens = 3000      # Longer output for optimized CVs
@@ -87,6 +88,10 @@ class CVOptimizerAgent:
         logger.info(f"Starting CV optimization for {job_title} at {company_name}")
 
         try:
+            # Validate API configuration
+            if not self.client and not self.is_development:
+                raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY to use AI features.")
+
             # Validate input CV data
             if not parsed_cv or not isinstance(parsed_cv, dict):
                 raise ValueError("Invalid CV data: must be a non-empty dictionary")
@@ -100,14 +105,14 @@ class CVOptimizerAgent:
             system_prompt = self._build_cv_optimization_system_prompt()
             user_prompt = self._build_cv_optimization_user_prompt(
                 parsed_cv, job_description, job_title, company_name
-            )
-
-            # Call OpenAI API for CV optimization
-            if self.is_development:
-                # Return mock response in development mode
-                logger.info("Returning mock CV optimization response for development mode")
-                import json
-                mock_response = {
+            )            # Call OpenAI API for CV optimization
+            result = await self._make_api_call(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                response_format={"type": "json_object"},
+                mock_response={
                     "summary": f"Experienced professional optimized for {job_title} role at {company_name}",
                     "experience": [
                         {
@@ -119,26 +124,13 @@ class CVOptimizerAgent:
                     "skills": ["Python", "JavaScript", "React", "FastAPI", "Machine Learning"],
                     "optimized_keywords": ["Python", "API Development", "Full Stack"]
                 }
-                return mock_response
-
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format={"type": "json_object"}
             )
-
-            # Parse AI response
-            optimized_content = response.choices[0].message.content
-            if not optimized_content:
-                raise Exception("Empty response from OpenAI API")
-
-            import json
-            optimized_cv = json.loads(optimized_content)
+            
+            if isinstance(result, str):
+                import json
+                optimized_cv = json.loads(result)
+            else:
+                optimized_cv = result
 
             # Validate optimized CV structure
             self._validate_optimized_cv(optimized_cv)
@@ -191,6 +183,10 @@ class CVOptimizerAgent:
         logger.info(f"Generating cover letter for {job_title} at {company_name}")
 
         try:
+            # Validate API configuration
+            if not self.client and not self.is_development:
+                raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY to use AI features.")
+
             # Validate inputs
             if not parsed_cv:
                 raise ValueError("CV data is required for cover letter generation")
@@ -210,17 +206,13 @@ class CVOptimizerAgent:
             )
 
             # Call OpenAI API for cover letter generation
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=1500,  # Cover letters should be concise
-                temperature=0.4   # Slightly more creative for personal touch
+            cover_letter = await self._make_api_call(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=1500,
+                temperature=0.4,
+                mock_response=f"Dear Hiring Manager,\n\nI am writing to express my interest in the {job_title} position at {company_name}..."
             )
-
-            cover_letter = response.choices[0].message.content
             if not cover_letter:
                 raise Exception("Empty cover letter from OpenAI API")
 
@@ -359,6 +351,45 @@ Write a compelling cover letter that:
 
 Keep it engaging, specific, and professional. Avoid generic language."""
 
+    async def _make_api_call(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int,
+        temperature: float,
+        response_format: Optional[Dict[str, str]] = None,
+        mock_response: Any = None,
+    ) -> Any:
+        """Centralized method for making OpenAI API calls with development mode support."""
+        if self.is_development:
+            logger.info("Operating in development mode; returning mock response.")
+            return mock_response
+
+        if not self.client:
+            raise ValueError("OpenAI client not initialized. Check API key configuration.")
+
+        try:
+            kwargs = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            if response_format:
+                kwargs["response_format"] = response_format
+
+            response = await self.client.chat.completions.create(**kwargs)
+            content = response.choices[0].message.content
+            if content is None:
+                raise ValueError("Empty response from OpenAI API")
+            return content
+        except Exception as e:
+            logger.error(f"OpenAI API call failed: {e}")
+            raise
+
     def _validate_optimized_cv(self, optimized_cv: Dict[str, Any]) -> None:
         """Validate structure of optimized CV returned by AI."""
         if not isinstance(optimized_cv, dict):
@@ -395,6 +426,10 @@ Keep it engaging, specific, and professional. Avoid generic language."""
         logger.info("Generating CV optimization suggestions")
 
         try:
+            # Validate API configuration
+            if not self.client and not self.is_development:
+                raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY to use AI features.")
+
             system_prompt = """You are an ATS expert providing CV improvement suggestions. Analyze the CV and job requirements to provide specific, actionable recommendations.
 
 Return suggestions as JSON with this structure:
@@ -427,7 +462,10 @@ Provide specific suggestions for improving ATS compatibility and job relevance."
             )
 
             import json
-            suggestions = json.loads(response.choices[0].message.content)
+            content = response.choices[0].message.content
+            if content is None:
+                raise ValueError("Empty response from OpenAI API")
+            suggestions = json.loads(content)
             logger.info("CV optimization suggestions generated successfully")
             return suggestions
 
