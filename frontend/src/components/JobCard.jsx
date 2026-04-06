@@ -290,7 +290,7 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
                 transition: 'transform 0.2s ease',
               }}
             >
-              {justApplied ? '🎉 Applied!' : '✓ Applied'}
+              {justApplied ? '🎉 Applied!' : 'Mark Applied'}
             </button>
           )}
 

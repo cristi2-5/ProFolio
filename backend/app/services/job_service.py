@@ -31,7 +31,7 @@ class JobService:
 
     def __init__(self):
         """Initialize Job Service with configuration."""
-        self.min_match_score = 30  # Only create UserJob if score >= threshold
+        self.min_match_score = 0  # Only create UserJob if score >= threshold
         self.max_jobs_per_user = 100  # Limit stored jobs per user
 
     async def match_jobs_to_user(
@@ -63,8 +63,7 @@ class JobService:
         active_resume = result.scalar_one_or_none()
 
         if not active_resume:
-            logger.warning(f"User {user.id} has no active resume for job matching")
-            return []
+            logger.warning(f"User {user.id} has no active resume. Jobs will be added with 0 match score.")
 
         user_jobs = []
         for job in jobs:
@@ -107,6 +106,30 @@ class JobService:
         logger.info(f"Created {len(user_jobs)} job matches for user {user.id}")
         return user_jobs
 
+    async def get_user_job_by_id(
+        self,
+        user_job_id: str,
+        user_id: str,
+        db: AsyncSession,
+    ) -> Optional[UserJob]:
+        """Fetch a single UserJob by ID for a specific user.
+
+        Args:
+            user_job_id: UUID of the UserJob record.
+            user_id: UUID of the owner.
+            db: Database session.
+
+        Returns:
+            Optional[UserJob]: The job record with joined ScrapedJob, or None.
+        """
+        stmt = (
+            select(UserJob)
+            .options(selectinload(UserJob.job))
+            .where(UserJob.id == user_job_id, UserJob.user_id == user_id)
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
     def _calculate_match_score(
         self,
         resume: ParsedResume,
@@ -124,6 +147,9 @@ class JobService:
         Returns:
             int: Match score from 0-100.
         """
+        if not resume:
+            return 0
+            
         score = 0
         parsed_cv = resume.parsed_data or {}
 

@@ -212,6 +212,46 @@ async def list_jobs(
         )
 
 
+@router.get(
+    "/{user_job_id}",
+    response_model=UserJobResponse,
+    summary="Get individual job details",
+)
+async def get_job_by_id(
+    user_job_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserJobResponse:
+    """Retrieve details for a single job by its UserJob ID.
+
+    Includes the scraped job content and current application status.
+
+    Args:
+        user_job_id: UUID of the UserJob record.
+        current_user: Authenticated user (injected).
+        db: Database session (injected).
+
+    Returns:
+        UserJobResponse: Detailed job information.
+
+    Raises:
+        HTTPException: 404 if job not found.
+    """
+    job = await job_service.get_user_job_by_id(
+        user_job_id=user_job_id,
+        user_id=str(current_user.id),
+        db=db,
+    )
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found",
+        )
+
+    return job
+
+
 @router.patch(
     "/{user_job_id}/status",
     response_model=UserJobResponse,
