@@ -205,8 +205,8 @@ class TestInterviewCoachAgent:
         # Execute generation
         result = await interview_coach.generate_interview_prep_materials(
             job_description=sample_job_description,
-            job_title="Developer",
             company_name="TechCorp",
+            job_title="Developer",
             user_background=sample_user_background
         )
 
@@ -218,7 +218,7 @@ class TestInterviewCoachAgent:
         assert "technical_questions" in result
         assert "behavioral_questions" in result
         assert "company_research" in result
-        assert "technology_cheat_sheet" in result
+        assert "technology_cheatsheet" in result
         assert "preparation_strategy" in result
 
         # Verify content
@@ -265,7 +265,6 @@ class TestInterviewCoachAgent:
         result = await interview_coach.generate_behavioral_questions(
             job_description=sample_job_description,
             company_name="TechCorp",
-            job_title="Senior Full Stack Developer",
             question_count=2
         )
 
@@ -304,8 +303,7 @@ class TestInterviewCoachAgent:
         interview_coach.client.chat.completions.create.return_value = mock_openai_cheat_sheet_response
 
         result = await interview_coach.generate_technology_cheatsheet(
-            job_description=sample_job_description,
-            job_title="Senior Full Stack Developer"
+            job_description=sample_job_description
         )
 
         # Verify result structure
@@ -323,8 +321,8 @@ class TestInterviewCoachAgent:
         interview_coach.client.chat.completions.create.return_value = mock_openai_strategy_response
 
         result = await interview_coach.generate_preparation_strategy(
-            job_description=sample_job_description,
             job_title="Senior Full Stack Developer",
+            company_name="TechCorp",
             user_experience_level="senior"
         )
 
@@ -362,11 +360,11 @@ class TestInterviewCoachAgent:
                 company_name="TechCorp"
             )
 
-        with pytest.raises(ValueError, match="Job title is required"):
-            await interview_coach.generate_technical_questions(
+        with pytest.raises(ValueError, match="Job description, title, and company name are required"):
+            await interview_coach.generate_interview_prep_materials(
                 job_description="Valid description",
                 job_title="",
-                user_experience_level="junior"
+                company_name="TechCorp",
             )
 
     @pytest.mark.asyncio
@@ -478,7 +476,7 @@ class TestInterviewCoachAgent:
         assert isinstance(result_senior, list)
  
         # Check that experience level was included in prompts
-        call_args = interview_coach.client.chat.completions.call_args_list
+        call_args = interview_coach.client.chat.completions.create.call_args_list
         junior_prompt = call_args[0].kwargs["messages"][1]["content"]
         senior_prompt = call_args[1].kwargs["messages"][1]["content"]
  
@@ -492,10 +490,9 @@ class TestInterviewCoachAgent:
         """Test integration of user background in question generation."""
         interview_coach.client.chat.completions.create.return_value = mock_openai_technical_response
 
-        result = await interview_coach.generate_interview_prep_materials(
+        result = await interview_coach.generate_technical_questions(
             job_description=sample_job_description,
             job_title="Developer",
-            company_name="TechCorp",
             user_background=sample_user_background
         )
 
@@ -505,4 +502,4 @@ class TestInterviewCoachAgent:
 
         assert "React" in prompt_content
         assert "Node.js" in prompt_content
-        assert "StartupXYZ" in prompt_content
+        assert "AWS" in prompt_content

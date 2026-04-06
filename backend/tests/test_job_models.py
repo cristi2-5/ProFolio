@@ -6,7 +6,7 @@ from app.models.job import ScrapedJob, UserJob
 from app.models.user import User
 
 @pytest.mark.asyncio
-async def test_create_scraped_job(db_session):
+async def test_create_scraped_job(test_session):
     """Test basic creation and retrieval of a ScrapedJob."""
     job = ScrapedJob(
         company_name="Test Company",
@@ -16,9 +16,9 @@ async def test_create_scraped_job(db_session):
         location="Remote",
         source_platform="test"
     )
-    db_session.add(job)
-    await db_session.commit()
-    await db_session.refresh(job)
+    test_session.add(job)
+    await test_session.commit()
+    await test_session.refresh(job)
     
     assert job.id is not None
     assert isinstance(job.id, uuid.UUID)
@@ -26,15 +26,15 @@ async def test_create_scraped_job(db_session):
     assert job.scraped_at is not None
 
 @pytest.mark.asyncio
-async def test_create_user_job(db_session):
+async def test_create_user_job(test_session):
     """Test creation of UserJob relationship."""
     # Create a user first
     user = User(
         email="test_models@example.com",
-        hashed_password="hashed_password",
+        password_hash="password_hash",
         full_name="Model Tester"
     )
-    db_session.add(user)
+    test_session.add(user)
     
     # Create a job
     job = ScrapedJob(
@@ -42,8 +42,8 @@ async def test_create_user_job(db_session):
         job_title="DevOps",
         external_url="https://rel.com/456"
     )
-    db_session.add(job)
-    await db_session.flush()
+    test_session.add(job)
+    await test_session.flush()
     
     # Create UserJob
     user_job = UserJob(
@@ -52,16 +52,16 @@ async def test_create_user_job(db_session):
         match_score=85,
         status="new"
     )
-    db_session.add(user_job)
-    await db_session.commit()
-    await db_session.refresh(user_job)
+    test_session.add(user_job)
+    await test_session.commit()
+    await test_session.refresh(user_job)
     
     assert user_job.match_score == 85
     assert user_job.status == "new"
     assert user_job.created_at is not None
 
 @pytest.mark.asyncio
-async def test_user_job_status_constraints(db_session):
+async def test_user_job_status_constraints(test_session):
     """Test that invalid statuses are rejected if we were to enforce them (logical check)."""
     # Note: SQLAlchemy check constraints are enforced by the DB, not the ORM usually
     # but we can verify the model attribute assignment.
@@ -69,7 +69,7 @@ async def test_user_job_status_constraints(db_session):
     assert user_job.status == "invalid_status"
 
 @pytest.mark.asyncio
-async def test_scraped_job_repr(db_session):
+async def test_scraped_job_repr(test_session):
     """Test the string representation of ScrapedJob."""
     job = ScrapedJob(company_name="Repr Inc", job_title="Manager")
     repr_str = repr(job)

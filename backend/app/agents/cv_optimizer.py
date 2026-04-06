@@ -382,7 +382,10 @@ Keep it engaging, specific, and professional. Avoid generic language."""
                 kwargs["response_format"] = response_format
 
             response = await self.client.chat.completions.create(**kwargs)
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            if content is None:
+                raise ValueError("Empty response from OpenAI API")
+            return content
         except Exception as e:
             logger.error(f"OpenAI API call failed: {e}")
             raise
@@ -459,7 +462,10 @@ Provide specific suggestions for improving ATS compatibility and job relevance."
             )
 
             import json
-            suggestions = json.loads(response.choices[0].message.content)
+            content = response.choices[0].message.content
+            if content is None:
+                raise ValueError("Empty response from OpenAI API")
+            suggestions = json.loads(content)
             logger.info("CV optimization suggestions generated successfully")
             return suggestions
 

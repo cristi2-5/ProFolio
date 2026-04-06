@@ -63,8 +63,9 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
 
     await admin_engine.dispose()
 
+    from sqlalchemy.pool import NullPool
     # Create engine for test database
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=NullPool)
 
     # Create all tables (ensure clean start)
     async with engine.begin() as conn:
@@ -84,25 +85,20 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
 
 
 @pytest_asyncio.fixture
-async def test_session(
-    test_engine: AsyncEngine,
-) -> AsyncGenerator[AsyncSession, None]:
-    """Provide a test database session with transaction rollback.
-
-    Each test runs in a transaction that automatically rolls back,
-    ensuring test isolation without database cleanup overhead.
-    """
-    # Create session factory
+async def test_session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     async_session = async_sessionmaker(
         test_engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
-
     async with async_session() as session:
-        async with session.begin_nested():
-            yield session
-            # Transaction automatically rolls back after yield
+        yield session
+        await session.rollback()
+        # Truncate tables to ensure clean state for next test
+        for table in reversed(Base.metadata.sorted_tables):
+            await session.execute(text(f"TRUNCATE TABLE {table.name} CASCADE;"))
+        await session.commit()
+        await session.close()
 
 
 @pytest_asyncio.fixture

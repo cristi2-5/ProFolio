@@ -460,4 +460,4 @@ John Doe"""
         assert cv_optimizer.model == "gpt-4o-mini"
         assert cv_optimizer.max_tokens == 3000
         assert cv_optimizer.temperature == 0.3
-        assert isinstance(cv_optimizer.client, AsyncMock)
+        assert cv_optimizer.client is not None

@@ -202,7 +202,7 @@ class TestCVProfilerAgent:
         test_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
 
         # Mock file processing and OpenAI API
-        with patch('app.utils.file_processing.extract_text_from_file', return_value=sample_cv_text), \
+        with patch('app.agents.cv_profiler.extract_text_from_file', return_value=sample_cv_text), \
              patch('app.agents.cv_profiler.openai_client') as mock_client:
 
             # Mock OpenAI response
@@ -227,7 +227,7 @@ class TestCVProfilerAgent:
         test_file = tmp_path / "test_resume.pdf"
         test_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
 
-        with patch('app.utils.file_processing.extract_text_from_file', return_value=sample_cv_text), \
+        with patch('app.agents.cv_profiler.extract_text_from_file', return_value=sample_cv_text), \
              patch('app.agents.cv_profiler.openai_client') as mock_client:
 
             # Mock OpenAI API error
@@ -245,7 +245,7 @@ class TestCVProfilerAgent:
         test_file = tmp_path / "test_resume.pdf"
         test_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
 
-        with patch('app.utils.file_processing.extract_text_from_file', return_value=sample_cv_text), \
+        with patch('app.agents.cv_profiler.extract_text_from_file', return_value=sample_cv_text), \
              patch('app.agents.cv_profiler.openai_client') as mock_client:
 
             # Mock invalid JSON response

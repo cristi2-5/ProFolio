@@ -11,6 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from fastapi import Request, FastAPI
 
 # Initialize limiter with IP-based key function
+DEFAULT_RATE_LIMITS=["100/minute"]
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 
