@@ -99,7 +99,6 @@ class AdzunaClient:
             "results_per_page": min(results_per_page, 50),  # Adzuna limit
             "what": query,
             "content-type": "application/json",
-            "page": page,
             "max_days_old": max_days_old,
         }
 
@@ -109,7 +108,7 @@ class AdzunaClient:
 
         # Country code (default to US, can be extended for international)
         country_code = "us"
-        endpoint = f"{self.base_url}/{country_code}/search"
+        endpoint = f"{self.base_url}/{country_code}/search/{page}"
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:

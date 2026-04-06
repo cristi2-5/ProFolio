@@ -64,7 +64,9 @@ export async function apiRequest(endpoint, options = {}) {
       }
     }
 
-    throw new Error(errorMessage);
+    const errObj = new Error(errorMessage);
+    errObj.status = response.status;
+    throw errObj;
   }
 
   return response.json();

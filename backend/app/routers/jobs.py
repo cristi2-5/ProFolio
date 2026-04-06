@@ -345,7 +345,7 @@ async def trigger_job_scan(
         _scan_last_called[user_id_str] = now
 
         # --- Run real job scanner ---
-        logger.info(f"Manual job scan triggered for user {current_user.id}")
+        logger.info(f"Manual job scan triggered for user {user_id_str}")
         new_jobs = await job_scanner.scan(user_id_str, db)
 
         return {
@@ -362,14 +362,14 @@ async def trigger_job_scan(
     except ValueError as e:
         # Adzuna credentials not configured
         _scan_last_called.pop(user_id_str, None)
-        logger.error(f"Job scan config error for user {current_user.id}: {e}")
+        logger.error(f"Job scan config error for user {user_id_str}: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Job scan service is not configured. Please contact support.",
         )
     except Exception as e:
         _scan_last_called.pop(user_id_str, None)
-        logger.error(f"Manual job scan failed for user {current_user.id}: {e}")
+        logger.error(f"Manual job scan failed for user {user_id_str}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Job scan failed. Please try again later.",
