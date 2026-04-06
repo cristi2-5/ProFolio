@@ -109,6 +109,7 @@ class CVOptimizerService:
         user: User,
         job: ScrapedJob,
         db: AsyncSession,
+        user_motivation: Optional[str] = None,
     ) -> str:
         """Generate personalized cover letter for job application.
 
@@ -119,6 +120,8 @@ class CVOptimizerService:
             user: User requesting cover letter generation.
             job: Target job posting.
             db: Database session.
+            user_motivation: Optional personal motivation text from user,
+                incorporated into the cover letter prompt.
 
         Returns:
             str: Generated cover letter text.
@@ -152,13 +155,14 @@ class CVOptimizerService:
             if not user_job:
                 raise ValueError(f"No UserJob record found for user {user.id} and job {job.id}")
 
-            # Generate AI-powered cover letter
+            # Generate AI-powered cover letter with optional user motivation
             cover_letter = await self.cv_optimizer.generate_cover_letter(
                 parsed_cv=active_resume.parsed_data,
                 job_description=job.description or "",
                 job_title=job.job_title,
                 company_name=job.company_name,
                 user_name=user.full_name,
+                user_motivation=user_motivation,
             )
 
             # Store cover letter in UserJob record

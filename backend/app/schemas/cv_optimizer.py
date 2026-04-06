@@ -7,7 +7,7 @@ and PDF export API interactions.
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,12 +30,18 @@ class CVOptimizationResponse(BaseModel):
         job_title: Job title the CV was optimized for.
         company_name: Company name the CV was optimized for.
         optimization_date: When the optimization was performed.
+        changes_summary: Human-readable list of what changed vs original CV.
+            Each entry describes one modification made by the AI.
     """
 
     optimized_cv: Dict[str, Any]
     job_title: str
     company_name: str
     optimization_date: datetime
+    changes_summary: Optional[List[str]] = Field(
+        default=None,
+        description="List of changes made to the CV for user review (NO_FABRICATION audit trail)",
+    )
 
 
 class CoverLetterRequest(BaseModel):
@@ -43,9 +49,16 @@ class CoverLetterRequest(BaseModel):
 
     Attributes:
         job_id: UUID of the job to generate cover letter for.
+        user_motivation: Optional personal motivation text provided by the user.
+            Combined with CV data for more personalized cover letter generation.
     """
 
     job_id: uuid.UUID
+    user_motivation: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="User's personal motivation or context to include in the cover letter",
+    )
 
 
 class CoverLetterResponse(BaseModel):
