@@ -3,7 +3,7 @@
 > Living index of all project files, their purposes, and dependencies.
 > Updated per `rules.md` §2 whenever files are created, deleted, renamed, or substantially modified.
 >
-> **Last Updated:** 2026-04-05 (Phase 2 Complete)
+> **Last Updated:** 2026-04-06 (Phase 3 Epic 2 Complete)
 
 ---
 
@@ -40,8 +40,8 @@
 | File | Purpose | Dependencies |
 |------|---------|-------------|
 | `backend/app/__init__.py` | Package init | — |
-| `backend/app/main.py` | FastAPI entry point, CORS, lifespan, health check, router registration | `config`, `routers/*` |
-| `backend/app/config.py` | Pydantic BaseSettings — loads all env vars | `pydantic-settings` |
+| `backend/app/main.py` | FastAPI entry point, CORS, lifespan, health check, router registration, **APScheduler 24h job scan cron** | `config`, `routers/*`, `apscheduler` |
+| `backend/app/config.py` | Pydantic BaseSettings — loads all env vars, **+ job_scan_interval_hours, job_scan_rate_limit_hours** | `pydantic-settings` |
 | `backend/app/database.py` | SQLAlchemy async engine, session factory, `get_db` dependency | `config`, `sqlalchemy`, `asyncpg` |
 
 ### Dependencies (`/backend/app/dependencies/`)
@@ -66,7 +66,7 @@
 | `models/__init__.py` | Exports all models for Alembic auto-discovery | All model files |
 | `models/user.py` | `User` + `JobPreference` models (auth, GDPR opt-in, seniority) | `database.Base` |
 | `models/resume.py` | `ParsedResume` model (JSONB for parsed CV data) | `database.Base` |
-| `models/job.py` | `ScrapedJob` + `UserJob` models (dedup hash, match scores) | `database.Base` |
+| `models/job.py` | `ScrapedJob` + `UserJob` models (dedup hash, match scores, **applied_at timestamp**) | `database.Base` |
 | `models/benchmark.py` | `BenchmarkScore` model (GDPR-compliant scoring) | `database.Base` |
 
 ### Pydantic Schemas (`/backend/app/schemas/`)
@@ -76,7 +76,7 @@
 | `schemas/__init__.py` | Package init | — |
 | `schemas/user.py` | `UserCreate`, `UserUpdate`, `UserResponse`, `Token`, `LoginRequest` | `pydantic` |
 | `schemas/resume.py` | `ResumeResponse`, `ResumeUpdate` | `pydantic` |
-| `schemas/job.py` | `JobResponse`, `UserJobResponse`, `UserJobStatusUpdate` | `pydantic` |
+| `schemas/job.py` | `JobResponse`, `UserJobResponse` (**+applied_at**), `UserJobListResponse` (paginated), `UserJobStatusUpdate` | `pydantic` |
 | `schemas/benchmark.py` | `BenchmarkResponse` | `pydantic` |
 
 ### API Routers (`/backend/app/routers/`)
@@ -86,7 +86,7 @@
 | `routers/__init__.py` | Package init | — |
 | `routers/auth.py` | Registration + login endpoints (stubs → Phase 2) | `schemas/user`, `database` |
 | `routers/resumes.py` | CV upload + listing endpoints (stubs → Phase 2) | `database` |
-| `routers/jobs.py` | Job listing + status update endpoints (stubs → Phase 2) | `database` |
+| `routers/jobs.py` | Job listing (**paginated, searchable, sortable**) + status update + **real scan trigger (rate-limited 1/hr)** + interview/benchmark endpoints | `database`, `agents/job_scanner` |
 | `routers/benchmarks.py` | Benchmark scores endpoint (stubs → Phase 3) | `database` |
 
 ### Business Logic Services (`/backend/app/services/`)
@@ -96,7 +96,7 @@
 | `services/__init__.py` | Package init | — |
 | `services/auth_service.py` | Registration (dedup, hashing) + authentication (JWT) | `models/user`, `utils/security` |
 | `services/resume_service.py` | CV upload + parsing orchestration with file handling and agent integration | `agents/cv_profiler`, `utils/file_validation` |
-| `services/job_service.py` | Job matching, deduplication, and scoring with Adzuna API integration | `clients/adzuna`, `agents/job_scanner`, `utils/hashing` |
+| `services/job_service.py` | Job matching, deduplication, scoring — **list with search/sort/pagination+total_count, update sets applied_at** | `clients/adzuna`, `agents/job_scanner`, `utils/hashing` |
 | `services/benchmark_service.py` | GDPR-compliant competitive scoring with peer group analysis | `models/user`, `models/benchmark`, `utils/statistics` |
 
 ### AI Agents (`/backend/app/agents/`)
@@ -105,7 +105,7 @@
 |------|---------|-------------|
 | `agents/__init__.py` | Package docs — agent architecture overview | — |
 | `agents/cv_profiler.py` | CV parsing agent (PDF/DOCX → structured JSON via GPT-4) with text extraction and validation | `openai`, `PyPDF2`, `python-docx` |
-| `agents/job_scanner.py` | Job discovery agent (Adzuna API + daily cron) with cross-platform deduplication and scoring | `openai`, `httpx`, `clients/adzuna` |
+| `agents/job_scanner.py` | Job discovery agent (Adzuna API + 24h APScheduler cron) — **lazy Adzuna client, graceful missing-key handling** | `openai`, `httpx`, `clients/adzuna` |
 | `agents/cv_optimizer.py` | ATS rewriting + cover letter agent with keyword optimization and PDF export | `openai`, `services/pdf_export` |
 | `agents/interview_coach.py` | Interview prep generator with technical/behavioral questions and cheat sheets | `openai` |
 | `agents/prompts/__init__.py` | Package init for prompt engineering modules | — |
@@ -118,7 +118,7 @@
 | File | Purpose | Dependencies |
 |------|---------|-------------|
 | `clients/__init__.py` | Package init for external API clients | — |
-| `clients/adzuna.py` | Adzuna job search API client with rate limiting and error handling | `httpx`, `config` |
+| `clients/adzuna.py` | Adzuna job search API client with rate limiting and error handling — **lazy singleton via get_adzuna_client()** | `httpx`, `config` |
 
 ### Utilities (`/backend/app/utils/`)
 
@@ -144,8 +144,8 @@
 | `backend/tests/test_cv_profiler.py` | CV parsing agent tests (22 scenarios: PDF/DOCX extraction, GPT-4 integration, validation) | `conftest`, `agents/cv_profiler` |
 | `backend/tests/test_job_scanner.py` | Job discovery tests (28 scenarios: Adzuna API, deduplication, scoring, cron jobs) | `conftest`, `agents/job_scanner`, `clients/adzuna` |
 | `backend/tests/test_cv_optimizer.py` | CV optimization tests (18 scenarios: ATS rewriting, cover letters, PDF export) | `conftest`, `agents/cv_optimizer` |
-| `backend/tests/test_interview_coach.py` | Interview coach tests (15 scenarios: question generation, cheat sheets, tech analysis) | `conftest`, `agents/interview_coach` |
-| `backend/tests/test_benchmark_service.py` | Benchmark service tests (25 scenarios: competitive scoring, GDPR compliance, peer analysis) | `conftest`, `services/benchmark_service` |
+| `backend/tests/test_job_scanner.py` | **Job Scanner Agent tests (25 scenarios: dedup URL/hash, scan happy/error, cron, hashing)** | `conftest`, `agents/job_scanner`, `utils/hashing` |
+| `backend/tests/test_job_service.py` | **Job Service tests (15 scenarios: list_user_jobs pagination/search/sort, update_job_status+applied_at, match_jobs)** | `conftest`, `services/job_service` |
 | `backend/tests/test_benchmark_router.py` | Benchmark API tests (20 scenarios: calculation endpoints, opt-in management, privacy) | `conftest`, `routers/benchmarks` |
 | `backend/tests/fixtures/sample.pdf` | Test PDF file for CV parsing validation | — |
 | `backend/tests/fixtures/sample.docx` | Test DOCX file for CV parsing validation | — |
@@ -158,6 +158,7 @@
 | `backend/alembic/versions/002_create_parsed_resumes.py` | Migration for parsed_resumes table with JSONB + GIN index | `alembic` |
 | `backend/alembic/versions/003_create_scraped_jobs_and_user_jobs.py` | Migration for scraped_jobs & user_jobs with dedup hash | `alembic` |
 | `backend/alembic/versions/004_create_benchmark_scores.py` | Migration for benchmark_scores table (GDPR-compliant) | `alembic` |
+| `backend/alembic/versions/005_add_applied_at_to_user_jobs.py` | **Additive migration: nullable applied_at TIMESTAMPTZ on user_jobs** | `alembic` |
 | `backend/app/dependencies/__init__.py` | Package init for auth dependencies | — |
 | `backend/app/dependencies/auth.py` | JWT authentication dependency (`get_current_user`, `get_current_user_optional`) | `app.utils.security`, `app.models.user` |
 | `backend/app/middleware/__init__.py` | Package init for middleware | — |

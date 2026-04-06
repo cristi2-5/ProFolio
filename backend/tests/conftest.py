@@ -31,15 +31,15 @@ TEST_DATABASE_URL = settings.database_url.replace(
 
 
 @pytest.fixture(scope="session")
-def event_loop():
+def event_loop_policy():
     """Create an event loop for the test session.
 
     Required for pytest-asyncio to work with session-scoped fixtures.
     """
     policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
-    yield loop
-    loop.close()
+    
+    return policy
+    
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -47,16 +47,18 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create test database engine.
 
     Creates a fresh test database at session start and drops it at session end.
+    Ensures all connections are closed before dropping.
     """
     # Create engine for postgres database (to create/drop test DB)
+    admin_url = settings.database_url.replace("/autoapply_db", "/postgres")
     admin_engine = create_async_engine(
-        settings.database_url.replace("/autoapply_db", "/postgres"),
+        admin_url,
         isolation_level="AUTOCOMMIT",
     )
 
-    # Drop and recreate test database
+    # Force disconnect all sessions and recreate test database
     async with admin_engine.connect() as conn:
-        await conn.execute(text("DROP DATABASE IF EXISTS autoapply_test_db"))
+        await conn.execute(text("DROP DATABASE IF EXISTS autoapply_test_db WITH (FORCE)"))
         await conn.execute(text("CREATE DATABASE autoapply_test_db"))
 
     await admin_engine.dispose()
@@ -64,16 +66,21 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     # Create engine for test database
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 
-    # Create all tables
+    # Create all tables (ensure clean start)
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
     yield engine
 
-    # Cleanup: drop all tables and dispose engine
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    # Final Cleanup: ensure all connections are disposed
     await engine.dispose()
+
+    # Final drop (optional but cleaner)
+    admin_engine_cleanup = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
+    async with admin_engine_cleanup.connect() as conn:
+        await conn.execute(text("DROP DATABASE IF EXISTS autoapply_test_db WITH (FORCE)"))
+    await admin_engine_cleanup.dispose()
 
 
 @pytest_asyncio.fixture
@@ -93,7 +100,7 @@ async def test_session(
     )
 
     async with async_session() as session:
-        async with session.begin():
+        async with session.begin_nested():
             yield session
             # Transaction automatically rolls back after yield
 

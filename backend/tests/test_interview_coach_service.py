@@ -8,7 +8,7 @@ storage, and retrieval with database operations.
 import pytest
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from app.models.job import ScrapedJob, UserJob
 from app.models.resume import ParsedResume
@@ -132,10 +132,12 @@ class TestInterviewCoachService:
         """Test successful interview prep generation."""
         # Setup mocks
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.side_effect = [
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.side_effect = [
             sample_parsed_resume,  # Active resume query
             sample_user_job        # UserJob query
         ]
+        mock_db.execute.return_value = mock_result
 
         interview_coach_service.interview_coach.generate_interview_prep_materials.return_value = (
             sample_interview_prep_materials
@@ -172,10 +174,11 @@ class TestInterviewCoachService:
     ):
         """Test prep generation without user background."""
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.side_effect = [
-            None,  # No active resume
-            sample_user_job
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.side_effect = [
+            sample_user_job        # Only one call for UserJob because background is False
         ]
+        mock_db.execute.return_value = mock_result
 
         interview_coach_service.interview_coach.generate_interview_prep_materials.return_value = (
             sample_interview_prep_materials
@@ -206,10 +209,12 @@ class TestInterviewCoachService:
     ):
         """Test prep generation when UserJob doesn't exist."""
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.side_effect = [
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.side_effect = [
             sample_parsed_resume,  # Active resume found
             None                   # No UserJob found
         ]
+        mock_db.execute.return_value = mock_result
 
         with pytest.raises(ValueError, match="No UserJob record found"):
             await interview_coach_service.generate_interview_prep_materials(
@@ -226,7 +231,9 @@ class TestInterviewCoachService:
         sample_user_job.interview_prep = sample_interview_prep_materials
 
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.return_value = sample_user_job
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_user_job
+        mock_db.execute.return_value = mock_result
 
         result = await interview_coach_service.get_interview_prep_materials(
             user=sample_user,
@@ -242,7 +249,9 @@ class TestInterviewCoachService:
     ):
         """Test retrieval when no prep materials exist."""
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.return_value = None
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
 
         with pytest.raises(ValueError, match="No interview prep materials found"):
             await interview_coach_service.get_interview_prep_materials(
@@ -259,7 +268,9 @@ class TestInterviewCoachService:
         sample_user_job.interview_prep = sample_interview_prep_materials.copy()
 
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.return_value = sample_user_job
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_user_job
+        mock_db.execute.return_value = mock_result
 
         updates = {
             "user_notes": "Added my own notes",
@@ -338,7 +349,6 @@ class TestInterviewCoachService:
         interview_coach_service.interview_coach.generate_behavioral_questions.assert_called_once_with(
             job_description=sample_job.description,
             company_name=sample_job.company_name,
-            job_title=sample_job.job_title,
             question_count=1
         )
 
@@ -406,7 +416,7 @@ class TestInterviewCoachService:
         user_job2 = Mock(spec=UserJob)
         user_job2.id = uuid.uuid4()
         user_job2.job_id = uuid.uuid4()
-        user_job2.interview_prep = {"technical_questions": []}  # Partial materials
+        user_job2.interview_prep = {"technical_questions": [{"question": "Q"}]}  # Partial materials
         user_job2.match_score = 70
         user_job2.status = "applied"
         user_job2.updated_at = datetime.now(timezone.utc)
@@ -423,7 +433,9 @@ class TestInterviewCoachService:
         job2.company_name = "DataCorp"
 
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalars.return_value.all.return_value = [user_job1, user_job2]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [user_job1, user_job2]
+        mock_db.execute.return_value = mock_result
         mock_db.get.side_effect = [job1, job2]
 
         result = await interview_coach_service.get_user_interview_preps(
@@ -454,10 +466,12 @@ class TestInterviewCoachService:
     ):
         """Test error handling with database rollback."""
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.side_effect = [
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.side_effect = [
             sample_parsed_resume,
             sample_user_job
         ]
+        mock_db.execute.return_value = mock_result
 
         # Mock AI agent to raise exception
         interview_coach_service.interview_coach.generate_interview_prep_materials.side_effect = Exception("AI API error")
@@ -491,7 +505,9 @@ class TestInterviewCoachService:
         user_job.interview_prep = {"technical_questions": []}
 
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalars.return_value.all.return_value = [user_job]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [user_job]
+        mock_db.execute.return_value = mock_result
         mock_db.get.return_value = None  # Job not found
 
         result = await interview_coach_service.get_user_interview_preps(
@@ -510,7 +526,9 @@ class TestInterviewCoachService:
         sample_user_job.interview_prep = None
 
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.return_value = sample_user_job
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_user_job
+        mock_db.execute.return_value = mock_result
 
         updates = {"user_notes": "New notes"}
 

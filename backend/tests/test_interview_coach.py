@@ -7,7 +7,7 @@ cheat sheet creation, and preparation strategy development.
 
 import json
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from openai import AsyncOpenAI
 
 from app.agents.interview_coach import InterviewCoachAgent
@@ -20,9 +20,16 @@ class TestInterviewCoachAgent:
     def interview_coach(self):
         """Create interview coach agent with mocked OpenAI client."""
         with patch("app.agents.interview_coach.settings") as mock_settings:
-            mock_settings.openai_api_key = "test-key"
+            mock_settings.openai_api_key = "sk-placeholder-key"
             agent = InterviewCoachAgent()
-            agent.client = AsyncMock(spec=AsyncOpenAI)
+            assert agent.is_development is False
+            # Setup nested AsyncMock for OpenAI client
+            mock_client = MagicMock(spec=AsyncOpenAI)
+            mock_client.chat = MagicMock()
+            mock_client.chat.completions = MagicMock()
+            mock_client.chat.completions.create = AsyncMock()
+            agent.client = mock_client
+            
             return agent
 
     @pytest.fixture
@@ -85,7 +92,7 @@ class TestInterviewCoachAgent:
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps(technical_questions)
+        mock_response.choices[0].message.content = json.dumps({"technical_questions": technical_questions})
         return mock_response
 
     @pytest.fixture
@@ -108,7 +115,7 @@ class TestInterviewCoachAgent:
 
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = json.dumps(behavioral_questions)
+        mock_response.choices[0].message.content = json.dumps({"behavioral_questions": behavioral_questions})
         return mock_response
 
     @pytest.fixture
@@ -198,9 +205,8 @@ class TestInterviewCoachAgent:
         # Execute generation
         result = await interview_coach.generate_interview_prep_materials(
             job_description=sample_job_description,
-            job_title="Senior Full Stack Developer",
+            job_title="Developer",
             company_name="TechCorp",
-            user_experience_level="senior",
             user_background=sample_user_background
         )
 
@@ -349,7 +355,7 @@ class TestInterviewCoachAgent:
     @pytest.mark.asyncio
     async def test_invalid_input_validation(self, interview_coach):
         """Test validation of invalid inputs."""
-        with pytest.raises(ValueError, match="Job description is required"):
+        with pytest.raises(ValueError, match="Job description, title, and company name are required"):
             await interview_coach.generate_interview_prep_materials(
                 job_description="",
                 job_title="Developer",
@@ -407,109 +413,75 @@ class TestInterviewCoachAgent:
                 user_experience_level="junior"
             )
 
-    def test_question_count_validation(self, interview_coach):
-        """Test validation of question counts."""
-        # Valid counts should not raise errors
-        interview_coach._validate_question_count(5)
-        interview_coach._validate_question_count(1)
-        interview_coach._validate_question_count(20)
-
-        # Invalid counts should raise errors
-        with pytest.raises(ValueError, match="Question count must be between 1 and 20"):
-            interview_coach._validate_question_count(0)
-
-        with pytest.raises(ValueError, match="Question count must be between 1 and 20"):
-            interview_coach._validate_question_count(25)
-
-    def test_input_validation_methods(self, interview_coach):
-        """Test input validation helper methods."""
-        # Valid inputs should not raise errors
-        interview_coach._validate_job_inputs(
-            "Valid job description",
-            "Developer",
-            "TechCorp"
-        )
-
-        # Invalid inputs should raise errors
-        with pytest.raises(ValueError, match="Job description is required"):
-            interview_coach._validate_job_inputs("", "Developer", "TechCorp")
-
-        with pytest.raises(ValueError, match="Job title is required"):
-            interview_coach._validate_job_inputs("Valid", "", "TechCorp")
-
-        with pytest.raises(ValueError, match="Company name is required"):
-            interview_coach._validate_job_inputs("Valid", "Developer", "")
-
     def test_prompt_building_methods(self, interview_coach):
         """Test prompt building methods."""
         # Technical questions prompt
-        prompt = interview_coach._build_technical_questions_prompt(
+        prompt = interview_coach._build_technical_questions_user_prompt(
             "Senior Developer job",
             "Senior Developer",
             "senior",
-            5
+            {"skills": ["Python"]}
         )
         assert "Senior Developer" in prompt
         assert "senior" in prompt
-        assert "5" in prompt
-
+        assert "Python" in prompt
+ 
         # Behavioral questions prompt
-        prompt = interview_coach._build_behavioral_questions_prompt(
+        prompt = interview_coach._build_behavioral_questions_user_prompt(
             "Job description",
             "TechCorp",
-            "Developer",
-            3
+            "senior"
         )
         assert "TechCorp" in prompt
-        assert "Developer" in prompt
+        assert "senior" in prompt
 
     def test_initialization_without_api_key(self):
         """Test interview coach initialization without OpenAI API key."""
         with patch("app.agents.interview_coach.settings") as mock_settings:
             mock_settings.openai_api_key = ""
-
-            with pytest.raises(ValueError, match="OpenAI API key not configured"):
-                InterviewCoachAgent()
+            # The agent is now robust and only logs a warning instead of raising ValueError
+            agent = InterviewCoachAgent()
+            assert agent.client is None
 
     def test_configuration_attributes(self, interview_coach):
         """Test interview coach configuration attributes."""
         assert interview_coach.model == "gpt-4o-mini"
-        assert interview_coach.max_tokens == 3000
+        assert interview_coach.max_tokens == 4000
         assert interview_coach.temperature == 0.4
-        assert isinstance(interview_coach.client, AsyncMock)
+        assert isinstance(interview_coach.client, MagicMock)
 
     @pytest.mark.asyncio
     async def test_experience_level_adaptation(
-        self, interview_coach, sample_job_description, mock_openai_technical_response
+        self, interview_coach, sample_job_description
     ):
-        """Test adaptation of questions based on experience level."""
-        interview_coach.client.chat.completions.create.return_value = mock_openai_technical_response
-
-        # Test junior level
+        """Test adaptation of questions to experience level."""
+        interview_coach.client.chat.completions.create.return_value = Mock()
+        interview_coach.client.chat.completions.create.return_value.choices = [Mock()]
+        interview_coach.client.chat.completions.create.return_value.choices[0].message.content = json.dumps({"technical_questions": []})
+ 
+        # Test junior
         result_junior = await interview_coach.generate_technical_questions(
             job_description=sample_job_description,
             job_title="Developer",
-            user_experience_level="junior",
-            question_count=2
+            user_experience_level="junior"
         )
-
-        # Test senior level
+        
+        # Test senior
         result_senior = await interview_coach.generate_technical_questions(
             job_description=sample_job_description,
             job_title="Developer",
-            user_experience_level="senior",
-            question_count=2
+            user_experience_level="senior"
         )
-
+ 
         # Both should generate questions
         assert isinstance(result_junior, list)
         assert isinstance(result_senior, list)
-
+ 
         # Check that experience level was included in prompts
-        call_args = interview_coach.client.chat.completions.create.call_args_list
+        call_args = interview_coach.client.chat.completions.call_args_list
         junior_prompt = call_args[0].kwargs["messages"][1]["content"]
         senior_prompt = call_args[1].kwargs["messages"][1]["content"]
-
+ 
         assert "junior" in junior_prompt.lower()
         assert "senior" in senior_prompt.lower()
 

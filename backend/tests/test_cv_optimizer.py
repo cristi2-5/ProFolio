@@ -7,7 +7,7 @@ PDF export, and error handling scenarios.
 
 import json
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from openai import AsyncOpenAI
 
 from app.agents.cv_optimizer import CVOptimizerAgent
@@ -17,12 +17,20 @@ class TestCVOptimizerAgent:
     """Test CV optimizer agent functionality."""
 
     @pytest.fixture
-    def cv_optimizer(self):
+    def cv_optimizer(self, mock_openai_cv_response):
         """Create CV optimizer agent with mocked OpenAI client."""
         with patch("app.agents.cv_optimizer.settings") as mock_settings:
-            mock_settings.openai_api_key = "test-key"
+            mock_settings.openai_api_key = "sk-placeholder-key"
             agent = CVOptimizerAgent()
-            agent.client = AsyncMock(spec=AsyncOpenAI)
+            assert agent.is_development is False
+            
+            # Setup nested AsyncMock for OpenAI client
+            mock_client = MagicMock(spec=AsyncOpenAI)
+            mock_client.chat = MagicMock()
+            mock_client.chat.completions = MagicMock()
+            mock_client.chat.completions.create = AsyncMock()
+            agent.client = mock_client
+            
             return agent
 
     @pytest.fixture
@@ -443,9 +451,9 @@ John Doe"""
         """Test CV optimizer initialization without OpenAI API key."""
         with patch("app.agents.cv_optimizer.settings") as mock_settings:
             mock_settings.openai_api_key = ""
-
-            with pytest.raises(ValueError, match="OpenAI API key not configured"):
-                CVOptimizerAgent()
+            # The agent is now robust and only logs a warning instead of raising ValueError
+            agent = CVOptimizerAgent()
+            assert agent.client is None
 
     def test_configuration_attributes(self, cv_optimizer):
         """Test CV optimizer configuration attributes."""

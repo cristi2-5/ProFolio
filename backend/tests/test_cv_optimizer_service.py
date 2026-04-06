@@ -8,7 +8,7 @@ generation, and PDF export with database operations.
 import pytest
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from app.models.job import ScrapedJob, UserJob
 from app.models.resume import ParsedResume
@@ -81,10 +81,12 @@ class TestCVOptimizerService:
         """Test successful CV optimization for a job."""
         # Setup mocks
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.side_effect = [
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.side_effect = [
             sample_parsed_resume,  # First call for active resume
             sample_user_job        # Second call for UserJob
         ]
+        mock_db.execute.return_value = mock_result
 
         optimized_cv_data = {
             "summary": "Optimized summary with keywords",
@@ -121,7 +123,9 @@ class TestCVOptimizerService:
     async def test_optimize_cv_no_resume(self, cv_optimizer_service, sample_user, sample_job):
         """Test CV optimization when user has no active resume."""
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.return_value = None
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
 
         with pytest.raises(ValueError, match="has no active resume"):
             await cv_optimizer_service.optimize_cv_for_job(
@@ -136,10 +140,12 @@ class TestCVOptimizerService:
     ):
         """Test CV optimization when UserJob doesn't exist."""
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.side_effect = [
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.side_effect = [
             sample_parsed_resume,  # Active resume found
             None                   # No UserJob found
         ]
+        mock_db.execute.return_value = mock_result
 
         with pytest.raises(ValueError, match="No UserJob record found"):
             await cv_optimizer_service.optimize_cv_for_job(
@@ -154,10 +160,12 @@ class TestCVOptimizerService:
     ):
         """Test successful cover letter generation."""
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.side_effect = [
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.side_effect = [
             sample_parsed_resume,
             sample_user_job
         ]
+        mock_db.execute.return_value = mock_result
 
         generated_letter = "Dear Hiring Manager, I am excited about this opportunity..."
         cv_optimizer_service.cv_optimizer.generate_cover_letter.return_value = generated_letter
@@ -195,7 +203,9 @@ class TestCVOptimizerService:
         sample_user_job.optimized_cv = {"summary": "Optimized CV content"}
 
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.return_value = sample_user_job
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_user_job
+        mock_db.execute.return_value = mock_result
 
         # Mock PDF export
         pdf_data = b"PDF content here"
@@ -223,7 +233,9 @@ class TestCVOptimizerService:
         mock_user_job.optimized_cv = None
 
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.return_value = mock_user_job
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_user_job
+        mock_db.execute.return_value = mock_result
 
         with pytest.raises(ValueError, match="No optimized CV found"):
             await cv_optimizer_service.export_optimized_cv_pdf(
@@ -242,7 +254,9 @@ class TestCVOptimizerService:
         sample_user_job.cover_letter = "Dear Hiring Manager..."
 
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.return_value = sample_user_job
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_user_job
+        mock_db.execute.return_value = mock_result
 
         # Mock PDF export
         pdf_data = b"Cover letter PDF content"
@@ -272,7 +286,9 @@ class TestCVOptimizerService:
     ):
         """Test optimization suggestions generation."""
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.return_value = sample_parsed_resume
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_parsed_resume
+        mock_db.execute.return_value = mock_result
 
         suggestions = {
             "keywords_to_add": ["React", "TypeScript"],
@@ -331,7 +347,9 @@ class TestCVOptimizerService:
         job2.company_name = "DataCorp"
 
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalars.return_value.all.return_value = [user_job1, user_job2]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [user_job1, user_job2]
+        mock_db.execute.return_value = mock_result
         mock_db.get.side_effect = [job1, job2]
 
         result = await cv_optimizer_service.get_user_optimized_materials(
@@ -362,10 +380,12 @@ class TestCVOptimizerService:
     ):
         """Test error handling with database rollback."""
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalar_one_or_none.side_effect = [
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.side_effect = [
             sample_parsed_resume,
             sample_user_job
         ]
+        mock_db.execute.return_value = mock_result
 
         # Mock AI agent to raise exception
         cv_optimizer_service.cv_optimizer.optimize_cv_for_job.side_effect = Exception("AI API error")
@@ -400,7 +420,9 @@ class TestCVOptimizerService:
         user_job.cover_letter = None
 
         mock_db = AsyncMock()
-        mock_db.execute.return_value.scalars.return_value.all.return_value = [user_job]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [user_job]
+        mock_db.execute.return_value = mock_result
         mock_db.get.return_value = None  # Job not found
 
         result = await cv_optimizer_service.get_user_optimized_materials(

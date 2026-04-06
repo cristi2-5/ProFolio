@@ -234,7 +234,6 @@ class InterviewCoachService:
                 additional_content = await self.interview_coach.generate_behavioral_questions(
                     job_description=job.description,
                     company_name=job.company_name,
-                    job_title=job.job_title,
                     question_count=count,
                 )
             else:  # company

@@ -161,6 +161,7 @@ class TestFileProcessing:
     def test_validate_cv_file_too_large(self, tmp_path):
         """Files exceeding size limit should fail validation."""
         large_file = tmp_path / "large.pdf"
+        large_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
         # Create a file larger than 10MB (simulate)
         with patch('os.path.getsize', return_value=11 * 1024 * 1024):
             is_valid, error = validate_cv_file(str(large_file), "large.pdf")
@@ -198,7 +199,7 @@ class TestCVProfilerAgent:
         """Successful CV parsing with AI should return structured data."""
         # Create mock PDF file
         test_file = tmp_path / "test_resume.pdf"
-        test_file.write_bytes(b"%PDF-1.4 mock pdf content")
+        test_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
 
         # Mock file processing and OpenAI API
         with patch('app.utils.file_processing.extract_text_from_file', return_value=sample_cv_text), \
@@ -224,7 +225,7 @@ class TestCVProfilerAgent:
     async def test_parse_cv_openai_error(self, cv_agent, tmp_path, sample_cv_text):
         """OpenAI API errors should be handled gracefully."""
         test_file = tmp_path / "test_resume.pdf"
-        test_file.write_bytes(b"%PDF-1.4 mock pdf content")
+        test_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
 
         with patch('app.utils.file_processing.extract_text_from_file', return_value=sample_cv_text), \
              patch('app.agents.cv_profiler.openai_client') as mock_client:
@@ -242,7 +243,7 @@ class TestCVProfilerAgent:
     async def test_parse_cv_invalid_json(self, cv_agent, tmp_path, sample_cv_text):
         """Invalid JSON from OpenAI should be handled."""
         test_file = tmp_path / "test_resume.pdf"
-        test_file.write_bytes(b"%PDF-1.4 mock pdf content")
+        test_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
 
         with patch('app.utils.file_processing.extract_text_from_file', return_value=sample_cv_text), \
              patch('app.agents.cv_profiler.openai_client') as mock_client:

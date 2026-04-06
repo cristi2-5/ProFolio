@@ -41,4 +41,5 @@ def setup_rate_limiting(app: FastAPI) -> None:
         - Limits reset on a sliding window (not fixed intervals)
     """
     app.state.limiter = limiter
+    app.state.default_limits = DEFAULT_RATE_LIMITS
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

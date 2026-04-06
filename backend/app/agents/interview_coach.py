@@ -39,46 +39,58 @@ class InterviewCoachAgent:
         else:
             # Handle development/test mode with placeholder API keys
             self.is_development = api_key.startswith("test-") or settings.environment == "development"
+            self.client = AsyncOpenAI(api_key=api_key) if not self.is_development else None
             
-            if not self.is_development:
-                self.client = AsyncOpenAI(api_key=api_key)
-            else:
-                # In development mode, create a mock client that won't make real API calls
-                self.client = None
+            if self.is_development:
                 logger.warning("Running in development mode with test API key. AI features will return mock responses.")
 
         self.model = "gpt-4o-mini"  # Cost-effective model for content generation
         self.max_tokens = 4000      # Extended output for comprehensive materials
         self.temperature = 0.4      # Balanced creativity for diverse but relevant content
 
-    async def _make_api_call(self, system_prompt: str, user_prompt: str, mock_response_type: str = "questions") -> str:
-        """Make API call with mock response handling for development mode."""
+    async def _make_api_call(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 2000,
+        temperature: float = 0.4,
+        response_format: Optional[Dict[str, str]] = None,
+        mock_response: Any = None,
+    ) -> Any:
+        """Centralized method for making OpenAI API calls with development mode support."""
         if self.is_development:
-            # Return mock responses based on type
-            mock_responses = {
-                "questions": '{"questions": [{"question": "Tell me about your experience with Python", "type": "technical", "difficulty": "medium", "answer_guide": "Discuss your Python projects and frameworks"}]}',
-                "prep": '{"preparation_strategy": "Mock interview preparation", "company_research": "Research this company online", "key_points": ["Technical skills", "Problem solving"]}',
-                "behavioral": '{"questions": [{"question": "Describe a challenging project", "type": "behavioral", "answer_guide": "Use STAR method"}]}',
-                "research": '{"company_info": "Mock company research data", "culture_notes": "Company culture insights", "interview_tips": ["Be prepared", "Ask questions"]}',
-                "cheat_sheet": '{"technical_concepts": {"Python": "High-level programming language", "API": "Application Programming Interface"}, "common_questions": ["What is your experience?"]}'
-            }
-            return mock_responses.get(mock_response_type, '{"mock": "response"}')
+            logger.info("Operating in development mode; returning mock response.")
+            return mock_response
 
-        # Validate API configuration for production
         if not self.client:
-            raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY to use AI features.")
+            raise ValueError("OpenAI client not initialized. Check API key configuration.")
 
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
-            response_format={"type": "json_object"}
-        )
-        return response.choices[0].message.content
+        try:
+            kwargs = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            if response_format:
+                kwargs["response_format"] = response_format
+
+            response = await self.client.chat.completions.create(**kwargs)
+            
+            content = response.choices[0].message.content
+            if not content:
+                raise Exception("Empty response from OpenAI API")
+                
+            if response_format and response_format.get("type") == "json_object":
+                import json
+                return json.loads(content)
+            return content
+        except Exception as e:
+            logger.error(f"OpenAI API call failed: {e}")
+            raise
 
     async def generate_interview_prep_materials(
         self,
@@ -166,37 +178,30 @@ class InterviewCoachAgent:
         job_title: str,
         user_experience_level: Optional[str] = None,
         user_background: Optional[Dict[str, Any]] = None,
+        question_count: int = 5,
     ) -> List[Dict[str, Any]]:
-        """Generate role-specific technical interview questions.
-
-        Creates technical questions tailored to the job requirements, user's
-        experience level, and commonly asked topics for the specific role.
-
-        Args:
-            job_description: Job requirements and technical skills.
-            job_title: Position title for context.
-            user_experience_level: User's experience level.
-            user_background: User's technical background.
-
-        Returns:
-            list: Technical questions with suggested answers and difficulty levels.
-        """
+        """Generate role-specific technical interview questions."""
         logger.info(f"Generating technical questions for {job_title}")
 
         try:
-            # Build prompt for technical questions
             system_prompt = self._build_technical_questions_system_prompt()
             user_prompt = self._build_technical_questions_user_prompt(
-                job_description, job_title, user_experience_level, user_background
+                job_description, job_title, user_experience_level, user_background, question_count
             )
 
-            response_content = await self._make_api_call(system_prompt, user_prompt, "questions")
-
-            import json
-            questions_data = json.loads(response_content)
-
-            # Validate and return technical questions
-            technical_questions = questions_data.get("technical_questions", [])
+            data = await self._make_api_call(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=2000,
+                temperature=self.temperature,
+                response_format={"type": "json_object"},
+                mock_response={"technical_questions": []}
+            )
+ 
+            if isinstance(data, list):
+                technical_questions = data
+            else:
+                technical_questions = data.get("technical_questions", [])
             logger.info(f"Generated {len(technical_questions)} technical questions")
             return technical_questions
 
@@ -209,43 +214,30 @@ class InterviewCoachAgent:
         job_description: str,
         company_name: str,
         user_experience_level: Optional[str] = None,
+        question_count: int = 5,
     ) -> List[Dict[str, Any]]:
-        """Generate behavioral interview questions tailored to company culture.
-
-        Creates behavioral questions that assess cultural fit, leadership skills,
-        and situational judgment relevant to the specific company and role.
-
-        Args:
-            job_description: Job requirements including soft skills.
-            company_name: Company for cultural context.
-            user_experience_level: User's experience level.
-
-        Returns:
-            list: Behavioral questions with STAR method guidance.
-        """
+        """Generate behavioral interview questions tailored to company culture."""
         logger.info(f"Generating behavioral questions for {company_name}")
 
         try:
             system_prompt = self._build_behavioral_questions_system_prompt()
             user_prompt = self._build_behavioral_questions_user_prompt(
-                job_description, company_name, user_experience_level
+                job_description, company_name, user_experience_level, question_count
             )
 
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+            data = await self._make_api_call(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
                 max_tokens=2500,
                 temperature=self.temperature,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                mock_response={"behavioral_questions": []}
             )
-
-            import json
-            questions_data = json.loads(response.choices[0].message.content)
-
-            behavioral_questions = questions_data.get("behavioral_questions", [])
+ 
+            if isinstance(data, list):
+                behavioral_questions = data
+            else:
+                behavioral_questions = data.get("behavioral_questions", [])
             logger.info(f"Generated {len(behavioral_questions)} behavioral questions")
             return behavioral_questions
 
@@ -425,7 +417,7 @@ Question Structure:
 - **Follow-up**: Potential deeper questions to explore
 - **Example Answer**: Concise but complete sample response
 
-Return a JSON object with an array of 5-7 technical questions covering the main technical requirements."""
+Return a JSON object with an array of technical questions covering the main technical requirements."""
 
     def _build_behavioral_questions_system_prompt(self) -> str:
         """Build system prompt for behavioral questions generation."""
@@ -446,7 +438,7 @@ Question Structure:
 - **STAR Guidance**: How to structure their response
 - **Follow-up Questions**: Probing questions to dig deeper
 
-Return a JSON object with 4-6 behavioral questions that assess key competencies."""
+Return a JSON object with behavioral questions that assess key competencies."""
 
     def _build_company_research_system_prompt(self) -> str:
         """Build system prompt for company research generation."""
@@ -521,13 +513,14 @@ Return a JSON object with a structured, actionable preparation plan."""
         job_title: str,
         user_experience_level: Optional[str],
         user_background: Optional[Dict[str, Any]],
+        question_count: int = 5,
     ) -> str:
         """Build user prompt for technical questions with job context."""
         background_info = ""
         if user_background:
             skills = user_background.get("skills", [])
             experience_years = user_background.get("total_years_experience", 0)
-            background_info = f"\\nCandidate Background: {experience_years} years experience, skills: {', '.join(skills[:8])}"
+            background_info = f"\nCandidate Background: {experience_years} years experience, skills: {', '.join(skills[:8])}"
 
         return f"""TECHNICAL INTERVIEW PREPARATION REQUEST:
 Position: {job_title}
@@ -538,7 +531,7 @@ JOB DESCRIPTION:
 {job_description[:2000]}
 
 REQUIREMENTS:
-Generate 5-7 technical interview questions that:
+Generate {question_count} technical interview questions that:
 1. Directly relate to the technologies and requirements in this job description
 2. Are appropriate for the {user_experience_level or 'specified'} experience level
 3. Cover both theoretical knowledge and practical application
@@ -552,6 +545,7 @@ Focus on the most critical technical skills mentioned in the job requirements.""
         job_description: str,
         company_name: str,
         user_experience_level: Optional[str],
+        question_count: int = 5,
     ) -> str:
         """Build user prompt for behavioral questions with company context."""
         return f"""BEHAVIORAL INTERVIEW PREPARATION REQUEST:
@@ -562,7 +556,7 @@ JOB DESCRIPTION:
 {job_description[:1500]}
 
 REQUIREMENTS:
-Generate 4-6 behavioral interview questions that:
+Generate {question_count} behavioral interview questions that:
 1. Assess cultural fit for {company_name} based on the role requirements
 2. Evaluate key soft skills mentioned in the job description
 3. Are appropriate for the {user_experience_level or 'specified'} experience level
