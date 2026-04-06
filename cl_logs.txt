@@ -1,3 +1,0 @@
-2026-04-06 19:20:20,834 - app.agents.cv_optimizer - ERROR - Cover letter generation failed: Generated cover letter is too short
-2026-04-06 19:20:20,834 - app.services.cv_optimizer_service - ERROR - Cover letter generation failed: Generated cover letter is too short
-    logger.error(f"Cover letter generation failed for user {current_user.id}: {e}")
