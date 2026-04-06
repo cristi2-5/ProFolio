@@ -95,3 +95,9 @@
 - Comprehensive error handling and user feedback systems
 
 **Phase 2 Status: 🎉 COMPLETE - Ready for production!**
+### UI State Bug Fixes (Phase 4)
+- Fixed JobPreferences and CVUpload components to elegantly parse array payloads strictly served by the API endpoints instead of mapping undefined objects, allowing them to persistently display across navigation.
+
+### Job Optimization & Dashboard Fixes (Phase 4)
+- Solved 'CV Optimizer' failure by rewriting backend activation logic to automatically set any newly uploaded CV as active.
+- Solved 'Set Now' continuous Dashboard prompt by fixing the frontend object validation logic.

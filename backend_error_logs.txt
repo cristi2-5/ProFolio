@@ -1,0 +1,260 @@
+INFO:     172.19.0.4:58076 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:13,707 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:13,707 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:13,708 INFO sqlalchemy.engine.Engine [cached since 789.6s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:13,711 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.user_id = $1::UUID ORDER BY parsed_resumes.created_at DESC
+2026-04-06 19:12:13,711 INFO sqlalchemy.engine.Engine [cached since 657.8s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:13,714 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:58088 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:23,817 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:23,819 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:23,819 INFO sqlalchemy.engine.Engine [cached since 799.7s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:23,825 INFO sqlalchemy.engine.Engine UPDATE parsed_resumes SET is_active=$1::BOOLEAN, updated_at=$2::TIMESTAMP WITH TIME ZONE WHERE parsed_resumes.user_id = $3::UUID AND parsed_resumes.is_active = true
+2026-04-06 19:12:23,826 INFO sqlalchemy.engine.Engine [cached since 84.64s ago] (False, datetime.datetime(2026, 4, 6, 19, 12, 23, 824052, tzinfo=datetime.timezone.utc), UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'))
+2026-04-06 19:12:23,830 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.id = $1::UUID AND parsed_resumes.user_id = $2::UUID
+2026-04-06 19:12:23,831 INFO sqlalchemy.engine.Engine [cached since 84.64s ago] (UUID('d88337cf-7ba5-488f-b914-f02fe78e9691'), UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'))
+2026-04-06 19:12:23,835 INFO sqlalchemy.engine.Engine UPDATE parsed_resumes SET is_active=$1::BOOLEAN, updated_at=$2::TIMESTAMP WITH TIME ZONE WHERE parsed_resumes.user_id = $3::UUID AND parsed_resumes.is_active = true
+2026-04-06 19:12:23,835 INFO sqlalchemy.engine.Engine [cached since 84.65s ago] (False, datetime.datetime(2026, 4, 6, 19, 12, 23, 834352, tzinfo=datetime.timezone.utc), UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'))
+2026-04-06 19:12:23,838 INFO sqlalchemy.engine.Engine UPDATE parsed_resumes SET is_active=$1::BOOLEAN, updated_at=$2::TIMESTAMP WITH TIME ZONE WHERE parsed_resumes.id = $3::UUID
+2026-04-06 19:12:23,838 INFO sqlalchemy.engine.Engine [cached since 84.65s ago] (True, datetime.datetime(2026, 4, 6, 19, 12, 23, 833760, tzinfo=datetime.timezone.utc), UUID('d88337cf-7ba5-488f-b914-f02fe78e9691'))
+2026-04-06 19:12:23,842 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.id = $1::UUID
+2026-04-06 19:12:23,842 INFO sqlalchemy.engine.Engine [cached since 84.64s ago] (UUID('d88337cf-7ba5-488f-b914-f02fe78e9691'),)
+2026-04-06 19:12:23,844 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:40980 - "POST /api/resumes/d88337cf-7ba5-488f-b914-f02fe78e9691/activate HTTP/1.1" 200 OK
+2026-04-06 19:12:23,940 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:23,941 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:23,941 INFO sqlalchemy.engine.Engine [cached since 799.9s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:23,944 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.user_id = $1::UUID ORDER BY parsed_resumes.created_at DESC
+2026-04-06 19:12:23,945 INFO sqlalchemy.engine.Engine [cached since 668.1s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:23,948 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:40984 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:38,481 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:38,482 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:38,482 INFO sqlalchemy.engine.Engine [cached since 814.4s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:38,486 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.user_id = $1::UUID ORDER BY parsed_resumes.created_at DESC
+2026-04-06 19:12:38,486 INFO sqlalchemy.engine.Engine [cached since 682.6s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:38,492 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:40506 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:38,513 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:38,514 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:38,514 INFO sqlalchemy.engine.Engine [cached since 814.4s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:38,517 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.user_id = $1::UUID ORDER BY parsed_resumes.created_at DESC
+2026-04-06 19:12:38,517 INFO sqlalchemy.engine.Engine [cached since 682.7s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:38,522 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:40520 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:38,532 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:38,533 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:38,533 INFO sqlalchemy.engine.Engine [cached since 814.5s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:38,537 INFO sqlalchemy.engine.Engine SELECT job_preferences.id, job_preferences.user_id, job_preferences.desired_title, job_preferences.location_type, job_preferences.keywords, job_preferences.created_at 
+FROM job_preferences 
+WHERE job_preferences.user_id = $1::UUID
+2026-04-06 19:12:38,537 INFO sqlalchemy.engine.Engine [cached since 587.7s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:38,540 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:40530 - "GET /api/jobs/preferences HTTP/1.1" 200 OK
+2026-04-06 19:12:38,592 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:38,593 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:38,593 INFO sqlalchemy.engine.Engine [cached since 814.5s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:38,595 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:38,596 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:38,596 INFO sqlalchemy.engine.Engine [cached since 814.5s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:38,601 INFO sqlalchemy.engine.Engine SELECT job_preferences.id, job_preferences.user_id, job_preferences.desired_title, job_preferences.location_type, job_preferences.keywords, job_preferences.created_at 
+FROM job_preferences 
+WHERE job_preferences.user_id = $1::UUID
+2026-04-06 19:12:38,601 INFO sqlalchemy.engine.Engine [cached since 587.8s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:38,603 INFO sqlalchemy.engine.Engine COMMIT
+2026-04-06 19:12:38,606 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM (SELECT user_jobs.id AS id, user_jobs.user_id AS user_id, user_jobs.job_id AS job_id, user_jobs.match_score AS match_score, user_jobs.status AS status, user_jobs.optimized_cv AS optimized_cv, user_jobs.cover_letter AS cover_letter, user_jobs.interview_prep AS interview_prep, user_jobs.applied_at AS applied_at, user_jobs.created_at AS created_at, user_jobs.updated_at AS updated_at 
+FROM user_jobs JOIN scraped_jobs ON user_jobs.job_id = scraped_jobs.id 
+WHERE user_jobs.user_id = $1::UUID) AS anon_1
+2026-04-06 19:12:38,606 INFO sqlalchemy.engine.Engine [cached since 814.5s ago] ('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a',)
+2026-04-06 19:12:38,609 INFO sqlalchemy.engine.Engine SELECT user_jobs.id, user_jobs.user_id, user_jobs.job_id, user_jobs.match_score, user_jobs.status, user_jobs.optimized_cv, user_jobs.cover_letter, user_jobs.interview_prep, user_jobs.applied_at, user_jobs.created_at, user_jobs.updated_at 
+FROM user_jobs JOIN scraped_jobs ON user_jobs.job_id = scraped_jobs.id 
+WHERE user_jobs.user_id = $1::UUID ORDER BY user_jobs.match_score DESC, user_jobs.created_at DESC 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2026-04-06 19:12:38,609 INFO sqlalchemy.engine.Engine [cached since 814.5s ago] ('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a', 20, 0)
+INFO:     172.19.0.4:40534 - "GET /api/jobs/preferences HTTP/1.1" 200 OK
+2026-04-06 19:12:38,615 INFO sqlalchemy.engine.Engine SELECT scraped_jobs.id AS scraped_jobs_id, scraped_jobs.external_url AS scraped_jobs_external_url, scraped_jobs.company_name AS scraped_jobs_company_name, scraped_jobs.job_title AS scraped_jobs_job_title, scraped_jobs.description AS scraped_jobs_description, scraped_jobs.description_hash AS scraped_jobs_description_hash, scraped_jobs.location AS scraped_jobs_location, scraped_jobs.source_platform AS scraped_jobs_source_platform, scraped_jobs.scraped_at AS scraped_jobs_scraped_at 
+FROM scraped_jobs 
+WHERE scraped_jobs.id IN ($1::UUID)
+2026-04-06 19:12:38,616 INFO sqlalchemy.engine.Engine [cached since 814.5s ago] (UUID('56be1f4e-cbf5-41e2-881d-239b7a1af255'),)
+2026-04-06 19:12:38,619 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:40550 - "GET /api/jobs/ HTTP/1.1" 200 OK
+2026-04-06 19:12:38,641 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:38,642 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:38,642 INFO sqlalchemy.engine.Engine [cached since 814.6s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:38,647 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM (SELECT user_jobs.id AS id, user_jobs.user_id AS user_id, user_jobs.job_id AS job_id, user_jobs.match_score AS match_score, user_jobs.status AS status, user_jobs.optimized_cv AS optimized_cv, user_jobs.cover_letter AS cover_letter, user_jobs.interview_prep AS interview_prep, user_jobs.applied_at AS applied_at, user_jobs.created_at AS created_at, user_jobs.updated_at AS updated_at 
+FROM user_jobs JOIN scraped_jobs ON user_jobs.job_id = scraped_jobs.id 
+WHERE user_jobs.user_id = $1::UUID) AS anon_1
+2026-04-06 19:12:38,647 INFO sqlalchemy.engine.Engine [cached since 814.5s ago] ('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a',)
+2026-04-06 19:12:38,650 INFO sqlalchemy.engine.Engine SELECT user_jobs.id, user_jobs.user_id, user_jobs.job_id, user_jobs.match_score, user_jobs.status, user_jobs.optimized_cv, user_jobs.cover_letter, user_jobs.interview_prep, user_jobs.applied_at, user_jobs.created_at, user_jobs.updated_at 
+FROM user_jobs JOIN scraped_jobs ON user_jobs.job_id = scraped_jobs.id 
+WHERE user_jobs.user_id = $1::UUID ORDER BY user_jobs.match_score DESC, user_jobs.created_at DESC 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2026-04-06 19:12:38,650 INFO sqlalchemy.engine.Engine [cached since 814.5s ago] ('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a', 20, 0)
+2026-04-06 19:12:38,654 INFO sqlalchemy.engine.Engine SELECT scraped_jobs.id AS scraped_jobs_id, scraped_jobs.external_url AS scraped_jobs_external_url, scraped_jobs.company_name AS scraped_jobs_company_name, scraped_jobs.job_title AS scraped_jobs_job_title, scraped_jobs.description AS scraped_jobs_description, scraped_jobs.description_hash AS scraped_jobs_description_hash, scraped_jobs.location AS scraped_jobs_location, scraped_jobs.source_platform AS scraped_jobs_source_platform, scraped_jobs.scraped_at AS scraped_jobs_scraped_at 
+FROM scraped_jobs 
+WHERE scraped_jobs.id IN ($1::UUID)
+2026-04-06 19:12:38,654 INFO sqlalchemy.engine.Engine [cached since 814.5s ago] (UUID('56be1f4e-cbf5-41e2-881d-239b7a1af255'),)
+2026-04-06 19:12:38,657 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:40566 - "GET /api/jobs/ HTTP/1.1" 200 OK
+2026-04-06 19:12:47,453 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:47,454 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:47,455 INFO sqlalchemy.engine.Engine [cached since 823.4s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:47,458 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.user_id = $1::UUID ORDER BY parsed_resumes.created_at DESC
+2026-04-06 19:12:47,458 INFO sqlalchemy.engine.Engine [cached since 691.6s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:47,462 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:38248 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:47,477 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:47,478 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:47,479 INFO sqlalchemy.engine.Engine [cached since 823.4s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:47,483 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.user_id = $1::UUID ORDER BY parsed_resumes.created_at DESC
+2026-04-06 19:12:47,483 INFO sqlalchemy.engine.Engine [cached since 691.6s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:47,486 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:38250 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:47,515 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:47,516 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:47,517 INFO sqlalchemy.engine.Engine [cached since 823.4s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:47,520 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.user_id = $1::UUID ORDER BY parsed_resumes.created_at DESC
+2026-04-06 19:12:47,520 INFO sqlalchemy.engine.Engine [cached since 691.7s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:47,525 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:38254 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:47,544 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:47,545 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:47,545 INFO sqlalchemy.engine.Engine [cached since 823.5s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:47,549 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.user_id = $1::UUID ORDER BY parsed_resumes.created_at DESC
+2026-04-06 19:12:47,550 INFO sqlalchemy.engine.Engine [cached since 691.7s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:47,554 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:38258 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:56,119 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:56,120 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:56,121 INFO sqlalchemy.engine.Engine [cached since 832s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:56,124 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.user_id = $1::UUID ORDER BY parsed_resumes.created_at DESC
+2026-04-06 19:12:56,124 INFO sqlalchemy.engine.Engine [cached since 700.3s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:56,129 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:42106 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:56,145 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:56,146 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:56,146 INFO sqlalchemy.engine.Engine [cached since 832.1s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:56,149 INFO sqlalchemy.engine.Engine SELECT parsed_resumes.id, parsed_resumes.user_id, parsed_resumes.original_filename, parsed_resumes.file_url, parsed_resumes.parsed_data, parsed_resumes.is_active, parsed_resumes.created_at, parsed_resumes.updated_at 
+FROM parsed_resumes 
+WHERE parsed_resumes.user_id = $1::UUID ORDER BY parsed_resumes.created_at DESC
+2026-04-06 19:12:56,149 INFO sqlalchemy.engine.Engine [cached since 700.3s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:56,153 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:42120 - "GET /api/resumes/ HTTP/1.1" 200 OK
+2026-04-06 19:12:56,183 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:56,184 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:56,185 INFO sqlalchemy.engine.Engine [cached since 832.1s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:56,188 INFO sqlalchemy.engine.Engine SELECT job_preferences.id, job_preferences.user_id, job_preferences.desired_title, job_preferences.location_type, job_preferences.keywords, job_preferences.created_at 
+FROM job_preferences 
+WHERE job_preferences.user_id = $1::UUID
+2026-04-06 19:12:56,188 INFO sqlalchemy.engine.Engine [cached since 605.4s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:56,191 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:42126 - "GET /api/jobs/preferences HTTP/1.1" 200 OK
+2026-04-06 19:12:56,210 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:56,211 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:56,212 INFO sqlalchemy.engine.Engine [cached since 832.1s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:56,217 INFO sqlalchemy.engine.Engine SELECT job_preferences.id, job_preferences.user_id, job_preferences.desired_title, job_preferences.location_type, job_preferences.keywords, job_preferences.created_at 
+FROM job_preferences 
+WHERE job_preferences.user_id = $1::UUID
+2026-04-06 19:12:56,217 INFO sqlalchemy.engine.Engine [cached since 605.4s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:56,220 INFO sqlalchemy.engine.Engine COMMIT
+2026-04-06 19:12:56,220 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:56,221 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:56,222 INFO sqlalchemy.engine.Engine [cached since 832.1s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+INFO:     172.19.0.4:42128 - "GET /api/jobs/preferences HTTP/1.1" 200 OK
+2026-04-06 19:12:56,227 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM (SELECT user_jobs.id AS id, user_jobs.user_id AS user_id, user_jobs.job_id AS job_id, user_jobs.match_score AS match_score, user_jobs.status AS status, user_jobs.optimized_cv AS optimized_cv, user_jobs.cover_letter AS cover_letter, user_jobs.interview_prep AS interview_prep, user_jobs.applied_at AS applied_at, user_jobs.created_at AS created_at, user_jobs.updated_at AS updated_at 
+FROM user_jobs JOIN scraped_jobs ON user_jobs.job_id = scraped_jobs.id 
+WHERE user_jobs.user_id = $1::UUID) AS anon_1
+2026-04-06 19:12:56,227 INFO sqlalchemy.engine.Engine [cached since 832.1s ago] ('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a',)
+2026-04-06 19:12:56,231 INFO sqlalchemy.engine.Engine SELECT user_jobs.id, user_jobs.user_id, user_jobs.job_id, user_jobs.match_score, user_jobs.status, user_jobs.optimized_cv, user_jobs.cover_letter, user_jobs.interview_prep, user_jobs.applied_at, user_jobs.created_at, user_jobs.updated_at 
+FROM user_jobs JOIN scraped_jobs ON user_jobs.job_id = scraped_jobs.id 
+WHERE user_jobs.user_id = $1::UUID ORDER BY user_jobs.match_score DESC, user_jobs.created_at DESC 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2026-04-06 19:12:56,232 INFO sqlalchemy.engine.Engine [cached since 832.1s ago] ('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a', 20, 0)
+2026-04-06 19:12:56,235 INFO sqlalchemy.engine.Engine SELECT scraped_jobs.id AS scraped_jobs_id, scraped_jobs.external_url AS scraped_jobs_external_url, scraped_jobs.company_name AS scraped_jobs_company_name, scraped_jobs.job_title AS scraped_jobs_job_title, scraped_jobs.description AS scraped_jobs_description, scraped_jobs.description_hash AS scraped_jobs_description_hash, scraped_jobs.location AS scraped_jobs_location, scraped_jobs.source_platform AS scraped_jobs_source_platform, scraped_jobs.scraped_at AS scraped_jobs_scraped_at 
+FROM scraped_jobs 
+WHERE scraped_jobs.id IN ($1::UUID)
+2026-04-06 19:12:56,236 INFO sqlalchemy.engine.Engine [cached since 832.1s ago] (UUID('56be1f4e-cbf5-41e2-881d-239b7a1af255'),)
+2026-04-06 19:12:56,239 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:42132 - "GET /api/jobs/ HTTP/1.1" 200 OK
+2026-04-06 19:12:56,257 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-06 19:12:56,258 INFO sqlalchemy.engine.Engine SELECT users.id AS users_id, users.email AS users_email, users.password_hash AS users_password_hash, users.full_name AS users_full_name, users.seniority_level AS users_seniority_level, users.niche AS users_niche, users.benchmark_opt_in AS users_benchmark_opt_in, users.created_at AS users_created_at, users.updated_at AS users_updated_at 
+FROM users 
+WHERE users.id = $1::UUID
+2026-04-06 19:12:56,258 INFO sqlalchemy.engine.Engine [cached since 832.2s ago] (UUID('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a'),)
+2026-04-06 19:12:56,263 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM (SELECT user_jobs.id AS id, user_jobs.user_id AS user_id, user_jobs.job_id AS job_id, user_jobs.match_score AS match_score, user_jobs.status AS status, user_jobs.optimized_cv AS optimized_cv, user_jobs.cover_letter AS cover_letter, user_jobs.interview_prep AS interview_prep, user_jobs.applied_at AS applied_at, user_jobs.created_at AS created_at, user_jobs.updated_at AS updated_at 
+FROM user_jobs JOIN scraped_jobs ON user_jobs.job_id = scraped_jobs.id 
+WHERE user_jobs.user_id = $1::UUID) AS anon_1
+2026-04-06 19:12:56,263 INFO sqlalchemy.engine.Engine [cached since 832.2s ago] ('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a',)
+2026-04-06 19:12:56,267 INFO sqlalchemy.engine.Engine SELECT user_jobs.id, user_jobs.user_id, user_jobs.job_id, user_jobs.match_score, user_jobs.status, user_jobs.optimized_cv, user_jobs.cover_letter, user_jobs.interview_prep, user_jobs.applied_at, user_jobs.created_at, user_jobs.updated_at 
+FROM user_jobs JOIN scraped_jobs ON user_jobs.job_id = scraped_jobs.id 
+WHERE user_jobs.user_id = $1::UUID ORDER BY user_jobs.match_score DESC, user_jobs.created_at DESC 
+ LIMIT $2::INTEGER OFFSET $3::INTEGER
+2026-04-06 19:12:56,267 INFO sqlalchemy.engine.Engine [cached since 832.1s ago] ('b328ea5f-6448-4419-a0b9-b6aeaeb50a0a', 20, 0)
+2026-04-06 19:12:56,272 INFO sqlalchemy.engine.Engine SELECT scraped_jobs.id AS scraped_jobs_id, scraped_jobs.external_url AS scraped_jobs_external_url, scraped_jobs.company_name AS scraped_jobs_company_name, scraped_jobs.job_title AS scraped_jobs_job_title, scraped_jobs.description AS scraped_jobs_description, scraped_jobs.description_hash AS scraped_jobs_description_hash, scraped_jobs.location AS scraped_jobs_location, scraped_jobs.source_platform AS scraped_jobs_source_platform, scraped_jobs.scraped_at AS scraped_jobs_scraped_at 
+FROM scraped_jobs 
+WHERE scraped_jobs.id IN ($1::UUID)
+2026-04-06 19:12:56,272 INFO sqlalchemy.engine.Engine [cached since 832.1s ago] (UUID('56be1f4e-cbf5-41e2-881d-239b7a1af255'),)
+2026-04-06 19:12:56,275 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     172.19.0.4:42138 - "GET /api/jobs/ HTTP/1.1" 200 OK

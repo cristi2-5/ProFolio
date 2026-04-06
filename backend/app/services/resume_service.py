@@ -84,9 +84,13 @@ class ResumeService:
             logger.info(f"Parsing CV with AI: {file.filename}")
             parsed_data = await self.cv_profiler.parse(str(file_path), file.filename)
 
-            # Deactivate other resumes if this is the first one
-            existing_count = await self._count_user_resumes(db, user.id)
-            is_active = existing_count == 0  # First resume is automatically active
+            # Always make the newly uploaded resume the active one, deactivating others
+            await db.execute(
+                update(ParsedResume)
+                .where(ParsedResume.user_id == user.id)
+                .values(is_active=False)
+            )
+            is_active = True
 
             # Create resume record in database
             resume = ParsedResume(

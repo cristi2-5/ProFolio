@@ -98,7 +98,7 @@ function JobDetail() {
   const optimizeCV = async () => {
     try {
       setOptimizing(true);
-      const response = await post(`/cv-optimizer/optimize`, { job_id: jobId });
+      const response = await post(`/cv-optimizer/optimize`, { job_id: job.job_id });
       setOptimizedCV(response.optimized_cv ?? response);
       setActiveTab('cv-optimization');
     } catch (err) {
@@ -115,7 +115,7 @@ function JobDetail() {
     try {
       setGeneratingCover(true);
       const response = await post(`/cv-optimizer/cover-letter`, {
-        job_id: jobId,
+        job_id: job.job_id,
         user_motivation: userMotivation.trim() || null,
       });
       setCoverLetter(response.cover_letter ?? response);
@@ -133,7 +133,7 @@ function JobDetail() {
   const prepareInterview = async () => {
     try {
       setPreparingInterview(true);
-      const response = await post(`/jobs/${jobId}/generate-interview-prep`);
+      const response = await post(`/jobs/${job.job_id}/generate-interview-prep`, {});
       setInterviewPrep(response);
       setActiveTab('interview-prep');
     } catch (err) {
@@ -149,7 +149,7 @@ function JobDetail() {
   const calculateBenchmark = async () => {
     try {
       setCalculatingBenchmark(true);
-      const response = await post(`/jobs/${jobId}/calculate-benchmark`);
+      const response = await post(`/jobs/${job.job_id}/calculate-benchmark`);
       setBenchmark(response);
       setActiveTab('benchmark');
     } catch (err) {
@@ -170,7 +170,7 @@ function JobDetail() {
    */
   const exportCV = async () => {
     try {
-      const response = await fetch(`/api/cv-optimizer/export/cv/${jobId}`, {
+      const response = await fetch(`/api/cv-optimizer/export/cv/${job.job_id}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('access_token')}`,
         },
@@ -197,7 +197,7 @@ function JobDetail() {
    */
   const exportCoverLetter = async () => {
     try {
-      const response = await fetch(`/api/cv-optimizer/export/cover-letter/${jobId}`, {
+      const response = await fetch(`/api/cv-optimizer/export/cover-letter/${job.job_id}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('access_token')}`,
         },
@@ -224,7 +224,7 @@ function JobDetail() {
    */
   const saveOptimizedCV = async () => {
     try {
-      await patch(`/jobs/${jobId}/optimized-cv`, { optimized_cv: optimizedCV });
+      await patch(`/jobs/${job.job_id}/optimized-cv`, { optimized_cv: optimizedCV });
       setEditingCV(false);
     } catch (err) {
       setError('Failed to save CV changes: ' + err.message);
@@ -236,7 +236,7 @@ function JobDetail() {
    */
   const saveCoverLetter = async () => {
     try {
-      await patch(`/jobs/${jobId}/cover-letter`, { cover_letter: coverLetter });
+      await patch(`/jobs/${job.job_id}/cover-letter`, { cover_letter: coverLetter });
       setEditingCover(false);
     } catch (err) {
       setError('Failed to save cover letter: ' + err.message);

@@ -15,6 +15,7 @@ import JobDetail from './pages/JobDetail';
 import Benchmarks from './pages/Benchmarks';
 import Interview from './pages/Interview';
 import Login from './pages/Login';
+import JobPreferences from './components/JobPreferences';
 import './App.css';
 
 /**
@@ -83,6 +84,17 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Interview />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <div className="animate-fade-in card" style={{ maxWidth: '800px', margin: '0 auto' }}>
+                    <h2 style={{ marginBottom: 'var(--space-6)' }}>Account Settings</h2>
+                    <JobPreferences />
+                  </div>
                 </ProtectedRoute>
               }
             />

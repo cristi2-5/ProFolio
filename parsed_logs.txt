@@ -1,0 +1,1 @@
+2026-04-06 19:11:39,691 - app.routers.cv_optimizer - ERROR - CV optimization failed for user b328ea5f-6448-4419-a0b9-b6aeaeb50a0a: 404: Job not found

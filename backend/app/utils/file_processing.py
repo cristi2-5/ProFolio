@@ -105,7 +105,7 @@ def extract_text_from_pdf(file_path: str) -> str:
         extracted_text = []
 
         with open(file_path, 'rb') as pdf_file:
-            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            pdf_reader = pypdf.PdfReader(pdf_file)
 
             if len(pdf_reader.pages) == 0:
                 raise ValueError("PDF contains no pages")

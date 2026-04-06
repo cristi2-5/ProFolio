@@ -212,12 +212,23 @@ class CVOptimizerAgent:
             )
 
             # Call OpenAI API for cover letter generation
+            mock_cover_letter = f"""Dear Hiring Manager,
+
+I am writing to express my strong interest in the {job_title} position at {company_name}. 
+
+With my proven background and technical expertise, I am confident in my ability to make an immediate impact on your team. I have consistently delivered high-quality results in my previous roles, focusing on scalability, clean code, and effective collaboration. My experience aligns perfectly with the requirements mentioned in the job description.
+
+I would welcome the opportunity to discuss how my skills and experiences can contribute to {company_name}'s continued success. Thank you for considering my application.
+
+Sincerely,
+[Your Name]"""
+
             cover_letter = await self._make_api_call(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 max_tokens=1500,
                 temperature=0.4,
-                mock_response=f"Dear Hiring Manager,\n\nI am writing to express my interest in the {job_title} position at {company_name}..."
+                mock_response=mock_cover_letter
             )
             if not cover_letter:
                 raise Exception("Empty cover letter from OpenAI API")

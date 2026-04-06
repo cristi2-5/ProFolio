@@ -1700,3 +1700,54 @@ TEST FILES ADDED/MODIFIED: `backend/tests/test_cv_optimizer_e2e.py` (New extensi
 SCENARIOS COVERED: Mocked integration paths, prompt validation, byte validation, PDF rendering verification, backward compatibility with missing motivation or empty structs.
 TEST STATUS: Code is fully staged for unit testing locally under docker container. Test infrastructure relies on `pytest`.
 ==================================================
+
+==================================================
+TIMESTAMP: 2026-04-06 21:50:00
+TASK/PROMPT: Job Preferences and CV List persistence fixes
+BRANCH: main
+PR STATUS: Draft
+
+--- FILES MODIFIED ---
+- frontend/src/components/CVUpload.jsx: Updated React state unmarshaling to handle pure array from backend
+- frontend/src/components/JobPreferences.jsx: Updated frontend to properly identify raw job_preferences object mapping without a wrapper
+
+--- ARCHITECTURE & LOGIC CHANGES ---
+Fixed implicit state wipe bugs on component unmounting that made local data disappear on the frontend, even though the database processed it correctly.
+
+--- AUDIT & VERIFICATION REVIEW ---
+BUGS/KNOWN ISSUES: None
+SECURITY VULNERABILITIES: None
+PERFORMANCE OPTIMIZATIONS: Removed useless fallback triggers
+MAINTAINABILITY IMPROVEMENTS: None
+
+--- TEST COVERAGE ---
+TEST FILES ADDED/MODIFIED: None
+SCENARIOS COVERED: Navigation state persistance
+TEST STATUS: Passed
+==================================================
+
+==================================================
+TIMESTAMP: 2026-04-06 21:58:00
+TASK/PROMPT: Job Preferences Dashboard Alert & Active Resume resolution
+BRANCH: main
+PR STATUS: Draft
+
+--- FILES MODIFIED ---
+- frontend/src/pages/Dashboard.jsx: Updated checking logic for preferences boolean to prevent 'Set Now' false positive.
+- backend/app/services/resume_service.py: Programmatically forced all newly uploaded Resumes to become the active CV instantly and deactivate the old ones.
+
+--- ARCHITECTURE & LOGIC CHANGES ---
+- The frontend was falsely requesting 'Set Now' because it continued to check for 'preferences.preferences' instead of the root data.
+- The backend cv_optimizer algorithm failed to find a valid resume because new uploads were defaulting to is_active=False. Updated logic so any newly uploaded CV explicitly sets is_active=True and safely unsets all prior resumes.
+
+--- AUDIT & VERIFICATION REVIEW ---
+BUGS/KNOWN ISSUES: None
+SECURITY VULNERABILITIES: None
+PERFORMANCE OPTIMIZATIONS: None
+MAINTAINABILITY IMPROVEMENTS: Auto-Active CV flow completely minimizes user UI clicks.
+
+--- TEST COVERAGE ---
+TEST FILES ADDED/MODIFIED: None
+SCENARIOS COVERED: Job Optimization with active resume, Dashboard alerts
+TEST STATUS: Passed
+==================================================

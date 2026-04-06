@@ -48,10 +48,10 @@ function JobPreferences({ onPreferencesSaved }) {
     try {
       setLoading(true);
       const data = await get('/jobs/preferences');
-      if (data.preferences) {
+      if (data && Object.keys(data).length > 0) {
         setPreferences(prev => ({
           ...prev,
-          ...data.preferences,
+          ...data,
         }));
       }
     } catch (err) {

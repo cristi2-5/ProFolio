@@ -46,15 +46,15 @@ function Dashboard() {
     try {
       setLoading(true);
 
-      // Fetch resumes count
+      // Fetch resumes count (backend returns list directly)
       const resumeData = await get('/resumes/');
-      const resumeCount = resumeData.resumes?.length || 0;
+      const resumeCount = Array.isArray(resumeData) ? resumeData.length : (resumeData.resumes?.length || 0);
 
       // Try to fetch job preferences
       let preferencesSet = false;
       try {
         const prefsData = await get('/jobs/preferences');
-        preferencesSet = !!prefsData.preferences;
+        preferencesSet = prefsData && Object.keys(prefsData).length > 0;
       } catch (err) {
         // 404 expected for users without preferences
         preferencesSet = false;
