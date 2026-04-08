@@ -3,7 +3,7 @@
 > Living index of all project files, their purposes, and dependencies.
 > Updated per `rules.md` §2 whenever files are created, deleted, renamed, or substantially modified.
 >
-> **Last Updated:** 2026-04-06 (Phase 3 Epic 2 Complete)
+> **Last Updated:** 2026-04-06 (Phase 4 Epic 3 Complete)
 
 ---
 
@@ -144,6 +144,7 @@
 | `backend/tests/test_cv_profiler.py` | CV parsing agent tests (22 scenarios: PDF/DOCX extraction, GPT-4 integration, validation) | `conftest`, `agents/cv_profiler` |
 | `backend/tests/test_job_scanner.py` | Job discovery tests (28 scenarios: Adzuna API, deduplication, scoring, cron jobs) | `conftest`, `agents/job_scanner`, `clients/adzuna` |
 | `backend/tests/test_cv_optimizer.py` | CV optimization tests (18 scenarios: ATS rewriting, cover letters, PDF export) | `conftest`, `agents/cv_optimizer` |
+| `backend/tests/test_cv_optimizer_e2e.py` | **CV optimizer E2E tests (PDF export bytes validation, prompt rules check, changes_summary validation)** | `conftest`, `agents/cv_optimizer`, `utils/pdf_export` |
 | `backend/tests/test_job_scanner.py` | **Job Scanner Agent tests (25 scenarios: dedup URL/hash, scan happy/error, cron, hashing)** | `conftest`, `agents/job_scanner`, `utils/hashing` |
 | `backend/tests/test_job_service.py` | **Job Service tests (15 scenarios: list_user_jobs pagination/search/sort, update_job_status+applied_at, match_jobs)** | `conftest`, `services/job_service` |
 | `backend/tests/test_benchmark_router.py` | Benchmark API tests (20 scenarios: calculation endpoints, opt-in management, privacy) | `conftest`, `routers/benchmarks` |

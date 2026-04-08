@@ -140,6 +140,7 @@ async def generate_cover_letter(
             user=current_user,
             job=job,
             db=db,
+            user_motivation=request.user_motivation,
         )
 
         return CoverLetterResponse(

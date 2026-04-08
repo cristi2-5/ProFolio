@@ -132,6 +132,8 @@ class CVPDFExporter:
         self,
         optimized_cv: Dict[str, Any],
         user_name: str,
+        job_title: Optional[str] = None,
+        company_name: Optional[str] = None,
         filename: Optional[str] = None,
     ) -> bytes:
         """Generate professional PDF from optimized CV data.
@@ -139,6 +141,8 @@ class CVPDFExporter:
         Args:
             optimized_cv: Structured CV data with optimized content.
             user_name: User's full name for the CV header.
+            job_title: Target job title — shown as a subtitle in the header.
+            company_name: Target company name — shown in the header subtitle.
             filename: Optional filename (used for metadata only).
 
         Returns:
@@ -151,7 +155,9 @@ class CVPDFExporter:
             >>> exporter = CVPDFExporter()
             >>> pdf_data = exporter.export_cv_to_pdf(
             ...     optimized_cv=optimized_data,
-            ...     user_name="John Doe"
+            ...     user_name="John Doe",
+            ...     job_title="Senior Python Developer",
+            ...     company_name="TechCorp"
             ... )
             >>> with open("resume.pdf", "wb") as f:
             ...     f.write(pdf_data)
@@ -178,10 +184,12 @@ class CVPDFExporter:
             # Build PDF content
             story = []
             self._add_cv_header(story, optimized_cv, user_name)
+            self._add_cv_job_target(story, job_title, company_name)
             self._add_cv_summary(story, optimized_cv)
             self._add_cv_experience(story, optimized_cv)
             self._add_cv_skills(story, optimized_cv)
             self._add_cv_education(story, optimized_cv)
+            self._add_cv_optimized_keywords(story, optimized_cv)
 
             # Generate PDF
             doc.build(story)
@@ -284,6 +292,63 @@ class CVPDFExporter:
             story.append(Paragraph(contact_text, self.styles['ContactInfo']))
 
         story.append(Spacer(1, 0.2 * inch))
+
+    def _add_cv_job_target(
+        self,
+        story: list,
+        job_title: Optional[str],
+        company_name: Optional[str],
+    ):
+        """Add ATS optimization target header (job + company) to CV PDF.
+
+        Shows the recruiter immediately which position this CV was optimized for.
+        Only rendered when both job_title and company_name are provided.
+        """
+        if not job_title or not company_name:
+            return
+
+        target_style = ParagraphStyle(
+            name='JobTargetHeader',
+            parent=self.styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#2980b9'),
+            alignment=1,  # Center
+            spaceAfter=8,
+            fontName='Helvetica-Oblique',
+        )
+        target_text = f"✦ ATS-Optimized for: {job_title} at {company_name} ✦"
+        story.append(Paragraph(target_text, target_style))
+        story.append(HRFlowable(
+            width="100%", thickness=1.5,
+            color=colors.HexColor('#2980b9'), spaceAfter=8,
+        ))
+        story.append(Spacer(1, 0.05 * inch))
+
+    def _add_cv_optimized_keywords(self, story: list, cv_data: Dict[str, Any]):
+        """Add ATS keywords section at the bottom of the CV PDF.
+
+        Lists keywords that were integrated from the job description,
+        useful for the candidate to review before submission.
+        """
+        keywords = cv_data.get("optimized_keywords", [])
+        if not keywords:
+            return
+
+        story.append(Spacer(1, 0.1 * inch))
+        story.append(Paragraph("ATS KEYWORDS INTEGRATED", self.styles['SectionHeader']))
+        story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#bdc3c7')))
+        story.append(Spacer(1, 0.1 * inch))
+
+        kw_text = " • ".join(str(k) for k in keywords)
+        kw_style = ParagraphStyle(
+            name='KeywordsStyle',
+            parent=self.styles['Normal'],
+            fontSize=9,
+            textColor=colors.HexColor('#27ae60'),
+            spaceAfter=6,
+        )
+        story.append(Paragraph(kw_text, kw_style))
+
 
     def _add_cv_summary(self, story: list, cv_data: Dict[str, Any]):
         """Add professional summary section."""
@@ -400,14 +465,25 @@ class CVPDFExporter:
         story.append(Spacer(1, 0.2 * inch))
 
     def _add_cover_letter_body(self, story: list, cover_letter_text: str):
-        """Add cover letter body content."""
-        # Split cover letter into paragraphs
-        paragraphs = cover_letter_text.split('\\n\\n')
+        """Add cover letter body content, splitting on real newlines."""
+        # Split on double newline (real \n\n), also handle single newlines as paragraph breaks
+        paragraphs = [
+            p.strip()
+            for p in cover_letter_text.replace('\r\n', '\n').split('\n\n')
+            if p.strip()
+        ]
+
+        # Fallback: if no double-newline found, split on single newlines
+        if len(paragraphs) == 1:
+            paragraphs = [
+                p.strip()
+                for p in cover_letter_text.replace('\r\n', '\n').split('\n')
+                if p.strip()
+            ]
 
         for paragraph in paragraphs:
-            if paragraph.strip():
-                story.append(Paragraph(paragraph.strip(), self.styles['Normal']))
-                story.append(Spacer(1, 0.15 * inch))
+            story.append(Paragraph(paragraph, self.styles['Normal']))
+            story.append(Spacer(1, 0.15 * inch))
 
     def _add_cover_letter_footer(self, story: list, user_name: str):
         """Add cover letter closing and signature."""

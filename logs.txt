@@ -1,5 +1,27 @@
 # ProFolio Development Logs
 
+## Phase 4: Epic 3 - CV Optimizer & Export ✅
+**Date**: April 6, 2026
+**Branch**: feat/phase4-pdf-export
+**Description**: Faza în care aplicația devine cu adevărat "inteligentă" și utilă în aplicarea efectivă.
+
+### US 3.1: Dezvoltarea Agentului "CV Optimizer"
+- **Restrictive Prompt Engineering**: LLM-ul primește profilul JSON al utilizatorului și JD-ul curent. Instrucțiunile interzic explicit inventarea de experiență și cer doar reformularea realizărilor existente pentru a include cuvintele cheie din JD.
+- **Interfață UI**: Implementare interfață de "Review & Edit" pe frontend (în `JobDetail.jsx`) pentru ca utilizatorul să valideze și să modifice manual propunerile AI.
+- **Status**: ✅ Finalizat și verificat.
+
+### US 3.2: Generare Scrisoare de Intenție
+- **Prompt Template**: Creat un șablon de prompt care combină datele companiei (extrase din JD) cu motivația și abilitățile utilizatorului.
+- **User Motivation**: Suport pentru input manual de motivație pentru a personaliza tonul scrisorii.
+- **Status**: ✅ Finalizat și verificat.
+
+### US 3.3: Sistemul de Export PDF
+- **Backend Implementation**: Implementat sistem de generare și export PDF pentru CV-ul optimizat și scrisoarea de intenție.
+- **Endpoint-uri**: `/api/cv-optimizer/export/cv/{job_id}` și `/api/cv-optimizer/export/cover-letter/{job_id}`.
+- **Status**: ✅ Finalizat și verificat.
+
+---
+
 ## Phase 2 Implementation - Complete ✅
 **Date**: April 5, 2026
 **Branch**: phase2
@@ -95,3 +117,9 @@
 - Comprehensive error handling and user feedback systems
 
 **Phase 2 Status: 🎉 COMPLETE - Ready for production!**
+### UI State Bug Fixes (Phase 4)
+- Fixed JobPreferences and CVUpload components to elegantly parse array payloads strictly served by the API endpoints instead of mapping undefined objects, allowing them to persistently display across navigation.
+
+### Job Optimization & Dashboard Fixes (Phase 4)
+- Solved 'CV Optimizer' failure by rewriting backend activation logic to automatically set any newly uploaded CV as active.
+- Solved 'Set Now' continuous Dashboard prompt by fixing the frontend object validation logic.

@@ -141,7 +141,7 @@ function CVUpload({ onUploadComplete }) {
   const fetchResumes = async () => {
     try {
       const data = await get('/resumes/');
-      setResumes(data.resumes || []);
+      setResumes(Array.isArray(data) ? data : data.resumes || []);
     } catch (err) {
       console.error('Failed to fetch resumes:', err);
     }
@@ -473,18 +473,46 @@ function CVUpload({ onUploadComplete }) {
                 onClick={() => setSelectedResume(resume)}
               >
                 <div>
-                  <p style={{ fontWeight: 'var(--font-weight-medium)' }}>
+                  <p style={{ fontWeight: 'var(--font-weight-medium)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {resume.filename}
+                    {resume.is_active && (
+                      <span style={{
+                        fontSize: '10px',
+                        background: 'var(--color-success)',
+                        color: 'white',
+                        padding: '2px 6px',
+                        borderRadius: '4px'
+                      }}>ACTIVE</span>
+                    )}
                   </p>
                   <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
                     Uploaded {new Date(resume.created_at).toLocaleDateString()}
                   </p>
                 </div>
-                <div style={{
-                  fontSize: 'var(--font-size-sm)',
-                  color: resume.parsed_data ? 'var(--color-success)' : 'var(--color-warning)'
-                }}>
-                  {resume.parsed_data ? '✅ Parsed' : '⏳ Processing'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: resume.parsed_data ? 'var(--color-success)' : 'var(--color-warning)'
+                  }}>
+                    {resume.parsed_data ? '✅ Parsed' : '⏳ Processing'}
+                  </div>
+                  {!resume.is_active && resume.parsed_data && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 8px', fontSize: '12px' }}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await post(`/resumes/${resume.id}/activate`);
+                          fetchResumes();
+                        } catch (err) {
+                           console.error(err);
+                        }
+                      }}
+                    >
+                      Make Active
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

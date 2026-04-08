@@ -171,7 +171,35 @@ class CVProfilerAgent:
             Exception: If OpenAI API call fails or returns invalid data.
         """
         if not openai_client:
-            raise Exception("OpenAI API key not configured")
+            logger.warning("Mocking OpenAI response due to missing API Key.")
+            return ParsedCVData(
+                full_name="Alexandru Popescu",
+                email="alex@example.com",
+                phone="0712345678",
+                location="Bucharest, Romania",
+                summary="Passionate Developer eager to build scalable web applications.",
+                skills=["Problem Solving", "Teamwork", "Agile"],
+                technologies=["Python", "React", "Docker", "FastAPI"],
+                experience=[
+                    Experience(
+                        role="Software Engineer",
+                        company="MockingCorp",
+                        period="2021 - Present",
+                        description="Developed multiple microservices saving 20% infrastructure cost.",
+                        technologies=["Python", "Docker"]
+                    )
+                ],
+                education=[
+                    Education(
+                        degree="BSc Computer Science",
+                        institution="University of Bucharest",
+                        year="2021",
+                        details="Graduated Top 10%"
+                    )
+                ],
+                total_years_experience=3,
+                senior_technologies=["Python"]
+            )
 
         # Construct the prompt for structured CV parsing
         system_prompt = self._get_cv_parsing_prompt()

@@ -149,11 +149,13 @@ class CVOptimizerAgent:
         job_title: str,
         company_name: str,
         user_name: Optional[str] = None,
+        user_motivation: Optional[str] = None,
     ) -> str:
         """Generate personalized cover letter for job application.
 
         Creates a tailored cover letter highlighting relevant experience
         and demonstrating knowledge of the company and role requirements.
+        Supports an optional personal motivation statement from the user.
 
         Args:
             parsed_cv: User's parsed CV data.
@@ -161,6 +163,8 @@ class CVOptimizerAgent:
             job_title: Target job title.
             company_name: Target company name.
             user_name: User's full name for personalization.
+            user_motivation: Optional personal motivation statement to incorporate
+                authentically into the cover letter opening or body.
 
         Returns:
             str: Generated cover letter text in professional format.
@@ -175,7 +179,8 @@ class CVOptimizerAgent:
             ...     job_description="We are seeking...",
             ...     job_title="Frontend Developer",
             ...     company_name="InnovateTech",
-            ...     user_name="John Doe"
+            ...     user_name="John Doe",
+            ...     user_motivation="I have been following InnovateTech's work in..."
             ... )
             >>> print(letter[:100])
             "Dear Hiring Manager,\\n\\nI am writing to express..."
@@ -199,19 +204,31 @@ class CVOptimizerAgent:
                 if not user_name:
                     user_name = "[Your Name]"  # Placeholder if name not available
 
-            # Build cover letter generation prompt
+            # Build cover letter generation prompt (with optional user motivation)
             system_prompt = self._build_cover_letter_system_prompt()
             user_prompt = self._build_cover_letter_user_prompt(
-                parsed_cv, job_description, job_title, company_name, user_name
+                parsed_cv, job_description, job_title, company_name, user_name,
+                user_motivation=user_motivation,
             )
 
             # Call OpenAI API for cover letter generation
+            mock_cover_letter = f"""Dear Hiring Manager,
+
+I am writing to express my strong interest in the {job_title} position at {company_name}. 
+
+With my proven background and technical expertise, I am confident in my ability to make an immediate impact on your team. I have consistently delivered high-quality results in my previous roles, focusing on scalability, clean code, and effective collaboration. My experience aligns perfectly with the requirements mentioned in the job description.
+
+I would welcome the opportunity to discuss how my skills and experiences can contribute to {company_name}'s continued success. Thank you for considering my application.
+
+Sincerely,
+[Your Name]"""
+
             cover_letter = await self._make_api_call(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 max_tokens=1500,
                 temperature=0.4,
-                mock_response=f"Dear Hiring Manager,\n\nI am writing to express my interest in the {job_title} position at {company_name}..."
+                mock_response=mock_cover_letter
             )
             if not cover_letter:
                 raise Exception("Empty cover letter from OpenAI API")
@@ -228,6 +245,7 @@ class CVOptimizerAgent:
             logger.error(f"Cover letter generation failed: {e}")
             raise
 
+
     # Legacy method name for backward compatibility
     async def optimize_cv(self, parsed_cv: dict, job_description: str) -> dict:
         """Legacy wrapper for optimize_cv_for_job method."""
@@ -239,23 +257,44 @@ class CVOptimizerAgent:
         )
 
     def _build_cv_optimization_system_prompt(self) -> str:
-        """Build system prompt for CV optimization task."""
-        return """You are an expert ATS (Applicant Tracking System) optimization specialist and career counselor. Your role is to optimize resumes to improve their chances of passing ATS screening while maintaining accuracy and professionalism.
+        """Build system prompt for CV optimization task with strict NO_FABRICATION rules."""
+        return """You are an expert ATS (Applicant Tracking System) optimization specialist and career counselor. Your role is to optimize resumes to improve their chances of passing ATS screening while maintaining complete factual accuracy.
 
-Key principles for CV optimization:
-1. **Keyword Integration**: Naturally incorporate relevant keywords from job descriptions
-2. **ATS Formatting**: Use clear section headers and standard formatting
-3. **Quantifiable Results**: Emphasize measurable achievements and impact
-4. **Relevance Prioritization**: Highlight most relevant experience first
-5. **Accuracy Maintenance**: Never fabricate experience or skills
+⛔ NO_FABRICATION RULES (MANDATORY — violations are unacceptable):
+1. You MUST NOT invent, fabricate, or hallucinate ANY experience, skill, achievement, company, date, or qualification.
+2. You MUST NOT add years of experience the candidate does not have.
+3. You MUST NOT claim technologies or certifications not present in the original CV.
+4. You MUST ONLY rephrase, reorder, and integrate keywords from the JD into EXISTING content.
+5. Every bullet point in the output MUST correspond to an existing bullet point in the input CV.
 
-Optimize these CV sections:
-- **Summary**: 2-3 sentences highlighting relevant expertise
-- **Experience**: Rewrite bullet points with job-relevant keywords and quantified results
-- **Skills**: Reorganize and enhance skill lists to match job requirements
-- **Education**: Keep factual, add relevant coursework if applicable
+✅ ALLOWED optimizations:
+- Rephrase existing bullet points to include relevant JD keywords naturally
+- Reorder skills to prioritize job-relevant technologies first
+- Update the summary to reference relevant JD terms using candidate’s actual experience
+- Strengthen quantified results that are already present (do NOT invent numbers)
+- Reorganize section order to match what the JD prioritizes
 
-Return the optimized CV as a JSON object with the same structure as the input, but with improved, ATS-friendly content."""
+Return the optimized CV as a JSON object with this EXACT structure:
+{
+  "summary": "<optimized summary string>",
+  "experience": [
+    {
+      "company": "<same as original>",
+      "role": "<same as original>",
+      "duration": "<same as original>",
+      "description": "<rephrased bullets only using existing facts>"
+    }
+  ],
+  "skills": ["<reordered and keyword-enhanced, NO new skills added>"],
+  "education": [<unchanged or minor keyword additions only>],
+  "optimized_keywords": ["<keywords from JD that were naturally integrated>"],
+  "changes_summary": [
+    "<description of change 1, e.g., 'Added JD keyword Python to existing backend experience bullet'>",
+    "<description of change 2>"
+  ]
+}
+
+The changes_summary field is MANDATORY and must list every modification made for user review."""
 
     def _build_cv_optimization_user_prompt(
         self,
@@ -264,46 +303,48 @@ Return the optimized CV as a JSON object with the same structure as the input, b
         job_title: str,
         company_name: str,
     ) -> str:
-        """Build user prompt for CV optimization with specific job context."""
+        """Build user prompt for CV optimization with specific job context and NO_FABRICATION enforcement."""
         return f"""OPTIMIZATION REQUEST:
 Job Title: {job_title}
 Company: {company_name}
 
-JOB DESCRIPTION:
+JOB DESCRIPTION (extract keywords and requirements from this):
 {job_description[:2000]}
 
-CURRENT CV DATA:
+ORIGINAL CV DATA (this is the ONLY source of truth — do NOT add anything not present here):
 {parsed_cv}
 
-INSTRUCTIONS:
-1. Analyze the job requirements and identify key skills, technologies, and qualifications
-2. Optimize the CV to better match these requirements while maintaining truthfulness
-3. Rewrite experience bullet points to emphasize relevant achievements
-4. Reorganize skills to prioritize job-relevant technologies
-5. Update the summary to highlight the most relevant qualifications
-6. Ensure all content is ATS-friendly with clear formatting
+INSTRUCTIONS — follow NO_FABRICATION rules strictly:
+1. Extract key skills, technologies, and keywords from the JD above
+2. Identify which keywords ALREADY EXIST in the original CV (even implicitly)
+3. Rephrase existing bullet points to surface those keywords naturally
+4. Reorder the skills list to put JD-relevant skills first
+5. Update the summary using ONLY the candidate's actual experience
+6. List every change made in the changes_summary field for user review
+7. NEVER add experience, tools, or achievements not in the original CV
 
-Return the optimized CV as a JSON object with the same structure but improved content."""
+Return the optimized CV JSON with all required fields including changes_summary."""
 
     def _build_cover_letter_system_prompt(self) -> str:
-        """Build system prompt for cover letter generation."""
+        """Build system prompt for cover letter generation with NO_FABRICATION constraints."""
         return """You are a professional career counselor and expert cover letter writer. Create compelling, personalized cover letters that effectively connect candidate qualifications to job requirements.
 
-Cover Letter Guidelines:
+⛔ NO_FABRICATION RULES (MANDATORY):
+1. Base ALL claims ONLY on the candidate background provided — do NOT invent achievements.
+2. Do NOT claim industry awards, publications, or certifications not in the CV.
+3. Do NOT exaggerate years of experience beyond what the CV states.
+4. If the user provided personal motivation, incorporate it authentically without embellishment.
+
+✅ Cover Letter Guidelines:
 1. **Professional Format**: Standard business letter structure
-2. **Engaging Opening**: Hook the reader in the first paragraph
-3. **Relevant Experience**: Highlight 2-3 most relevant achievements
-4. **Company Knowledge**: Show understanding of company/role
-5. **Strong Closing**: Clear call-to-action and enthusiasm
-6. **Appropriate Length**: 3-4 paragraphs, 250-400 words
+2. **Engaging Opening**: Hook the reader with genuine enthusiasm for the specific role
+3. **Relevant Experience**: Highlight 2-3 most relevant ACTUAL achievements from the CV
+4. **Company Knowledge**: Show understanding of company/role from the JD
+5. **Personal Motivation**: Incorporate the user's stated motivation naturally if provided
+6. **Strong Closing**: Clear call-to-action and enthusiasm
+7. **Appropriate Length**: 3-4 paragraphs, 250-400 words
 
-Structure Template:
-- Opening: Express interest and mention specific role
-- Body 1: Highlight relevant experience with specific examples
-- Body 2: Demonstrate company knowledge and cultural fit
-- Closing: Request interview and reiterate enthusiasm
-
-Write in a professional, confident, yet personable tone. Avoid generic phrases and ensure each letter feels tailored to the specific opportunity."""
+Write in a professional, confident, yet personable tone. Avoid generic phrases."""
 
     def _build_cover_letter_user_prompt(
         self,
@@ -312,12 +353,13 @@ Write in a professional, confident, yet personable tone. Avoid generic phrases a
         job_title: str,
         company_name: str,
         user_name: str,
+        user_motivation: Optional[str] = None,
     ) -> str:
-        """Build user prompt for cover letter generation."""
+        """Build user prompt for cover letter generation with optional personal motivation."""
         # Extract key CV information for the prompt
         experience_summary = ""
         if "experience" in parsed_cv and parsed_cv["experience"]:
-            experience_summary = "\\n".join([
+            experience_summary = "\n".join([
                 f"- {exp.get('role', 'N/A')} at {exp.get('company', 'N/A')}: {exp.get('description', '')[:100]}..."
                 for exp in parsed_cv["experience"][:3]  # Top 3 experiences
             ])
@@ -325,6 +367,13 @@ Write in a professional, confident, yet personable tone. Avoid generic phrases a
         skills_summary = ""
         if "skills" in parsed_cv and parsed_cv["skills"]:
             skills_summary = ", ".join(parsed_cv["skills"][:8])  # Top 8 skills
+
+        motivation_section = ""
+        if user_motivation:
+            motivation_section = f"""
+CANDIDATE'S PERSONAL MOTIVATION (incorporate authentically into the opening or body):
+{user_motivation}
+"""
 
         return f"""COVER LETTER REQUEST:
 Name: {user_name}
@@ -334,22 +383,23 @@ Target Company: {company_name}
 JOB DESCRIPTION:
 {job_description[:1500]}
 
-CANDIDATE BACKGROUND:
+CANDIDATE BACKGROUND (use ONLY this — do NOT fabricate):
 
 Key Experience:
 {experience_summary}
 
 Top Skills: {skills_summary}
-
+{motivation_section}
 INSTRUCTIONS:
 Write a compelling cover letter that:
-1. Opens with enthusiasm for the specific role at {company_name}
-2. Highlights the most relevant experience from the candidate's background
+1. Opens with genuine enthusiasm for the specific role at {company_name}
+2. Highlights the most relevant experience from the candidate's ACTUAL background
 3. Shows understanding of the company's needs based on the job description
-4. Demonstrates how the candidate's skills solve the company's challenges
-5. Closes with a professional request for an interview
+4. Demonstrates how the candidate's REAL skills solve the company's challenges
+5. Incorporates the personal motivation naturally (if provided)
+6. Closes with a professional request for an interview
 
-Keep it engaging, specific, and professional. Avoid generic language."""
+Keep it engaging, specific, and professional. Base every claim on the candidate background above."""
 
     async def _make_api_call(
         self,
