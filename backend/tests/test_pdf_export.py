@@ -330,7 +330,7 @@ John Doe"""
 
     def test_cover_letter_paragraph_splitting(self, pdf_exporter):
         """Test cover letter body paragraph splitting."""
-        letter_text = "First paragraph content.\\n\\nSecond paragraph content.\\n\\nThird paragraph."
+        letter_text = "First paragraph content.\n\nSecond paragraph content.\n\nThird paragraph."
         story = []
 
         pdf_exporter._add_cover_letter_body(story, letter_text)

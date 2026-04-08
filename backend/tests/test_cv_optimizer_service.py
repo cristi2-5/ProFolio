@@ -182,7 +182,8 @@ class TestCVOptimizerService:
             job_description=sample_job.description,
             job_title=sample_job.job_title,
             company_name=sample_job.company_name,
-            user_name=sample_user.full_name
+            user_name=sample_user.full_name,
+            user_motivation=None,
         )
 
         # Verify database operations

@@ -219,8 +219,6 @@ class CVOptimizerService:
             pdf_data = pdf_exporter.export_cv_to_pdf(
                 optimized_cv=user_job.optimized_cv,
                 user_name=user.full_name or "Resume",
-                job_title=job.job_title,
-                company_name=job.company_name,
             )
 
             # Generate filename
