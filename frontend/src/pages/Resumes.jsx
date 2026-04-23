@@ -284,13 +284,31 @@ function Resumes() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-4)' }}>
                     <div>
-                      <h3 style={{
-                        fontSize: 'var(--font-size-lg)',
-                        fontWeight: 'var(--font-weight-medium)',
-                        marginBottom: 'var(--space-1)',
-                      }}>
-                        {resume.filename}
-                      </h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
+                        <h3 style={{
+                          fontSize: 'var(--font-size-lg)',
+                          fontWeight: 'var(--font-weight-medium)',
+                          margin: 0,
+                        }}>
+                          {resume.filename}
+                        </h3>
+                        {resume.is_active && (
+                          <span
+                            title="This is the resume used for matching and AI agents"
+                            style={{
+                              background: 'oklch(from var(--color-success) l c h / 0.15)',
+                              color: 'var(--color-success)',
+                              border: '1px solid oklch(from var(--color-success) l c h / 0.4)',
+                              borderRadius: 'var(--radius-full)',
+                              fontSize: 'var(--font-size-xs)',
+                              padding: '2px var(--space-2)',
+                              fontWeight: 'var(--font-weight-medium)',
+                            }}
+                          >
+                            ✓ Active
+                          </span>
+                        )}
+                      </div>
                       <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
                         Uploaded {new Date(resume.created_at).toLocaleDateString()}
                       </p>

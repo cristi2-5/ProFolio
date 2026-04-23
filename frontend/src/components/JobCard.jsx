@@ -26,10 +26,18 @@ import { patch } from '../api/client';
  * @param {Function} props.onStatusChange - Handler for status changes.
  * @returns {JSX.Element} The job card component.
  */
+const STATUS_TOAST_COPY = {
+  new: '✓ Moved back to new',
+  saved: '⭐ Saved for later',
+  applied: '✅ Marked as applied',
+  hidden: '🙈 Hidden from list',
+};
+
 function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatusChange }) {
   const [status, setStatus] = useState(job.status || 'new');
   const [updating, setUpdating] = useState(false);
   const [justApplied, setJustApplied] = useState(false);
+  const [toast, setToast] = useState(null);
 
   /**
    * Update job status via API and trigger visual feedback.
@@ -39,6 +47,9 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
       setUpdating(true);
       await patch(`/jobs/${job.id}/status`, { status: newStatus });
       setStatus(newStatus);
+
+      setToast(STATUS_TOAST_COPY[newStatus] || `✓ Status updated to ${newStatus}`);
+      setTimeout(() => setToast(null), 1800);
 
       // Flash animation when marking as applied
       if (newStatus === 'applied') {
@@ -51,6 +62,8 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
       }
     } catch (err) {
       console.error('Failed to update job status:', err);
+      setToast('⚠️ Could not update status');
+      setTimeout(() => setToast(null), 2200);
     } finally {
       setUpdating(false);
     }
@@ -124,9 +137,32 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
             ? 'var(--color-bg-secondary)'
             : undefined,
         outline: justApplied ? '1px solid var(--color-success)' : 'none',
+        position: 'relative',
       }}
       onClick={onClick}
     >
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            top: 'var(--space-2)',
+            right: 'var(--space-2)',
+            background: 'var(--color-bg-primary)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            padding: '4px var(--space-2)',
+            fontSize: 'var(--font-size-xs)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+            zIndex: 2,
+          }}
+        >
+          {toast}
+        </div>
+      )}
+
       {/* Header */}
       <div style={{
         display: 'flex',

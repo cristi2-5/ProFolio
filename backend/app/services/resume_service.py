@@ -109,15 +109,11 @@ class ResumeService:
             return resume
 
         except ValueError as e:
-            # Clean up file if parsing failed
-            if file_path.exists():
-                file_path.unlink()
+            file_path.unlink(missing_ok=True)
             logger.error(f"Resume processing validation error: {e}")
             raise
         except Exception as e:
-            # Clean up file if processing failed
-            if file_path.exists():
-                file_path.unlink()
+            file_path.unlink(missing_ok=True)
             logger.error(f"Resume processing failed: {e}")
             raise Exception(f"Resume processing failed: {str(e)}")
 

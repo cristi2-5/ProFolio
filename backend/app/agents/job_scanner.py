@@ -96,9 +96,13 @@ class JobScannerAgent:
             jobs = adzuna_response.get("results", [])
             logger.info(f"Found {len(jobs)} jobs from Adzuna for user {user_id}")
 
-            # Process and deduplicate jobs
+            # Process and deduplicate jobs. Duplicates return None from
+            # _process_and_deduplicate_job — but we still want to associate
+            # them with the current user via a UserJob row, otherwise a
+            # second user searching the same terms would see an empty list.
             new_jobs = []
-            scraped_jobs = []
+            scraped_jobs: list[ScrapedJob] = []
+            unassociated_duplicates: list[ScrapedJob] = []
             for job_data in jobs:
                 try:
                     scraped_job = await self._process_and_deduplicate_job(job_data, db)
@@ -111,14 +115,22 @@ class JobScannerAgent:
                             "location": scraped_job.location,
                             "external_url": scraped_job.external_url,
                         })
+                    else:
+                        existing = await self._find_existing_scraped_job(job_data, db)
+                        if existing is not None:
+                            unassociated_duplicates.append(existing)
                 except Exception as e:
                     logger.error(f"Error processing job: {e}")
                     continue
 
-            # Match new jobs to user and calculate scores
-            if scraped_jobs:
+            # Match every job we saw this scan to the user. ``match_jobs_to_user``
+            # already no-ops when a UserJob row already exists, so passing the
+            # dedup'd duplicates is cheap and catches the "CV uploaded later"
+            # case where jobs were scraped before the user had a profile.
+            all_jobs = scraped_jobs + unassociated_duplicates
+            if all_jobs:
                 try:
-                    user_jobs = await self.job_service.match_jobs_to_user(user, scraped_jobs, db)
+                    user_jobs = await self.job_service.match_jobs_to_user(user, all_jobs, db)
                     logger.info(f"Created {len(user_jobs)} job matches for user {user_id}")
                 except Exception as e:
                     logger.error(f"Error matching jobs to user {user_id}: {e}")
@@ -198,6 +210,38 @@ class JobScannerAgent:
             await db.rollback()
             logger.debug(f"Duplicate job detected during save: {company_name} - {job_title}")
             return None
+
+    async def _find_existing_scraped_job(
+        self,
+        job_data: dict[str, Any],
+        db: AsyncSession,
+    ) -> Optional[ScrapedJob]:
+        """Locate the existing ScrapedJob row a dedup'd job_data refers to.
+
+        ``_process_and_deduplicate_job`` returns ``None`` on dedup — useful
+        for "did we insert?" but loses the reference to the existing row
+        that match_jobs_to_user still needs to consider.
+        """
+        external_url = job_data.get("redirect_url")
+        if external_url:
+            result = await db.execute(
+                select(ScrapedJob).where(ScrapedJob.external_url == external_url)
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                return existing
+
+        company_name = job_data.get("company", {}).get("display_name", "Unknown Company")
+        job_title = job_data.get("title", "Unknown Position")
+        description_hash = create_description_hash(job_data.get("description", ""))
+        result = await db.execute(
+            select(ScrapedJob).where(
+                ScrapedJob.company_name == company_name,
+                ScrapedJob.job_title == job_title,
+                ScrapedJob.description_hash == description_hash,
+            )
+        )
+        return result.scalar_one_or_none()
 
     def _build_search_query(self, preferences: JobPreference) -> str:
         """Build Adzuna search query from user preferences.
