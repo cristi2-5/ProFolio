@@ -109,6 +109,25 @@ async def test_session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession,
         await session.close()
 
 
+@pytest.fixture(autouse=True)
+def _reset_phase7_singletons():
+    """Keep prompt-cache + task-manager state from bleeding across tests.
+
+    Both utilities are process-wide singletons by design (so agents can
+    share them at runtime). Tests, however, must see a clean slate per
+    test — otherwise one test's cached LLM response returns on another
+    test's "first" call, or a leftover task ID leaks into an assertion.
+    """
+    from app.utils.prompt_cache import reset_prompt_cache_for_tests
+    from app.services.task_manager import reset_task_manager_for_tests
+
+    reset_prompt_cache_for_tests()
+    reset_task_manager_for_tests()
+    yield
+    reset_prompt_cache_for_tests()
+    reset_task_manager_for_tests()
+
+
 @pytest_asyncio.fixture
 async def client(test_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Provide an async HTTP test client with test database.

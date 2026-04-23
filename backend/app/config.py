@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     job_scan_interval_hours: int = 24  # How often the cron scans all users
     job_scan_rate_limit_hours: int = 1  # Max manual scans per user per N hours
 
+    # --- Prompt Cache ---
+    # Falls back to an in-memory LRU when redis_url is empty.
+    redis_url: str = ""
+    prompt_cache_enabled: bool = True
+    prompt_cache_ttl_seconds: int = 60 * 60 * 24  # 24 hours
+
 
 @lru_cache
 def get_settings() -> Settings:

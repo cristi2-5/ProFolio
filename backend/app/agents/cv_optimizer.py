@@ -9,6 +9,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from app.config import get_settings
+from app.utils.token_guard import truncate_for_budget
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
@@ -29,24 +30,34 @@ class CVOptimizerAgent:
     """
 
     def __init__(self):
-        """Initialize CV Optimizer with OpenAI configuration."""
-        # Handle missing API key gracefully during initialization
+        """Initialize CV Optimizer against the Gemini OpenAI-compat endpoint."""
         api_key = settings.openai_api_key
         if not api_key:
-            logger.warning("OpenAI API key not configured. AI features will be disabled. Set OPENAI_API_KEY environment variable.")
+            logger.warning(
+                "LLM API key not configured. AI features will be disabled. "
+                "Set OPENAI_API_KEY to your Gemini API key."
+            )
             self.client = None
             self.is_development = False
         else:
-            # Handle development/test mode with placeholder API keys
-            self.is_development = api_key.startswith("test-") or settings.environment == "development"
-            self.client = AsyncOpenAI(api_key=api_key) if not self.is_development else None
-            
+            # Only treat explicit placeholder keys as dev-mode; a real key
+            # is a real key regardless of ENVIRONMENT.
+            self.is_development = api_key.startswith("test-")
+            self.client = (
+                None
+                if self.is_development
+                else AsyncOpenAI(
+                    api_key=api_key,
+                    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                )
+            )
+
             if self.is_development:
                 logger.warning("Running in development mode with test API key. AI features will return mock responses.")
 
-        self.model = "gpt-4o-mini"  # Cost-effective model for text optimization
-        self.max_tokens = 3000      # Longer output for optimized CVs
-        self.temperature = 0.3      # Balanced creativity for professional content
+        self.model = "gemini-2.0-flash"  # Cheap JSON-capable model on Gemini
+        self.max_tokens = 3000
+        self.temperature = 0.3
 
     async def optimize_cv_for_job(
         self,
@@ -309,7 +320,7 @@ Job Title: {job_title}
 Company: {company_name}
 
 JOB DESCRIPTION (extract keywords and requirements from this):
-{job_description[:2000]}
+{truncate_for_budget(job_description, token_budget=500).text}
 
 ORIGINAL CV DATA (this is the ONLY source of truth — do NOT add anything not present here):
 {parsed_cv}
@@ -381,7 +392,7 @@ Target Position: {job_title}
 Target Company: {company_name}
 
 JOB DESCRIPTION:
-{job_description[:1500]}
+{truncate_for_budget(job_description, token_budget=375).text}
 
 CANDIDATE BACKGROUND (use ONLY this — do NOT fabricate):
 
@@ -496,7 +507,7 @@ Return suggestions as JSON with this structure:
 
             user_prompt = f"""ANALYSIS REQUEST:
 Current CV: {parsed_cv}
-Job Description: {job_description[:1000]}
+Job Description: {truncate_for_budget(job_description, token_budget=250).text}
 
 Provide specific suggestions for improving ATS compatibility and job relevance."""
 

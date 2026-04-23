@@ -160,7 +160,7 @@ John Doe"""
         cv_optimizer.client.chat.completions.create.assert_called_once()
         call_args = cv_optimizer.client.chat.completions.create.call_args
 
-        assert call_args.kwargs["model"] == "gpt-4o-mini"
+        assert call_args.kwargs["model"] == "gemini-2.0-flash"
         assert call_args.kwargs["response_format"] == {"type": "json_object"}
         assert len(call_args.kwargs["messages"]) == 2
         assert call_args.kwargs["messages"][0]["role"] == "system"
@@ -195,7 +195,7 @@ John Doe"""
         cv_optimizer.client.chat.completions.create.assert_called_once()
         call_args = cv_optimizer.client.chat.completions.create.call_args
 
-        assert call_args.kwargs["model"] == "gpt-4o-mini"
+        assert call_args.kwargs["model"] == "gemini-2.0-flash"
         assert call_args.kwargs["max_tokens"] == 1500
         assert call_args.kwargs["temperature"] == 0.4
 
@@ -457,7 +457,7 @@ John Doe"""
 
     def test_configuration_attributes(self, cv_optimizer):
         """Test CV optimizer configuration attributes."""
-        assert cv_optimizer.model == "gpt-4o-mini"
+        assert cv_optimizer.model == "gemini-2.0-flash"
         assert cv_optimizer.max_tokens == 3000
         assert cv_optimizer.temperature == 0.3
         assert cv_optimizer.client is not None

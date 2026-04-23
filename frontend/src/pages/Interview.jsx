@@ -242,7 +242,7 @@ function Interview() {
                 {[
                   { id: 'questions', label: 'Interview Questions', count: selectedPrep.technical_questions?.length || 0 },
                   { id: 'behavioral', label: 'Behavioral Scenarios', count: selectedPrep.behavioral_questions?.length || 0 },
-                  { id: 'cheatsheet', label: 'Tech Cheat Sheet', count: selectedPrep.technology_cheat_sheet ? Object.keys(selectedPrep.technology_cheat_sheet).length : 0 },
+                  { id: 'cheatsheet', label: 'Tech Cheat Sheet', count: selectedPrep.technology_cheat_sheet?.length || 0 },
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -327,10 +327,13 @@ function PrepCard({ prep, onClick, isSelected }) {
       }}>
         {prep.company_name}
       </p>
-      <div style={{ display: 'flex', gap: 'var(--space-3)', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-        <span>🎯 {prep.question_count || 0} questions</span>
-        <span>📚 {prep.tech_count || 0} technologies</span>
-        <span>📅 {new Date(prep.created_at).toLocaleDateString()}</span>
+      <div style={{ display: 'flex', gap: 'var(--space-3)', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', flexWrap: 'wrap' }}>
+        {prep.has_technical_questions && <span>💻 Technical</span>}
+        {prep.has_behavioral_questions && <span>🗣️ Behavioral</span>}
+        {prep.has_cheat_sheet && <span>📚 Cheat sheet</span>}
+        {prep.updated_at && (
+          <span>📅 {new Date(prep.updated_at).toLocaleDateString()}</span>
+        )}
       </div>
     </div>
   );
@@ -378,7 +381,7 @@ function QuestionsSection({ questions, type }) {
           }}>
             Q{index + 1}: {question.question}
           </div>
-          {question.guidance && (
+          {(question.guidance || question.star_guidance) && (
             <div style={{
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-secondary)',
@@ -387,8 +390,18 @@ function QuestionsSection({ questions, type }) {
               borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--color-info)',
             }}>
-              <strong>💡 Guidance:</strong> {question.guidance}
+              <strong>💡 Ideal answer:</strong> {question.guidance || question.star_guidance}
             </div>
+          )}
+          {question.sample_answer && (
+            <details style={{ marginTop: 'var(--space-2)' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 'var(--font-size-sm)', color: 'var(--color-accent)' }}>
+                Show sample answer
+              </summary>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginTop: 'var(--space-2)' }}>
+                {question.sample_answer}
+              </p>
+            </details>
           )}
         </div>
       ))}
@@ -400,7 +413,8 @@ function QuestionsSection({ questions, type }) {
  * Technology cheat sheet section component.
  */
 function CheatSheetSection({ cheatSheet }) {
-  if (!cheatSheet || Object.keys(cheatSheet).length === 0) {
+  const entries = Array.isArray(cheatSheet) ? cheatSheet : [];
+  if (entries.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
         <div style={{ fontSize: '2rem', marginBottom: 'var(--space-2)' }}>📚</div>
@@ -418,9 +432,9 @@ function CheatSheetSection({ cheatSheet }) {
         fontWeight: 'var(--font-weight-bold)',
         color: 'var(--color-text-primary)',
       }}>
-        Technology Cheat Sheet ({Object.keys(cheatSheet).length} technologies)
+        Technology Cheat Sheet ({entries.length} technologies)
       </h4>
-      {Object.entries(cheatSheet).map(([tech, description], index) => (
+      {entries.map((entry, index) => (
         <div
           key={index}
           style={{
@@ -435,17 +449,24 @@ function CheatSheetSection({ cheatSheet }) {
             fontWeight: 'var(--font-weight-medium)',
             marginBottom: 'var(--space-2)',
             color: 'var(--color-accent)',
-            textTransform: 'capitalize',
           }}>
-            {tech}
+            {entry.concept}
           </div>
           <div style={{
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text-secondary)',
             lineHeight: 1.5,
+            marginBottom: entry.key_points?.length ? 'var(--space-2)' : 0,
           }}>
-            {description}
+            {entry.definition}
           </div>
+          {entry.key_points && entry.key_points.length > 0 && (
+            <ul style={{ paddingLeft: 'var(--space-5)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+              {entry.key_points.map((kp, i) => (
+                <li key={i}>{kp}</li>
+              ))}
+            </ul>
+          )}
         </div>
       ))}
     </div>

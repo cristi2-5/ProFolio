@@ -3,7 +3,7 @@
 > Living index of all project files, their purposes, and dependencies.
 > Updated per `rules.md` §2 whenever files are created, deleted, renamed, or substantially modified.
 >
-> **Last Updated:** 2026-04-06 (Phase 4 Epic 3 Complete)
+> **Last Updated:** 2026-04-23 (Phase 7 Complete — QA, Optimization, Beta Launch)
 
 ---
 
@@ -68,6 +68,7 @@
 | `models/resume.py` | `ParsedResume` model (JSONB for parsed CV data) | `database.Base` |
 | `models/job.py` | `ScrapedJob` + `UserJob` models (dedup hash, match scores, **applied_at timestamp**) | `database.Base` |
 | `models/benchmark.py` | `BenchmarkScore` model (GDPR-compliant scoring) | `database.Base` |
+| `models/feedback.py` | **Phase 7 — Feedback model (user-authored ratings + comments on AI output; discriminated by content_type)** | `database.Base` |
 
 ### Pydantic Schemas (`/backend/app/schemas/`)
 
@@ -88,6 +89,8 @@
 | `routers/resumes.py` | CV upload + listing endpoints (stubs → Phase 2) | `database` |
 | `routers/jobs.py` | Job listing (**paginated, searchable, sortable**) + status update + **real scan trigger (rate-limited 1/hr)** + interview/benchmark endpoints | `database`, `agents/job_scanner` |
 | `routers/benchmarks.py` | Benchmark scores endpoint (stubs → Phase 3) | `database` |
+| `routers/tasks.py` | **Phase 7 — poll + SSE stream endpoints for background agent tasks (`/api/tasks/{id}`, `/api/tasks/{id}/events`)** | `services/task_manager` |
+| `routers/feedback.py` | **Phase 7 — beta-launch endpoints: submit feedback, list own history, aggregate stats** | `services/feedback_service`, `schemas/feedback` |
 
 ### Business Logic Services (`/backend/app/services/`)
 
@@ -97,7 +100,10 @@
 | `services/auth_service.py` | Registration (dedup, hashing) + authentication (JWT) | `models/user`, `utils/security` |
 | `services/resume_service.py` | CV upload + parsing orchestration with file handling and agent integration | `agents/cv_profiler`, `utils/file_validation` |
 | `services/job_service.py` | Job matching, deduplication, scoring — **list with search/sort/pagination+total_count, update sets applied_at** | `clients/adzuna`, `agents/job_scanner`, `utils/hashing` |
-| `services/benchmark_service.py` | GDPR-compliant competitive scoring with peer group analysis | `models/user`, `models/benchmark`, `utils/statistics` |
+| `services/benchmark_service.py` | **Phase 6 / Epic 5 — peer-average-weighted competitive scoring (US 5.1/5.2) with 30-peer minimum, sanitized peer pool, top-3 skill gap ranking** | `models/user`, `models/benchmark`, `utils/benchmark_sanitizer` |
+| `services/recommendations_service.py` | **Phase 6 / Epic 5 — aggregate Set A − Set B across all saved JDs for Top 3 missing skills + ATS keyword suggestions (US 5.3)** | `models/job`, `models/user`, `utils/benchmark_sanitizer` |
+| `services/task_manager.py` | **Phase 7 — async task registry with SSE progress bus; in-process singleton with TTL-based GC** | `asyncio` |
+| `services/feedback_service.py` | **Phase 7 — beta-launch feedback persistence + aggregate stats per content type** | `models/feedback` |
 
 ### AI Agents (`/backend/app/agents/`)
 
@@ -107,11 +113,9 @@
 | `agents/cv_profiler.py` | CV parsing agent (PDF/DOCX → structured JSON via GPT-4) with text extraction and validation | `openai`, `PyPDF2`, `python-docx` |
 | `agents/job_scanner.py` | Job discovery agent (Adzuna API + 24h APScheduler cron) — **lazy Adzuna client, graceful missing-key handling** | `openai`, `httpx`, `clients/adzuna` |
 | `agents/cv_optimizer.py` | ATS rewriting + cover letter agent with keyword optimization and PDF export | `openai`, `services/pdf_export` |
-| `agents/interview_coach.py` | Interview prep generator with technical/behavioral questions and cheat sheets | `openai` |
+| `agents/interview_coach.py` | **Phase 5 / Epic 4 Interview Coach Agent — 3 technical + 2 behavioral questions with ideal-answer guidance + tech cheat sheet driven by deterministic extractor** | `openai`, `agents/prompts/interview_coach`, `utils/tech_extractor` |
 | `agents/prompts/__init__.py` | Package init for prompt engineering modules | — |
-| `agents/prompts/cv_profiler.py` | GPT-4 prompts for structured CV parsing with "no fabrication" rules | — |
-| `agents/prompts/cv_optimizer.py` | GPT-4 prompts for ATS optimization and cover letter generation | — |
-| `agents/prompts/interview_coach.py` | GPT-4 prompts for interview question and cheat sheet generation | — |
+| `agents/prompts/interview_coach.py` | **Prompt builders for the Interview Coach — technical, behavioral, and cheat-sheet prompts with strict JSON contracts** | — |
 
 ### API Clients (`/backend/app/clients/`)
 
@@ -129,6 +133,10 @@
 | `utils/exceptions.py` | Custom exception hierarchy (`NotFoundError`, `DuplicateError`, etc.) | `fastapi` |
 | `utils/file_validation.py` | File upload security validation (size, MIME type, content checking) | — |
 | `utils/hashing.py` | Content hashing utilities for job deduplication | `hashlib` |
+| `utils/tech_extractor.py` | **Phase 5 / Epic 4 — deterministic extraction of technologies from JD text using a curated catalog + smart-boundary regex** | — |
+| `utils/benchmark_sanitizer.py` | **Phase 6 / Epic 5 — GDPR data sanitization; yields `SanitizedProfile` with only seniority/niche/years/skills, decoupled from user_id (US 5.1)** | `utils/tech_extractor` |
+| `utils/token_guard.py` | **Phase 7 — approximate-token estimator + deterministic head+tail JD truncation to stay inside LLM context budgets** | — |
+| `utils/prompt_cache.py` | **Phase 7 — content-hash prompt cache with Redis backend (optional) or in-memory LRU fallback; shared singleton across agents** | `config`, `redis` (optional) |
 | `services/pdf_export.py` | PDF generation service for ATS-optimized CVs and cover letters | `reportlab` |
 
 ### Testing & Configuration
@@ -144,6 +152,17 @@
 | `backend/tests/test_cv_profiler.py` | CV parsing agent tests (22 scenarios: PDF/DOCX extraction, GPT-4 integration, validation) | `conftest`, `agents/cv_profiler` |
 | `backend/tests/test_job_scanner.py` | Job discovery tests (28 scenarios: Adzuna API, deduplication, scoring, cron jobs) | `conftest`, `agents/job_scanner`, `clients/adzuna` |
 | `backend/tests/test_cv_optimizer.py` | CV optimization tests (18 scenarios: ATS rewriting, cover letters, PDF export) | `conftest`, `agents/cv_optimizer` |
+| `backend/tests/test_tech_extractor.py` | **Phase 5 / Epic 4 — deterministic tech extractor tests (15 scenarios: catalog matches, word boundaries, frequency ranking, category grouping)** | `utils/tech_extractor` |
+| `backend/tests/test_interview_coach.py` | **Phase 5 / Epic 4 — Interview Coach Agent tests (16 scenarios: technical/behavioral/cheat-sheet generation, dev-mode mocks, error handling)** | `agents/interview_coach`, `utils/tech_extractor` |
+| `backend/tests/test_interview_coach_service.py` | **Phase 5 / Epic 4 — Interview Coach Service tests (12 scenarios: background inclusion, rollback on failure, merge-update, list summarisation)** | `services/interview_coach_service` |
+| `backend/tests/test_benchmark_sanitizer.py` | **Phase 6 / Epic 5 — sanitizer tests (16 scenarios: GDPR field invariants, skill normalisation, years-of-experience fallbacks, JD requirement parsing)** | `utils/benchmark_sanitizer` |
+| `backend/tests/test_benchmark_service.py` | **Phase 6 / Epic 5 — benchmark service tests (14 scenarios: peer-weighted scoring, insufficient-peer raise, opt-in enforcement, mid/senior niche gate)** | `services/benchmark_service` |
+| `backend/tests/test_recommendations_service.py` | **Phase 6 / Epic 5 — recommendations tests (11 scenarios: cross-JD demand counting, peer-frequency weighting, insufficient-peer graceful mode)** | `services/recommendations_service` |
+| `backend/tests/test_token_guard.py` | **Phase 7 QA — token estimator + head+tail truncation tests (14 scenarios: boundary budgets, head_ratio, stability, realistic JD sanity)** | `utils/token_guard` |
+| `backend/tests/test_prompt_cache.py` | **Phase 7 — prompt cache tests (16 scenarios: key stability, in-memory LRU, eviction, disabled mode, malformed-data fail-safe)** | `utils/prompt_cache` |
+| `backend/tests/test_task_manager.py` | **Phase 7 — async task manager tests (10 scenarios: lifecycle, SSE ordering, owner enforcement, exception-to-FAILED)** | `services/task_manager` |
+| `backend/tests/test_feedback_service.py` | **Phase 7 — feedback service tests (5 scenarios: create happy path, DB rollback, list ordering, aggregate math)** | `services/feedback_service` |
+| `backend/tests/test_cv_profiler_edge_cases.py` | **Phase 7 QA — weird-PDF edge cases (14 scenarios: zero byte, oversized, image-only, corrupted, spoofed extensions, empty DOCX, happy path)** | `utils/file_processing` |
 | `backend/tests/test_cv_optimizer_e2e.py` | **CV optimizer E2E tests (PDF export bytes validation, prompt rules check, changes_summary validation)** | `conftest`, `agents/cv_optimizer`, `utils/pdf_export` |
 | `backend/tests/test_job_scanner.py` | **Job Scanner Agent tests (25 scenarios: dedup URL/hash, scan happy/error, cron, hashing)** | `conftest`, `agents/job_scanner`, `utils/hashing` |
 | `backend/tests/test_job_service.py` | **Job Service tests (15 scenarios: list_user_jobs pagination/search/sort, update_job_status+applied_at, match_jobs)** | `conftest`, `services/job_service` |
@@ -160,6 +179,7 @@
 | `backend/alembic/versions/003_create_scraped_jobs_and_user_jobs.py` | Migration for scraped_jobs & user_jobs with dedup hash | `alembic` |
 | `backend/alembic/versions/004_create_benchmark_scores.py` | Migration for benchmark_scores table (GDPR-compliant) | `alembic` |
 | `backend/alembic/versions/005_add_applied_at_to_user_jobs.py` | **Additive migration: nullable applied_at TIMESTAMPTZ on user_jobs** | `alembic` |
+| `backend/alembic/versions/006_create_feedback.py` | **Phase 7 — feedback table with rating/content_type CHECK constraints + (user_id, created_at) index** | `alembic` |
 | `backend/app/dependencies/__init__.py` | Package init for auth dependencies | — |
 | `backend/app/dependencies/auth.py` | JWT authentication dependency (`get_current_user`, `get_current_user_optional`) | `app.utils.security`, `app.models.user` |
 | `backend/app/middleware/__init__.py` | Package init for middleware | — |
@@ -195,6 +215,8 @@
 | `frontend/src/components/CVUpload.jsx` | Drag-and-drop file upload with validation, progress tracking, parsing result display | `api/client`, `contexts/AuthContext` |
 | `frontend/src/components/JobPreferences.jsx` | Job search criteria configuration with skills management, location preferences, salary ranges | `api/client` |
 | `frontend/src/components/JobCard.jsx` | Interactive job display with match score visualization, status management, action buttons | `api/client` |
+| `frontend/src/components/GdprConsentModal.jsx` | **Phase 6 / Epic 5 — GDPR opt-in/opt-out popup shown on first Benchmarks visit (US 5.1)** | — |
+| `frontend/src/components/FeedbackWidget.jsx` | **Phase 7 — compact 5-star feedback widget with optional comment; persists "already submitted" per artefact in localStorage** | `api/client` |
 
 ### Pages
 

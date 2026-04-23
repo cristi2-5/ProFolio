@@ -1,512 +1,258 @@
 """
-Tests for Benchmark Service — GDPR-compliant competitive scoring tests.
+Tests for the Benchmark Service (Phase 6 / Epic 5 / US 5.1 + 5.2).
 
-Comprehensive test suite covering benchmark calculation, peer group filtering,
-skill gap analysis, and privacy compliance validation.
+The service does:
+    1. Load + sanitize the requesting user's profile.
+    2. Load + sanitize the peer pool (filtered by opt-in + level +/- niche).
+    3. Enforce the 30-peer minimum.
+    4. Compute a peer-weighted score and skill-gap ranking.
+    5. Persist the result.
+
+DB is always an AsyncMock here; we care about the orchestration logic and
+the peer-average-weighted scoring math, not SQLAlchemy internals.
 """
 
-import pytest
+from __future__ import annotations
+
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, List, Optional
 from unittest.mock import AsyncMock, MagicMock, Mock
 
-from app.models.job import ScrapedJob, UserJob
+import pytest
+
+from app.models.benchmark import BenchmarkScore
+from app.models.job import ScrapedJob
 from app.models.resume import ParsedResume
 from app.models.user import User
-from app.models.benchmark import BenchmarkScore
-from app.services.benchmark_service import BenchmarkService, InsufficientPeersError
+from app.services.benchmark_service import (
+    BenchmarkResult,
+    BenchmarkService,
+    InsufficientPeersError,
+    MINIMUM_PEER_COUNT,
+    _peer_weighted_score,
+)
 
 
-class TestBenchmarkService:
-    """Test benchmark service functionality."""
+# ----------------------------------------------------------------------
+# Fixtures
+# ----------------------------------------------------------------------
 
-    @pytest.fixture
-    def benchmark_service(self):
-        """Create benchmark service instance."""
-        return BenchmarkService()
 
-    @pytest.fixture
-    def sample_user(self):
-        """Sample user for testing."""
-        user = Mock(spec=User)
-        user.id = uuid.uuid4()
-        user.full_name = "John Doe"
-        user.email = "john@example.com"
-        user.seniority_level = "senior"
-        user.benchmark_opt_in = True
-        return user
+@pytest.fixture
+def service() -> BenchmarkService:
+    return BenchmarkService()
 
-    @pytest.fixture
-    def sample_job(self):
-        """Sample job for testing."""
-        job = Mock(spec=ScrapedJob)
-        job.id = uuid.uuid4()
-        job.job_title = "Senior React Developer"
-        job.company_name = "TechCorp"
-        job.description = """
-        Senior React Developer position requiring 5+ years experience with React,
-        TypeScript, JavaScript, Node.js. Experience with AWS, Docker preferred.
 
-        Responsibilities:
-        - Develop scalable web applications
-        - Collaborate with cross-functional teams
-        - Implement best practices for code quality
-        """
-        return job
+@pytest.fixture
+def user() -> User:
+    u = Mock(spec=User)
+    u.id = uuid.uuid4()
+    u.seniority_level = "mid"
+    u.niche = "backend"
+    u.benchmark_opt_in = True
+    return u
 
-    @pytest.fixture
-    def sample_user_profile(self):
-        """Sample user profile from resume."""
-        return {
-            "personal_info": {"full_name": "John Doe"},
-            "summary": "Senior developer with 6+ years of React experience",
-            "experience": [
-                {
-                    "role": "Senior Frontend Developer",
-                    "company": "StartupXYZ",
-                    "duration": "2020-2023",
-                    "description": "Led React development team"
-                },
-                {
-                    "role": "React Developer",
-                    "company": "WebCorp",
-                    "duration": "2018-2020",
-                    "description": "Built React applications with TypeScript"
-                }
-            ],
-            "skills": ["React", "TypeScript", "JavaScript", "Node.js", "Python"],
-            "technologies": ["AWS", "Docker", "Git", "Jest"]
-        }
 
-    @pytest.fixture
-    def sample_peer_group(self):
-        """Sample peer group data."""
-        return [
-            {
-                "user_id": str(uuid.uuid4()),
-                "seniority_level": "senior",
-                "profile": {
-                    "skills": ["React", "JavaScript", "Angular", "Node.js"],
-                    "technologies": ["AWS", "Azure"],
-                    "experience": [
-                        {"role": "Frontend Dev", "company": "Company1"},
-                        {"role": "Full Stack Dev", "company": "Company2"}
-                    ]
-                },
-                "anonymized": True
-            },
-            {
-                "user_id": str(uuid.uuid4()),
-                "seniority_level": "senior",
-                "profile": {
-                    "skills": ["React", "TypeScript", "Vue", "Python"],
-                    "technologies": ["Docker", "Kubernetes"],
-                    "experience": [
-                        {"role": "Senior Developer", "company": "Company3"}
-                    ]
-                },
-                "anonymized": True
-            },
-            # Add 28 more minimal peers to meet minimum threshold
-            *[
-                {
-                    "user_id": str(uuid.uuid4()),
-                    "seniority_level": "senior",
-                    "profile": {
-                        "skills": ["JavaScript", "React"],
-                        "technologies": ["AWS"],
-                        "experience": [{"role": "Developer", "company": f"Company{i}"}]
-                    },
-                    "anonymized": True
-                }
-                for i in range(3, 31)
-            ]
+@pytest.fixture
+def job() -> ScrapedJob:
+    j = Mock(spec=ScrapedJob)
+    j.id = uuid.uuid4()
+    j.job_title = "Mid Python Backend Engineer"
+    j.company_name = "TechCorp"
+    j.description = (
+        "Python backend role — FastAPI, PostgreSQL, Docker. "
+        "3 years experience required."
+    )
+    return j
+
+
+@pytest.fixture
+def user_resume() -> ParsedResume:
+    r = Mock(spec=ParsedResume)
+    r.parsed_data = {
+        "skills": ["Python", "FastAPI"],
+        "total_years_experience": 4,
+    }
+    return r
+
+
+def _make_peer_row(*, skills: Iterable[str], niche: str = "backend", level: str = "mid"):
+    """Emulate the (level, niche, parsed_data) row the service selects."""
+    return (level, niche, {"skills": list(skills)})
+
+
+def _db_with(*, user_resume: Optional[ParsedResume], peer_rows: List[tuple]):
+    """Build an AsyncMock db that yields the right rows in the right order.
+
+    Order of ``execute`` calls in ``calculate_benchmark_score``:
+        1. Load the active resume (``scalar_one_or_none``).
+        2. Load peer rows (``all``).
+        3. Look up existing BenchmarkScore row (``scalar_one_or_none``).
+    """
+    db = AsyncMock()
+    # db.add is synchronous in SQLAlchemy; override the AsyncMock default.
+    db.add = Mock()
+
+    resume_result = MagicMock()
+    resume_result.scalar_one_or_none.return_value = user_resume
+
+    peers_result = MagicMock()
+    peers_result.all.return_value = peer_rows
+
+    upsert_result = MagicMock()
+    upsert_result.scalar_one_or_none.return_value = None  # always insert
+
+    db.execute.side_effect = [resume_result, peers_result, upsert_result]
+
+    # db.refresh should give the row an id + calculated_at
+    async def _refresh(row: Any) -> None:
+        if not getattr(row, "id", None):
+            row.id = uuid.uuid4()
+        if not getattr(row, "calculated_at", None):
+            row.calculated_at = datetime.now(timezone.utc)
+
+    db.refresh.side_effect = _refresh
+    return db
+
+
+# ----------------------------------------------------------------------
+# Happy path
+# ----------------------------------------------------------------------
+
+
+class TestHappyPath:
+    @pytest.mark.asyncio
+    async def test_returns_benchmark_result_with_expected_fields(
+        self, service, user, job, user_resume
+    ) -> None:
+        # 30 peers, all stronger than the user on FastAPI/Docker/Postgres
+        peer_rows = [
+            _make_peer_row(skills=["python", "fastapi", "postgresql", "docker"])
+            for _ in range(MINIMUM_PEER_COUNT)
         ]
+        db = _db_with(user_resume=user_resume, peer_rows=peer_rows)
+
+        result = await service.calculate_benchmark_score(user=user, job=job, db=db)
+
+        assert isinstance(result, BenchmarkResult)
+        assert 0 <= result.score <= 100
+        assert result.peer_group_size == MINIMUM_PEER_COUNT
+        assert result.seniority_level == "mid"
+        assert result.niche == "backend"
+        # User has Python+FastAPI; JD needs Python+FastAPI+PostgreSQL+Docker
+        # → user_match = 2/4 = 0.5; peer_mean = 4/4 = 1.0 → score < 50
+        assert result.user_match_score == pytest.approx(0.5, abs=0.01)
+        assert result.peer_mean_match_score == pytest.approx(1.0, abs=0.01)
+        assert result.score < 50
 
     @pytest.mark.asyncio
-    async def test_calculate_benchmark_score_success(
-        self, benchmark_service, sample_user, sample_job, sample_user_profile, sample_peer_group
-    ):
-        """Test successful benchmark score calculation."""
-        mock_db = AsyncMock()
-
-        # Mock user job creation/retrieval
-        user_job = Mock(spec=UserJob)
-        user_job.id = uuid.uuid4()
-        user_job.user_id = sample_user.id
-        user_job.job_id = sample_job.id
-
-        # Mock profile retrieval
-        benchmark_service._get_user_profile = AsyncMock(return_value=sample_user_profile)
-        benchmark_service._get_or_create_user_job = AsyncMock(return_value=user_job)
-        benchmark_service._get_peer_group = AsyncMock(return_value=sample_peer_group)
-
-        # Mock benchmark score creation
-        benchmark_score = Mock(spec=BenchmarkScore)
-        benchmark_score.id = uuid.uuid4()
-        benchmark_score.score = 75
-        benchmark_score.benchmark_data = {
-            "peer_group_size": len(sample_peer_group),
-            "skill_gaps": [
-                {
-                    "skill": "docker",
-                    "priority": "medium",
-                    "peer_frequency": "60%",
-                    "recommendation": "Learn containerization"
-                }
-            ]
-        }
-        benchmark_score.calculated_at = datetime.now(timezone.utc)
-
-        benchmark_service._create_benchmark_score = AsyncMock(return_value=benchmark_score)
-
-        # Execute calculation
-        result = await benchmark_service.calculate_benchmark_score(
-            user=sample_user,
-            job=sample_job,
-            db=mock_db
+    async def test_top_missing_skills_ranked_by_peer_frequency(
+        self, service, user, job, user_resume
+    ) -> None:
+        # 10 peers have Docker, 20 have PostgreSQL, 5 have AWS (but AWS not in JD).
+        peer_rows = (
+            [_make_peer_row(skills=["python", "fastapi", "docker"]) for _ in range(10)]
+            + [_make_peer_row(skills=["python", "fastapi", "postgresql"]) for _ in range(20)]
         )
+        db = _db_with(user_resume=user_resume, peer_rows=peer_rows)
 
-        # Verify result
-        assert result == benchmark_score
-        assert result.score == 75
+        result = await service.calculate_benchmark_score(user=user, job=job, db=db)
 
-        # Verify method calls
-        benchmark_service._get_user_profile.assert_called_once_with(sample_user, mock_db)
-        benchmark_service._get_peer_group.assert_called_once_with(sample_user, sample_job, mock_db)
+        # postgresql held by 20/30 = 0.67; docker by 10/30 = 0.33
+        skills = [gap["skill"] for gap in result.missing_skills]
+        assert skills[0] == "postgresql"
+        assert result.missing_skills[0]["peer_frequency"] == pytest.approx(0.667, abs=0.01)
+        assert "docker" in skills
 
     @pytest.mark.asyncio
-    async def test_calculate_benchmark_user_not_opted_in(
-        self, benchmark_service, sample_user, sample_job
-    ):
-        """Test benchmark calculation when user hasn't opted in."""
-        sample_user.benchmark_opt_in = False
-        mock_db = AsyncMock()
+    async def test_recommended_keywords_covers_all_required(
+        self, service, user, job, user_resume
+    ) -> None:
+        peer_rows = [
+            _make_peer_row(skills=["python", "fastapi", "postgresql", "docker"])
+            for _ in range(MINIMUM_PEER_COUNT)
+        ]
+        db = _db_with(user_resume=user_resume, peer_rows=peer_rows)
 
-        with pytest.raises(ValueError, match="User has not opted into benchmarking"):
-            await benchmark_service.calculate_benchmark_score(
-                user=sample_user,
-                job=sample_job,
-                db=mock_db
+        result = await service.calculate_benchmark_score(user=user, job=job, db=db)
+
+        assert set(result.recommended_keywords) >= {"python", "fastapi", "postgresql", "docker"}
+        assert "python" in result.matched_skills
+        assert "fastapi" in result.matched_skills
+
+
+# ----------------------------------------------------------------------
+# Enforcement paths
+# ----------------------------------------------------------------------
+
+
+class TestEnforcement:
+    @pytest.mark.asyncio
+    async def test_requires_opt_in(self, service, user, job) -> None:
+        user.benchmark_opt_in = False
+        with pytest.raises(ValueError, match="opted into benchmarking"):
+            await service.calculate_benchmark_score(
+                user=user, job=job, db=AsyncMock()
             )
 
     @pytest.mark.asyncio
-    async def test_calculate_benchmark_insufficient_peers(
-        self, benchmark_service, sample_user, sample_job, sample_user_profile
-    ):
-        """Test benchmark calculation with insufficient peer data."""
-        mock_db = AsyncMock()
-
-        # Mock small peer group (below minimum threshold)
-        small_peer_group = [
-            {
-                "user_id": str(uuid.uuid4()),
-                "seniority_level": "senior",
-                "profile": {"skills": ["React"], "experience": []},
-                "anonymized": True
-            }
-        ] * 10  # Only 10 peers, below minimum of 30
-
-        benchmark_service._get_user_profile = AsyncMock(return_value=sample_user_profile)
-        benchmark_service._get_or_create_user_job = AsyncMock(return_value=Mock())
-        benchmark_service._get_peer_group = AsyncMock(return_value=small_peer_group)
-
-        with pytest.raises(InsufficientPeersError, match="10 users found"):
-            await benchmark_service.calculate_benchmark_score(
-                user=sample_user,
-                job=sample_job,
-                db=mock_db
+    async def test_mid_senior_must_set_niche(self, service, user, job) -> None:
+        user.niche = None
+        with pytest.raises(ValueError, match="niche"):
+            await service.calculate_benchmark_score(
+                user=user, job=job, db=AsyncMock()
             )
 
-    def test_extract_job_requirements(self, benchmark_service, sample_job):
-        """Test job requirements extraction."""
-        requirements = benchmark_service._extract_job_requirements(sample_job)
-
-        # Verify extracted data
-        assert "react" in requirements["required_skills"]
-        assert "typescript" in requirements["required_skills"]
-        assert "javascript" in requirements["required_skills"]
-        assert "node.js" in requirements["required_skills"]
-        assert requirements["min_experience_years"] == 5
-        assert requirements["job_level"] == "senior"
-        assert requirements["job_title"] == "senior react developer"
-
-    def test_calculate_match_score_perfect_match(
-        self, benchmark_service, sample_user_profile
-    ):
-        """Test match score calculation with perfect skill overlap."""
-        job_requirements = {
-            "required_skills": ["react", "typescript", "javascript"],
-            "min_experience_years": 3,
-            "job_level": "senior",
-            "industry_keywords": [],
-            "job_title": "react developer"
-        }
-
-        score = benchmark_service._calculate_match_score(
-            sample_user_profile, job_requirements, "senior"
-        )
-
-        # Should be high score due to skill overlap
-        assert score > 70
-        assert score <= 100
-
-    def test_calculate_match_score_no_overlap(self, benchmark_service):
-        """Test match score with no skill overlap."""
-        user_profile = {
-            "skills": ["php", "mysql", "wordpress"],
-            "technologies": ["apache"],
-            "experience": [{"role": "Web Developer", "company": "Agency"}]
-        }
-
-        job_requirements = {
-            "required_skills": ["react", "typescript", "angular"],
-            "min_experience_years": 5,
-            "job_level": "senior",
-            "industry_keywords": [],
-            "job_title": "frontend developer"
-        }
-
-        score = benchmark_service._calculate_match_score(
-            user_profile, job_requirements, "senior"
-        )
-
-        # Should be low score due to no skill overlap
-        assert score < 30
-
-    def test_calculate_percentile_rank(self, benchmark_service):
-        """Test percentile rank calculation."""
-        user_score = 75.0
-        peer_scores = [60.0, 65.0, 70.0, 80.0, 85.0, 90.0]
-
-        percentile = benchmark_service._calculate_percentile_rank(user_score, peer_scores)
-
-        # User score 75 is higher than 3 out of 6 peers (50%)
-        assert percentile == 51  # 50% + 1 to avoid 0th percentile
-
-    def test_calculate_percentile_rank_highest(self, benchmark_service):
-        """Test percentile rank when user has highest score."""
-        user_score = 95.0
-        peer_scores = [60.0, 70.0, 80.0, 85.0]
-
-        percentile = benchmark_service._calculate_percentile_rank(user_score, peer_scores)
-
-        # User has highest score
-        assert percentile == 100
-
-    def test_calculate_percentile_rank_lowest(self, benchmark_service):
-        """Test percentile rank when user has lowest score."""
-        user_score = 50.0
-        peer_scores = [60.0, 70.0, 80.0, 90.0]
-
-        percentile = benchmark_service._calculate_percentile_rank(user_score, peer_scores)
-
-        # User has lowest score but gets minimum rank of 1
-        assert percentile == 1
-
-    def test_analyze_skill_gaps(
-        self, benchmark_service, sample_user_profile, sample_peer_group
-    ):
-        """Test skill gap analysis."""
-        job_requirements = {
-            "required_skills": ["react", "typescript", "docker", "kubernetes", "aws"]
-        }
-
-        skill_gaps = benchmark_service._analyze_skill_gaps(
-            sample_user_profile, job_requirements, sample_peer_group
-        )
-
-        # Should identify missing skills
-        assert len(skill_gaps) <= 3  # Top 3 gaps
-
-        # Check structure of gaps
-        for gap in skill_gaps:
-            assert "skill" in gap
-            assert "priority" in gap
-            assert "peer_frequency" in gap
-            assert "recommendation" in gap
-            assert gap["priority"] in ["high", "medium", "low"]
-
-    def test_analyze_skill_gaps_no_missing_skills(
-        self, benchmark_service, sample_peer_group
-    ):
-        """Test skill gap analysis when user has all required skills."""
-        user_profile = {
-            "skills": ["react", "typescript", "javascript", "docker", "aws"],
-            "technologies": ["kubernetes"],
-            "experience": []
-        }
-
-        job_requirements = {
-            "required_skills": ["react", "typescript", "javascript"]
-        }
-
-        skill_gaps = benchmark_service._analyze_skill_gaps(
-            user_profile, job_requirements, sample_peer_group
-        )
-
-        # Should have no gaps
-        assert len(skill_gaps) == 0
-
-    def test_score_skill_match_perfect(self, benchmark_service):
-        """Test skill matching with perfect overlap."""
-        user_skills = ["React", "TypeScript", "JavaScript", "Node.js"]
-        required_skills = ["react", "typescript", "javascript"]
-
-        score, max_score = benchmark_service._score_skill_match(user_skills, required_skills)
-
-        # Should get perfect score plus bonus for extra skills
-        assert score > 1.0  # Perfect match + bonus
-        assert max_score == 1.2
-
-    def test_score_skill_match_partial(self, benchmark_service):
-        """Test skill matching with partial overlap."""
-        user_skills = ["React", "Vue"]
-        required_skills = ["react", "typescript", "angular"]
-
-        score, max_score = benchmark_service._score_skill_match(user_skills, required_skills)
-
-        # Should get partial score (1/3)
-        assert score == pytest.approx(1/3, rel=1e-2)
-
-    def test_score_experience_match_sufficient(self, benchmark_service):
-        """Test experience matching with sufficient years."""
-        user_years = 6
-        required_years = 5
-        seniority = "senior"
-
-        score, max_score = benchmark_service._score_experience_match(
-            user_years, required_years, seniority
-        )
-
-        # Should get perfect score
-        assert score == 1.0
-        assert max_score == 1.0
-
-    def test_score_experience_match_insufficient(self, benchmark_service):
-        """Test experience matching with insufficient years."""
-        user_years = 2
-        required_years = 5
-        seniority = "junior"
-
-        score, max_score = benchmark_service._score_experience_match(
-            user_years, required_years, seniority
-        )
-
-        # Should get reduced score
-        assert score < 1.0
-        assert score > 0.0
-
-    def test_get_skill_recommendation(self, benchmark_service):
-        """Test skill learning recommendations."""
-        # Test known skill
-        recommendation = benchmark_service._get_skill_recommendation("react")
-        assert "React" in recommendation
-        assert "documentation" in recommendation.lower()
-
-        # Test unknown skill
-        recommendation = benchmark_service._get_skill_recommendation("unknownskill")
-        assert "unknownskill" in recommendation
-        assert "documentation" in recommendation
-
-    def test_extract_user_skills(self, benchmark_service, sample_user_profile):
-        """Test user skills extraction."""
-        skills = benchmark_service._extract_user_skills(sample_user_profile)
-
-        # Should combine skills and technologies
-        expected_skills = ["React", "TypeScript", "JavaScript", "Node.js", "Python", "AWS", "Docker", "Git", "Jest"]
-        assert all(skill in skills for skill in ["React", "TypeScript", "AWS", "Docker"])
-
-    def test_calculate_user_experience(self, benchmark_service, sample_user_profile):
-        """Test user experience calculation."""
-        years = benchmark_service._calculate_user_experience(sample_user_profile)
-
-        # Should count number of roles (simplified calculation)
-        assert years == 2  # Two experience entries
-
-    def test_extract_technology_keywords(self, benchmark_service, sample_job):
-        """Test technology keyword extraction for niche filtering."""
-        keywords = benchmark_service._extract_technology_keywords(sample_job)
-
-        # Should extract web-related keywords
-        assert "web" in keywords
-
-    # Removed incorrectly applied helper method definition
-
-    def test_infer_job_level(self, benchmark_service):
-        """Test job level inference."""
-        # Senior level
-        assert benchmark_service._infer_job_level("Senior Staff Engineer position") == "senior"
-
-        # Junior level
-        assert benchmark_service._infer_job_level("Entry level graduate developer") == "junior"
-
-        # Mid level (default)
-        assert benchmark_service._infer_job_level("Software Developer position") == "mid"
-
-    def test_infer_company_type(self, benchmark_service):
-        """Test company type inference."""
-        assert benchmark_service._infer_company_type("TechCorp Inc") == "enterprise"
-        assert benchmark_service._infer_company_type("StartupXYZ Labs") == "startup"
-        assert benchmark_service._infer_company_type("Generic Company") == "company"
+    @pytest.mark.asyncio
+    async def test_junior_without_niche_is_fine(self, service, user, job, user_resume) -> None:
+        user.seniority_level = "junior"
+        user.niche = None
+        peer_rows = [_make_peer_row(skills=["python", "fastapi"], niche=None, level="junior")
+                     for _ in range(MINIMUM_PEER_COUNT)]
+        db = _db_with(user_resume=user_resume, peer_rows=peer_rows)
+        result = await service.calculate_benchmark_score(user=user, job=job, db=db)
+        assert result.seniority_level == "junior"
 
     @pytest.mark.asyncio
-    async def test_get_peer_group_filtering(self, benchmark_service, sample_user, sample_job):
-        """Test peer group filtering logic."""
-        mock_db = AsyncMock()
+    async def test_insufficient_peers_raises(self, service, user, job, user_resume) -> None:
+        peer_rows = [_make_peer_row(skills=["python"]) for _ in range(MINIMUM_PEER_COUNT - 1)]
+        db = _db_with(user_resume=user_resume, peer_rows=peer_rows)
 
-        # Mock database query results
-        mock_peer1 = Mock()
-        mock_peer1.id = uuid.uuid4()
-        mock_peer1.seniority_level = "senior"
-        mock_peer1.benchmark_opt_in = True
-
-        mock_resume1 = Mock()
-        mock_resume1.parsed_data = {"skills": ["React", "JavaScript"]}
- 
-        mock_result = MagicMock()
-        mock_result.all.return_value = [(mock_peer1, mock_resume1)]
-        mock_db.execute.return_value = mock_result
-
-        peer_group = await benchmark_service._get_peer_group(sample_user, sample_job, mock_db)
-
-        # Verify peer group structure
-        assert len(peer_group) == 1
-        assert peer_group[0]["seniority_level"] == "senior"
-        assert peer_group[0]["anonymized"] is True
-        assert "user_id" in peer_group[0]  # For deduplication only
+        with pytest.raises(InsufficientPeersError) as exc_info:
+            await service.calculate_benchmark_score(user=user, job=job, db=db)
+        assert exc_info.value.peers_found == MINIMUM_PEER_COUNT - 1
+        assert exc_info.value.peers_required == MINIMUM_PEER_COUNT
 
     @pytest.mark.asyncio
-    async def test_error_handling_with_rollback(
-        self, benchmark_service, sample_user, sample_job, sample_user_profile
-    ):
-        """Test error handling with database rollback."""
-        mock_db = AsyncMock()
+    async def test_missing_active_resume_raises(self, service, user, job) -> None:
+        db = _db_with(user_resume=None, peer_rows=[])
+        with pytest.raises(ValueError, match="active resume"):
+            await service.calculate_benchmark_score(user=user, job=job, db=db)
 
-        # Mock exception during calculation
-        benchmark_service._get_user_profile = AsyncMock(return_value=sample_user_profile)
-        benchmark_service._get_or_create_user_job = AsyncMock(return_value=Mock())
-        benchmark_service._get_peer_group = AsyncMock(side_effect=Exception("Database error"))
 
-        with pytest.raises(Exception, match="Database error"):
-            await benchmark_service.calculate_benchmark_score(
-                user=sample_user,
-                job=sample_job,
-                db=mock_db
-            )
+# ----------------------------------------------------------------------
+# Scoring math
+# ----------------------------------------------------------------------
 
-        # Verify rollback was called
-        mock_db.rollback.assert_called_once()
 
-    def test_minimum_peer_count_constant(self, benchmark_service):
-        """Test minimum peer count requirement."""
-        assert benchmark_service.MINIMUM_PEER_COUNT == 30
+class TestPeerWeightedScore:
+    """Pure-function tests for ``_peer_weighted_score``."""
 
-    def test_skill_match_weights_configuration(self, benchmark_service):
-        """Test skill matching weights configuration."""
-        weights = benchmark_service.SKILL_MATCH_WEIGHTS
+    def test_user_equals_peer_mean_yields_50(self) -> None:
+        assert _peer_weighted_score(0.5, 0.5) == 50
+        assert _peer_weighted_score(1.0, 1.0) == 50
 
-        assert "exact_match" in weights
-        assert "partial_match" in weights
-        assert weights["exact_match"] == 1.0
-        assert weights["partial_match"] < weights["exact_match"]
+    def test_user_above_mean_gets_higher_score(self) -> None:
+        assert _peer_weighted_score(1.0, 0.5) == 75
+
+    def test_user_below_mean_gets_lower_score(self) -> None:
+        assert _peer_weighted_score(0.0, 0.5) == 25
+
+    def test_clamped_to_bounds(self) -> None:
+        assert _peer_weighted_score(1.0, 0.0) == 100
+        assert _peer_weighted_score(0.0, 1.0) == 0
+
+    def test_nan_falls_back_to_50(self) -> None:
+        assert _peer_weighted_score(float("nan"), 0.5) == 50
+        assert _peer_weighted_score(0.5, float("nan")) == 50

@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { get, post, patch } from '../api/client';
+import FeedbackWidget from '../components/FeedbackWidget';
 
 /**
  * Job detail page component with AI-powered tools.
@@ -896,6 +897,12 @@ function CVOptimizationTab({ job, optimizedCV, editing, onEdit, onSave, onChange
           )}
         </div>
       )}
+
+      <FeedbackWidget
+        contentType="optimized_cv"
+        contentId={job.job_id}
+        label="How good was this ATS rewrite?"
+      />
     </div>
   );
 }
@@ -1067,6 +1074,12 @@ function CoverLetterTab({
           {generating ? 'Regenerating…' : '🔄 Regenerate'}
         </button>
       </div>
+
+      <FeedbackWidget
+        contentType="cover_letter"
+        contentId={job.job_id}
+        label="How compelling was this cover letter?"
+      />
     </div>
   );
 }
@@ -1079,59 +1092,328 @@ function InterviewPrepTab({ job, interviewPrep }) {
         <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>🎯</div>
         <h3 style={{ marginBottom: 'var(--space-2)' }}>Interview Preparation Not Generated Yet</h3>
         <p style={{ color: 'var(--color-text-secondary)' }}>
-          Click "Interview Prep" above to generate personalized interview materials.
+          Click <strong>Interview Prep</strong> above to generate 3 technical + 2 behavioral
+          questions, plus a tech cheat sheet built from the JD.
         </p>
       </div>
     );
   }
 
+  const technical = interviewPrep.technical_questions || [];
+  const behavioral = interviewPrep.behavioral_questions || [];
+  const cheatSheet = interviewPrep.technology_cheat_sheet || [];
+  const extracted = interviewPrep.extracted_technologies || [];
+
   return (
-    <div>
-      <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-4)' }}>
-        Interview Preparation for {job.company_name}
-      </h3>
+    <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
+      <div>
+        <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-1)' }}>
+          Interview Preparation — {job.company_name}
+        </h3>
+        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+          Questions target the JD stack; the cheat sheet covers each technology explicitly
+          mentioned in the posting.
+        </p>
+      </div>
 
-      <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
-        {/* Questions */}
-        {interviewPrep.questions && interviewPrep.questions.length > 0 && (
-          <div>
-            <h4 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-3)', color: 'var(--color-accent)' }}>
-              Interview Questions
-            </h4>
-            {interviewPrep.questions.map((question, index) => (
-              <div key={index} style={{ marginBottom: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-md)' }}>
-                <p style={{ fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-2)' }}>
-                  Q{index + 1}: {question.question}
-                </p>
-                {question.suggested_answer && (
-                  <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                    <strong>Suggested approach:</strong> {question.suggested_answer}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+      {extracted.length > 0 && <ExtractedTechnologiesBar techs={extracted} />}
 
-        {/* Cheat Sheet */}
-        {interviewPrep.cheat_sheet && (
-          <div>
-            <h4 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-3)', color: 'var(--color-accent)' }}>
-              Technology Cheat Sheet
-            </h4>
-            <div style={{
-              background: 'var(--color-bg-secondary)',
-              padding: 'var(--space-4)',
-              borderRadius: 'var(--radius-md)',
-              whiteSpace: 'pre-wrap',
-              lineHeight: 1.6,
-            }}>
-              {typeof interviewPrep.cheat_sheet === 'string' ? interviewPrep.cheat_sheet : JSON.stringify(interviewPrep.cheat_sheet, null, 2)}
-            </div>
-          </div>
-        )}
+      {technical.length > 0 && (
+        <QuestionSection
+          icon="💻"
+          label="Technical Questions"
+          subtitle={`${technical.length} question${technical.length !== 1 ? 's' : ''} derived from the required stack`}
+        >
+          {technical.map((q, i) => (
+            <TechnicalQuestionCard key={i} index={i} question={q} />
+          ))}
+        </QuestionSection>
+      )}
+
+      {behavioral.length > 0 && (
+        <QuestionSection
+          icon="🗣️"
+          label="Behavioral Questions"
+          subtitle={`${behavioral.length} question${behavioral.length !== 1 ? 's' : ''} aligned with company culture cues`}
+        >
+          {behavioral.map((q, i) => (
+            <BehavioralQuestionCard key={i} index={i} question={q} />
+          ))}
+        </QuestionSection>
+      )}
+
+      {cheatSheet.length > 0 && (
+        <QuestionSection
+          icon="📚"
+          label="Technology Cheat Sheet"
+          subtitle="One-paragraph definition per technology in the JD"
+        >
+          {cheatSheet.map((entry, i) => (
+            <CheatSheetCard key={i} entry={entry} />
+          ))}
+        </QuestionSection>
+      )}
+
+      <FeedbackWidget
+        contentType="interview_prep"
+        contentId={job.job_id}
+        label="How useful were these interview materials?"
+      />
+    </div>
+  );
+}
+
+function ExtractedTechnologiesBar({ techs }) {
+  return (
+    <div
+      style={{
+        background: 'oklch(from var(--color-accent) l c h / 0.06)',
+        border: '1px solid oklch(from var(--color-accent) l c h / 0.25)',
+        borderRadius: 'var(--radius-md)',
+        padding: 'var(--space-3) var(--space-4)',
+      }}
+    >
+      <p
+        style={{
+          fontSize: 'var(--font-size-xs)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          color: 'var(--color-accent)',
+          fontWeight: 'var(--font-weight-semibold)',
+          marginBottom: 'var(--space-2)',
+        }}
+      >
+        🔍 Detected from JD ({techs.length})
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+        {techs.map((tech) => (
+          <span
+            key={tech.name}
+            title={`${tech.category} · ${tech.mentions} mention${tech.mentions !== 1 ? 's' : ''}`}
+            style={{
+              background: 'oklch(from var(--color-accent) l c h / 0.12)',
+              color: 'var(--color-accent)',
+              padding: '2px var(--space-2)',
+              borderRadius: 'var(--radius-full)',
+              fontSize: 'var(--font-size-xs)',
+              fontWeight: 'var(--font-weight-medium)',
+            }}
+          >
+            {tech.name}
+            {tech.mentions > 1 && (
+              <span style={{ opacity: 0.6, marginLeft: '4px' }}>×{tech.mentions}</span>
+            )}
+          </span>
+        ))}
       </div>
     </div>
+  );
+}
+
+function QuestionSection({ icon, label, subtitle, children }) {
+  return (
+    <section>
+      <header style={{ marginBottom: 'var(--space-3)' }}>
+        <h4
+          style={{
+            fontSize: 'var(--font-size-lg)',
+            fontWeight: 'var(--font-weight-medium)',
+            color: 'var(--color-accent)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+          }}
+        >
+          <span>{icon}</span>
+          {label}
+        </h4>
+        {subtitle && (
+          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+            {subtitle}
+          </p>
+        )}
+      </header>
+      <div style={{ display: 'grid', gap: 'var(--space-3)' }}>{children}</div>
+    </section>
+  );
+}
+
+function TechnicalQuestionCard({ index, question }) {
+  const difficultyColor = {
+    easy: 'var(--color-success)',
+    medium: 'var(--color-warning)',
+    hard: 'var(--color-error)',
+  }[(question.difficulty || '').toLowerCase()] || 'var(--color-accent)';
+
+  return (
+    <div
+      style={{
+        background: 'var(--color-bg-secondary)',
+        borderRadius: 'var(--radius-md)',
+        padding: 'var(--space-4)',
+        borderLeft: `3px solid ${difficultyColor}`,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+        <p style={{ fontWeight: 'var(--font-weight-medium)', lineHeight: 1.5 }}>
+          Q{index + 1}. {question.question}
+        </p>
+        {question.difficulty && (
+          <span
+            style={{
+              background: difficultyColor,
+              color: 'white',
+              fontSize: 'var(--font-size-xs)',
+              padding: '2px var(--space-2)',
+              borderRadius: 'var(--radius-sm)',
+              textTransform: 'capitalize',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {question.difficulty}
+          </span>
+        )}
+      </div>
+
+      {question.topics && question.topics.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: 'var(--space-2)' }}>
+          {question.topics.map((topic, i) => (
+            <span
+              key={i}
+              style={{
+                background: 'var(--color-bg-primary)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-secondary)',
+                fontSize: 'var(--font-size-xs)',
+                padding: '1px var(--space-2)',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              {topic}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {question.guidance && (
+        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
+          <strong>Ideal answer covers:</strong> {question.guidance}
+        </p>
+      )}
+
+      {question.sample_answer && (
+        <details>
+          <summary
+            style={{
+              cursor: 'pointer',
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-accent)',
+              fontWeight: 'var(--font-weight-medium)',
+            }}
+          >
+            Show sample answer
+          </summary>
+          <p
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              lineHeight: 1.6,
+              marginTop: 'var(--space-2)',
+              padding: 'var(--space-3)',
+              background: 'var(--color-bg-primary)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            {question.sample_answer}
+          </p>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function BehavioralQuestionCard({ index, question }) {
+  return (
+    <div
+      style={{
+        background: 'var(--color-bg-secondary)',
+        borderRadius: 'var(--radius-md)',
+        padding: 'var(--space-4)',
+        borderLeft: '3px solid var(--color-accent)',
+      }}
+    >
+      <p style={{ fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-2)', lineHeight: 1.5 }}>
+        Q{index + 1}. {question.question}
+      </p>
+      {question.scenario && (
+        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
+          <strong>Assesses:</strong> {question.scenario}
+        </p>
+      )}
+      {question.star_guidance && (
+        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
+          <strong>STAR guide:</strong> {question.star_guidance}
+        </p>
+      )}
+      {question.company_context && (
+        <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+          Culture cue: {question.company_context}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CheatSheetCard({ entry }) {
+  return (
+    <details
+      style={{
+        background: 'var(--color-bg-secondary)',
+        borderRadius: 'var(--radius-md)',
+        padding: 'var(--space-3) var(--space-4)',
+        borderLeft: '3px solid var(--color-border)',
+      }}
+    >
+      <summary
+        style={{
+          cursor: 'pointer',
+          fontWeight: 'var(--font-weight-semibold)',
+          color: 'var(--color-text-primary)',
+        }}
+      >
+        {entry.concept}
+      </summary>
+      <div style={{ marginTop: 'var(--space-3)', display: 'grid', gap: 'var(--space-2)' }}>
+        {entry.definition && (
+          <p style={{ fontSize: 'var(--font-size-sm)', lineHeight: 1.6, color: 'var(--color-text-secondary)' }}>
+            {entry.definition}
+          </p>
+        )}
+        {entry.key_points && entry.key_points.length > 0 && (
+          <ul style={{ paddingLeft: 'var(--space-5)', display: 'grid', gap: '4px' }}>
+            {entry.key_points.map((point, i) => (
+              <li key={i} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+                {point}
+              </li>
+            ))}
+          </ul>
+        )}
+        {entry.practical_example && (
+          <p
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-secondary)',
+              padding: 'var(--space-2) var(--space-3)',
+              background: 'var(--color-bg-primary)',
+              borderRadius: 'var(--radius-sm)',
+              fontFamily: 'var(--font-family-mono, monospace)',
+            }}
+          >
+            {entry.practical_example}
+          </p>
+        )}
+      </div>
+    </details>
   );
 }
 
