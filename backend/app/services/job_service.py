@@ -31,7 +31,11 @@ class JobService:
 
     def __init__(self):
         """Initialize Job Service with configuration."""
-        self.min_match_score = 30  # Only create UserJob if score >= threshold
+        # Threshold 0 means "associate every scraped job with the user". The
+        # match_score still gets stored and drives default sort order; users
+        # who haven't uploaded a CV yet all score 0 but still see jobs in the
+        # list. A CV upload later makes the score meaningful for sorting.
+        self.min_match_score = 0
         self.max_jobs_per_user = 100  # Limit stored jobs per user
 
     async def match_jobs_to_user(

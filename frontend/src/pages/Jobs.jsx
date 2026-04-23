@@ -106,14 +106,15 @@ function Jobs() {
       setError(null);
 
       const result = await post('/jobs/scan');
+      // The scan endpoint only returns after commit, so jobs are guaranteed
+      // to be queryable — no need for a timeout fudge. Await the refresh
+      // so the banner and the list update together.
+      await fetchJobs();
       setScanMessage(
         result.jobs_found > 0
           ? `✅ Found ${result.jobs_found} new job${result.jobs_found !== 1 ? 's' : ''}!`
-          : '✅ Scan complete — no new jobs found at this time.',
+          : '✅ Scan complete — no new jobs matched your current preferences. Try broader keywords.',
       );
-
-      // Refresh the list after a short delay
-      setTimeout(() => fetchJobs(), 1500);
     } catch (err) {
       if (err.status === 429) {
         setError(err.message || 'Rate limit reached. Please wait before scanning again.');
