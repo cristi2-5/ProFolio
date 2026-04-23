@@ -24,8 +24,6 @@ from app.schemas.interview_coach import (
     InterviewPrepGenerateRequest,
     InterviewPrepResponse,
     InterviewPrepUpdateRequest,
-    AdditionalQuestionsRequest,
-    AdditionalQuestionsResponse,
     InterviewPrepListResponse,
 )
 from app.schemas.benchmark import (
@@ -33,9 +31,11 @@ from app.schemas.benchmark import (
     BenchmarkScoreResponse,
     InsufficientPeersResponse,
 )
+from app.database import async_session_factory
 from app.services.job_service import JobService
 from app.services.interview_coach_service import InterviewCoachService
 from app.services.benchmark_service import BenchmarkService, InsufficientPeersError
+from app.services.task_manager import TaskContext, get_task_manager
 from app.agents.job_scanner import JobScannerAgent
 
 router = APIRouter(prefix="/api/jobs", tags=["Jobs"])
@@ -452,7 +452,6 @@ async def generate_interview_prep_materials(
                       500 if AI generation fails.
     """
     try:
-        # Get job details
         job = await db.get(ScrapedJob, job_id)
         if not job:
             raise HTTPException(
@@ -460,23 +459,20 @@ async def generate_interview_prep_materials(
                 detail="Job not found",
             )
 
-        # Generate interview prep materials
         prep_materials = await interview_coach_service.generate_interview_prep_materials(
             user=current_user,
             job=job,
             db=db,
             include_user_background=request.include_user_background,
+            technical_count=request.technical_count,
+            behavioral_count=request.behavioral_count,
         )
 
-        # Convert to response model
-        response_data = prep_materials.copy()
-        response_data.update({
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "job_title": job.job_title,
-            "company_name": job.company_name,
-        })
-
-        return InterviewPrepResponse(**response_data)
+        return InterviewPrepResponse(
+            **prep_materials,
+            job_title=job.job_title,
+            company_name=job.company_name,
+        )
 
     except ValueError as e:
         raise HTTPException(
@@ -489,6 +485,69 @@ async def generate_interview_prep_materials(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate interview preparation materials",
         )
+
+
+@router.post(
+    "/{job_id}/generate-interview-prep-async",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Kick off interview prep generation in the background",
+)
+async def generate_interview_prep_async(
+    job_id: str,
+    request: InterviewPrepGenerateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Start generation on a background task and return a task_id.
+
+    The client subscribes to ``GET /api/tasks/{task_id}/events`` (SSE)
+    or polls ``GET /api/tasks/{task_id}`` to receive progress and the
+    final result. This keeps the UI responsive for the 10-20 seconds
+    the LLM normally blocks.
+    """
+    job = await db.get(ScrapedJob, job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
+        )
+
+    include_background = request.include_user_background
+    technical_count = request.technical_count
+    behavioral_count = request.behavioral_count
+    user_id_str = str(current_user.id)
+
+    async def worker(ctx: TaskContext) -> dict:
+        """Run the service with its own DB session; publish progress."""
+        await ctx.progress(0.1, message="Loading profile")
+        # New session per task — the request-scoped ``db`` will be closed
+        # as soon as we return from this endpoint.
+        async with async_session_factory() as task_db:
+            # Re-fetch the row bound to the task's session.
+            task_job = await task_db.get(ScrapedJob, job_id)
+            task_user = await task_db.get(User, current_user.id)
+            if task_job is None or task_user is None:
+                raise RuntimeError("Job or user disappeared before task could start")
+
+            await ctx.progress(0.25, message="Extracting technologies")
+            materials = await interview_coach_service.generate_interview_prep_materials(
+                user=task_user,
+                job=task_job,
+                db=task_db,
+                include_user_background=include_background,
+                technical_count=technical_count,
+                behavioral_count=behavioral_count,
+            )
+            await ctx.progress(0.95, message="Finalising")
+            return {
+                **materials,
+                "job_title": task_job.job_title,
+                "company_name": task_job.company_name,
+            }
+
+    task_id = await get_task_manager().submit(
+        owner_user_id=user_id_str, worker=worker
+    )
+    return {"task_id": task_id, "status": "pending"}
 
 
 @router.get(
@@ -516,7 +575,6 @@ async def get_interview_prep_materials(
                       403 if user doesn't have access.
     """
     try:
-        # Get job details
         job = await db.get(ScrapedJob, job_id)
         if not job:
             raise HTTPException(
@@ -524,7 +582,6 @@ async def get_interview_prep_materials(
                 detail="Job not found",
             )
 
-        # Get prep materials
         prep_materials = await interview_coach_service.get_interview_prep_materials(
             user=current_user,
             job_id=job_id,
@@ -537,14 +594,12 @@ async def get_interview_prep_materials(
                 detail="No interview preparation materials found for this job",
             )
 
-        # Convert to response model
-        response_data = prep_materials.copy()
-        response_data.update({
-            "generated_at": response_data.get("generated_at", datetime.now(timezone.utc).isoformat()),
-            "job_title": job.job_title,
-            "company_name": job.company_name,
-        })
-
+        response_data = dict(prep_materials)
+        response_data.setdefault(
+            "generated_at", datetime.now(timezone.utc).isoformat()
+        )
+        response_data["job_title"] = job.job_title
+        response_data["company_name"] = job.company_name
         return InterviewPrepResponse(**response_data)
 
     except ValueError as e:
@@ -590,7 +645,6 @@ async def update_interview_prep_materials(
                       403 if user doesn't have access.
     """
     try:
-        # Get job details
         job = await db.get(ScrapedJob, job_id)
         if not job:
             raise HTTPException(
@@ -598,10 +652,8 @@ async def update_interview_prep_materials(
                 detail="Job not found",
             )
 
-        # Convert Pydantic model to dict, excluding None values
-        updates_dict = updates.dict(exclude_none=True)
+        updates_dict = updates.model_dump(exclude_none=True)
 
-        # Update prep materials
         updated_materials = await interview_coach_service.update_interview_prep_materials(
             user=current_user,
             job_id=job_id,
@@ -609,14 +661,12 @@ async def update_interview_prep_materials(
             db=db,
         )
 
-        # Convert to response model
-        response_data = updated_materials.copy()
-        response_data.update({
-            "generated_at": response_data.get("generated_at", datetime.now(timezone.utc).isoformat()),
-            "job_title": job.job_title,
-            "company_name": job.company_name,
-        })
-
+        response_data = dict(updated_materials)
+        response_data.setdefault(
+            "generated_at", datetime.now(timezone.utc).isoformat()
+        )
+        response_data["job_title"] = job.job_title
+        response_data["company_name"] = job.company_name
         return InterviewPrepResponse(**response_data)
 
     except ValueError as e:
@@ -629,71 +679,6 @@ async def update_interview_prep_materials(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update interview preparation materials",
-        )
-
-
-@router.post(
-    "/{job_id}/generate-additional-questions",
-    response_model=AdditionalQuestionsResponse,
-    summary="Generate additional interview questions of a specific type",
-)
-async def generate_additional_questions(
-    job_id: str,
-    request: AdditionalQuestionsRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> AdditionalQuestionsResponse:
-    """Generate additional interview questions of a specific type.
-
-    Useful for expanding existing preparation materials with more
-    technical, behavioral, or company-specific questions.
-
-    Args:
-        job_id: UUID of the target job.
-        request: Question type and count preferences.
-        current_user: Authenticated user (injected).
-        db: Database session (injected).
-
-    Returns:
-        AdditionalQuestionsResponse: Additional questions of requested type.
-
-    Raises:
-        HTTPException: 404 if job not found, 400 if invalid question type.
-    """
-    try:
-        # Get job details
-        job = await db.get(ScrapedJob, job_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found",
-            )
-
-        # Generate additional questions
-        additional_content = await interview_coach_service.generate_additional_questions(
-            user=current_user,
-            job=job,
-            question_type=request.question_type,
-            count=request.count,
-            db=db,
-        )
-
-        return AdditionalQuestionsResponse(
-            question_type=request.question_type,
-            questions=additional_content[f"additional_{request.question_type}_questions"],
-            generated_at=datetime.now(timezone.utc).isoformat(),
-        )
-
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
-    except Exception as e:
-        logger.error(f"Failed to generate additional questions for job {job_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate additional questions",
         )
 
 
@@ -775,7 +760,6 @@ async def calculate_benchmark_score(
                       422 if insufficient peers, 500 if calculation fails.
     """
     try:
-        # Get job details
         job = await db.get(ScrapedJob, job_id)
         if not job:
             raise HTTPException(
@@ -783,103 +767,74 @@ async def calculate_benchmark_score(
                 detail="Job not found",
             )
 
-        # Calculate benchmark score using service
-        benchmark_score = await benchmark_service.calculate_benchmark_score(
+        result = await benchmark_service.calculate_benchmark_score(
             user=current_user,
             job=job,
             db=db,
         )
 
-        # Extract required skills for response
-        job_requirements = benchmark_service._extract_job_requirements(job)
-        user_profile = await benchmark_service._get_user_profile(current_user, db)
-        user_skills = benchmark_service._extract_user_skills(user_profile) if user_profile else []
-
-        # Find matched skills
-        matched_skills = []
-        if user_skills and job_requirements["required_skills"]:
-            user_skills_lower = [skill.lower() for skill in user_skills]
-            matched_skills = [
-                skill for skill in job_requirements["required_skills"]
-                if skill.lower() in user_skills_lower
-            ]
-
-        # Calculate match score for response
-        match_score = benchmark_service._calculate_match_score(
-            user_profile, job_requirements, current_user.seniority_level
-        ) if user_profile else 0
-
-        # Convert skill gaps to response format
-        skill_gaps = []
-        if benchmark_score.benchmark_data and benchmark_score.benchmark_data.get("skill_gaps"):
-            for gap in benchmark_score.benchmark_data["skill_gaps"]:
-                skill_gaps.append({
-                    "skill": gap["skill"],
-                    "priority": gap["priority"],
-                    "peer_frequency": gap["peer_frequency"],
-                    "recommendation": gap["recommendation"],
-                })
-
-        # Create peer group metadata
-        peer_group_metadata = {
-            "size": benchmark_score.benchmark_data.get("peer_group_size", 0),
-            "seniority_level": current_user.seniority_level,
-            "niche_filters": [],  # Could extract from benchmark_data if needed
-            "benchmark_opt_in_required": True,
-            "min_peers_required": benchmark_service.MINIMUM_PEER_COUNT,
-        }
-
         return BenchmarkScoreResponse(
-            id=str(benchmark_score.id),
+            id=result.benchmark_id,
             user_id=str(current_user.id),
             job_id=str(job.id),
             job_title=job.job_title,
             company_name=job.company_name,
-            score=benchmark_score.score,
-            match_score=match_score,
-            peer_group=peer_group_metadata,
-            skill_gaps=skill_gaps,
-            matched_skills=matched_skills,
-            total_skills_analyzed=len(user_skills),
-            calculated_at=benchmark_score.calculated_at,
+            score=result.score,
+            user_match_score=result.user_match_score,
+            peer_mean_match_score=result.peer_mean_match_score,
+            peer_group={
+                "size": result.peer_group_size,
+                "seniority_level": result.seniority_level,
+                "niche": result.niche,
+                "min_peers_required": benchmark_service.MINIMUM_PEER_COUNT,
+                "benchmark_opt_in_required": True,
+            },
+            matched_skills=result.matched_skills,
+            skill_gaps=[
+                {
+                    "skill": item["skill"],
+                    "priority": item["priority"],
+                    "peer_frequency": item["peer_frequency"],
+                    "recommendation": item["recommendation"],
+                }
+                for item in result.missing_skills
+            ],
+            recommended_keywords=result.recommended_keywords,
+            calculated_at=result.calculated_at,
             privacy_compliant=True,
         )
 
-    except InsufficientPeersError as e:
-        # Extract peer count from error message
-        import re
-        match = re.search(r'(\d+) users found', str(e))
-        peers_found = int(match.group(1)) if match else 0
-
+    except InsufficientPeersError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "error": "insufficient_peers",
-                "message": str(e),
-                "peers_found": peers_found,
-                "peers_required": benchmark_service.MINIMUM_PEER_COUNT,
+                "message": str(exc),
+                "peers_found": exc.peers_found,
+                "peers_required": exc.peers_required,
                 "suggestions": [
-                    "Wait for more users to join the platform",
-                    "Try again later when more users have opted into benchmarking",
-                    f"Consider expanding to a broader seniority level if you're {current_user.seniority_level}",
-                ]
-            }
+                    "Wait for more users at your seniority/niche to opt in",
+                    "Double-check your seniority level and niche in account settings",
+                ],
+            },
         )
 
-    except ValueError as e:
-        if "not opted into benchmarking" in str(e):
+    except ValueError as exc:
+        if "not opted into benchmarking" in str(exc):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="You must opt into benchmarking to calculate competitive scores. Update your preferences in account settings.",
+                detail=(
+                    "You must opt into benchmarking to calculate competitive scores. "
+                    "Update your preferences in account settings."
+                ),
             )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e),
-            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
 
-    except Exception as e:
-        logger.error(f"Failed to calculate benchmark for job {job_id}: {e}")
+    except Exception as exc:
+        logger.error(f"Failed to calculate benchmark for job {job_id}: {exc}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to calculate benchmark score. Please try again later.",

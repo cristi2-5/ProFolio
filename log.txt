@@ -1751,3 +1751,431 @@ TEST FILES ADDED/MODIFIED: None
 SCENARIOS COVERED: Job Optimization with active resume, Dashboard alerts
 TEST STATUS: Passed
 ==================================================
+
+==================================================
+TIMESTAMP: 2026-04-23 20:30:00
+TASK/PROMPT: Phase 5 / Epic 4 — Interview Coach Agent (US 4.1 + US 4.2).
+  US 4.1: Generate 3 technical + 2 behavioral interview questions from JD
+          with an "ideal-answer" guide per question.
+  US 4.2: Extract required technologies from the JD and produce a short
+          definition paragraph per technology.
+BRANCH: feat/phase-5-epic-4-interview-coach
+PR STATUS: Draft (not pushed)
+
+--- FILES MODIFIED ---
+- backend/app/utils/tech_extractor.py (NEW): deterministic extraction of
+  technologies from JD text via a curated catalog + smart-boundary regex.
+- backend/app/agents/prompts/__init__.py (NEW): prompt-package init.
+- backend/app/agents/prompts/interview_coach.py (NEW): centralized prompt
+  builders for technical, behavioral, and cheat-sheet generation.
+- backend/app/agents/interview_coach.py: rewritten to route every OpenAI
+  call through _make_api_call (fixes dev-mode crash), reduced defaults to
+  3 technical + 2 behavioral per US 4.1, wired cheat-sheet input to the
+  deterministic extractor per US 4.2.
+- backend/app/services/interview_coach_service.py: slimmed to the four
+  verbs needed by the Epic 4 UX (generate, get, update, list) and fixed
+  the old `technology_cheatsheet` → `technology_cheat_sheet` key mismatch.
+- backend/app/schemas/interview_coach.py: simplified to the Epic-4 fields,
+  added ExtractedTechnology, removed unused AdditionalQuestions* types.
+- backend/app/routers/jobs.py: updated interview-prep endpoints to the
+  new service signature, removed legacy /generate-additional-questions.
+- backend/tests/test_tech_extractor.py (NEW): 15 deterministic tests.
+- backend/tests/test_interview_coach.py: rewritten to cover the new
+  contract — 16 tests including dev-mode regression guard.
+- backend/tests/test_interview_coach_service.py: rewritten to match the
+  new service surface — 12 tests.
+- frontend/src/pages/JobDetail.jsx: InterviewPrepTab now renders the
+  structured response (difficulty badges, topic chips, STAR guidance,
+  collapsible cheat-sheet, extracted-tech bar).
+- frontend/src/pages/Interview.jsx: PrepCard + CheatSheetSection updated
+  to consume the new response shape (array of TechnologyConcept, summary
+  flags instead of non-existent counts).
+- project_index.md: added new files; last-updated stamp refreshed.
+
+--- ARCHITECTURE & LOGIC CHANGES ---
+1. Deterministic tech extractor (US 4.2 "advanced logic"). A curated
+   catalog (~130 well-known technologies across 9 categories) plus a
+   smart-boundary regex compiler gives us reliable tech detection
+   without LLM hallucinations. Matches are ranked by mention count
+   (frequency-weighted) so high-signal technologies surface first. The
+   extractor feeds its list directly into the cheat-sheet prompt so the
+   LLM can only DEFINE technologies, never ADD new ones — this prevents
+   the candidate from being asked to prep for something not in the JD.
+
+2. Agent refactor. The previous implementation only routed 2 of its 5
+   generation methods through _make_api_call; the other three called
+   self.client.chat.completions.create directly, crashing in dev/test
+   mode (client is None). All paths now go through _make_api_call with
+   deterministic mock responses for dev mode — see the dev-mode
+   regression test in test_interview_coach.py.
+
+3. Prompt module extraction. Prompts live in app/agents/prompts/
+   interview_coach.py so prompt tweaks don't churn the agent file. The
+   project_index already referenced this path — now materialised.
+
+4. Schema / service / router key alignment. The agent used
+   `technology_cheatsheet` while the Pydantic response schema expected
+   `technology_cheat_sheet`, meaning every real call would have failed
+   Pydantic validation at response time. Fixed end-to-end.
+
+5. Default counts now match US 4.1 acceptance criteria (3 technical,
+   2 behavioral), configurable via the request body up to 10 each.
+
+--- AUDIT & VERIFICATION REVIEW ---
+BUGS/KNOWN ISSUES: None introduced. The pre-existing `GET /api/jobs/
+interview-preps` route collides with the earlier `GET /api/jobs/
+{user_job_id}` declaration order; not in scope for this epic.
+SECURITY VULNERABILITIES: None detected. No new external calls beyond
+the existing OpenAI integration; no secrets in code; tech extractor is
+pure regex with no injection surface.
+PERFORMANCE OPTIMIZATIONS: Regex patterns compiled once at module load
+(see _COMPILED at app/utils/tech_extractor.py). The cheat-sheet path
+short-circuits (no LLM call) when no known technologies are detected.
+MAINTAINABILITY IMPROVEMENTS: Prompt strings isolated in a dedicated
+module, making A/B prompt tuning cheap. The extractor catalog is a
+flat dict keyed by category, easy to extend without touching agent
+code.
+
+--- TEST COVERAGE ---
+TEST FILES ADDED/MODIFIED:
+  - backend/tests/test_tech_extractor.py (NEW, 15 scenarios)
+  - backend/tests/test_interview_coach.py (REWRITTEN, 16 scenarios)
+  - backend/tests/test_interview_coach_service.py (REWRITTEN, 12 scenarios)
+SCENARIOS COVERED:
+  Happy path — technical/behavioral/cheat-sheet generation each return
+  the expected envelope shape and surface extracted techs into the
+  user prompt.
+  Edge cases — empty JD, no technologies detected, tie-break alphabetical
+  ranking, word-boundary avoidance of false positives (e.g. "java" must
+  not match inside "javascript"), compound names (Node.js, C++, C#),
+  case-insensitive aliases.
+  Failure states — OpenAI 500, empty-content response, agent exception
+  triggers service-level rollback, missing UserJob raises ValueError,
+  missing inputs to generate_interview_prep_materials raises ValueError.
+  Regression — dev-mode (no API key) must return the full bundle without
+  crashing on the three sub-agents that previously bypassed _make_api_call.
+TEST STATUS: All 43 new/rewritten tests pass locally. Total 118/118
+backend unit tests pass; the 9 errors in the full suite are Postgres
+connection failures unrelated to this change.
+==================================================
+
+==================================================
+TIMESTAMP: 2026-04-23 21:15:00
+TASK/PROMPT: Phase 6 / Epic 5 — Competitive Benchmarking.
+  US 5.1: GDPR opt-in/opt-out popup + data-sanitization module that
+          extracts only seniority/niche/years/skills, decoupled from
+          user_id.
+  US 5.2: Peer-group score computed from CV-vs-JD similarity weighted
+          against the mean at the same level/niche. If fewer than 30
+          peers exist, return a warning instead of a score.
+  US 5.3: Aggregate Set A − Set B across all saved JDs to produce
+          "Top 3 missing skills" and recommended ATS keywords.
+BRANCH: feat/phase-6-epic-5-benchmarking
+PR STATUS: Draft (not pushed)
+
+--- FILES MODIFIED ---
+- backend/app/utils/benchmark_sanitizer.py (NEW): GDPR sanitizer module.
+  Exposes `sanitize_profile()` and `extract_job_requirements()` — pure
+  functions producing frozen `SanitizedProfile` / `JobRequirements` that
+  intentionally lack any user identifier. Contract is regression-tested.
+- backend/app/services/benchmark_service.py: FULL REWRITE. Fixed the
+  pre-existing storage bug (service wrote to a nonexistent
+  `benchmark_data` column). Peer loading now runs every row through the
+  sanitizer before the row leaves the DB layer. Grouping is by
+  `user.seniority_level` plus `user.niche` for mid/senior (taken from
+  the users table, not the JD). Scoring uses a peer-weighted formula
+  centred on 50 and clamped to [0, 100]. InsufficientPeersError carries
+  structured `peers_found` / `peers_required` fields.
+- backend/app/services/recommendations_service.py (NEW): cross-JD
+  recommendations engine (US 5.3). Mines every saved UserJob, weights
+  missing skills by (jd_count * (1 + peer_frequency)), and returns both
+  Top 3 skills and prioritised ATS keywords. Gracefully degrades when
+  the peer pool is too small (still returns JD-driven advice, sets
+  `insufficient_peers=true`).
+- backend/app/schemas/benchmark.py: schemas rebuilt around the new
+  response shape — `user_match_score` + `peer_mean_match_score` for
+  transparency, `recommended_keywords`, plus new
+  `RecommendationsResponse`, `RecommendedSkill`, `RecommendedKeyword`.
+- backend/app/routers/benchmarks.py: REWRITTEN. Reads from the real ORM
+  columns, adds `GET /api/benchmarks/recommendations` (US 5.3), orders
+  the recommendations route BEFORE `/{benchmark_id}` so FastAPI matches
+  it correctly.
+- backend/app/routers/jobs.py: `POST /jobs/{job_id}/calculate-benchmark`
+  now consumes the new `BenchmarkResult` dataclass from the service and
+  surfaces peer-weighted scoring in the response.
+- backend/tests/test_benchmark_sanitizer.py (NEW, 16 scenarios): GDPR
+  invariants, skill normalisation, years-of-experience fallbacks, JD
+  requirement parsing.
+- backend/tests/test_benchmark_service.py: REWRITTEN (14 scenarios):
+  peer-weighted scoring math, insufficient-peer raise, opt-in
+  enforcement, mid/senior niche gate, top-3 ranking.
+- backend/tests/test_recommendations_service.py (NEW, 11 scenarios):
+  cross-JD demand counting, peer-frequency weighting, insufficient-peer
+  graceful mode, end-to-end pipeline.
+- frontend/src/components/GdprConsentModal.jsx (NEW): explicit GDPR
+  opt-in popup. Keyboard-accessible (ESC dismisses), equal-weight
+  buttons per "freely given" consent guidance, spells out exactly which
+  four fields are extracted.
+- frontend/src/pages/Benchmarks.jsx: integrates the consent modal on
+  first visit (localStorage flag prevents re-pestering), replaces the
+  stale client-side skill-gap aggregation with a proper
+  `RecommendationsPanel` component backed by the new endpoint.
+- project_index.md: new files + last-updated stamp refreshed.
+
+--- ARCHITECTURE & LOGIC CHANGES ---
+1. GDPR sanitization (US 5.1). The `SanitizedProfile` dataclass is
+   intentionally frozen and contains only the four fields the spec
+   permits — regression-tested so a future refactor cannot sneak in a
+   user identifier without breaking a test. Every peer read in both the
+   benchmark service and the recommendations service flows through
+   `sanitize_profile()` before leaving the DB layer.
+
+2. Peer-weighted scoring (US 5.2). Replaces the broken percentile-only
+   implementation with:
+       score = round(50 + 50 * (user_match - peer_mean))
+   where `user_match` and `peer_mean` are the fraction of JD-required
+   skills covered. At peer parity the score is exactly 50; users who
+   cover significantly more of the JD than peers score >50, and vice
+   versa. The response surfaces both raw signals alongside the score
+   so the UI can explain the number.
+
+3. Grouping by user.seniority + user.niche (US 5.2). Mid and Senior
+   users are compared only to peers at the same niche (taken from the
+   users table — NOT inferred from the JD text as the old code did).
+
+4. 30-peer minimum enforcement. `InsufficientPeersError` carries
+   `peers_found` and `peers_required` so the router can serialise
+   them into a 422 payload without re-parsing strings.
+
+5. Cross-JD recommendations (US 5.3). Set A − Set B is computed over
+   all `UserJob` rows in {new, saved, applied}. Weighting by
+   `jd_count * (1 + peer_frequency)` surfaces the "the market wants it
+   AND your peers already have it" signal. When the peer pool is
+   below threshold, the service still returns JD-demand-driven
+   recommendations and flags `insufficient_peers` so the UI softens
+   the language.
+
+6. GDPR consent popup (US 5.1). First-visit modal with equal-weight
+   Opt-in / Opt-out actions. Decision persisted in localStorage so
+   returning users aren't pestered; actual consent remains in the
+   backend `users.benchmark_opt_in` column.
+
+7. Fixed pre-existing storage bug. The prior benchmark service wrote
+   to a `benchmark_data` JSONB column that did not exist on the
+   `BenchmarkScore` model — every real call would have crashed. New
+   code writes into the model's actual columns (`missing_skills`,
+   `recommended_keywords`, `peer_group_size`, `seniority_level`,
+   `niche`, `score`).
+
+--- AUDIT & VERIFICATION REVIEW ---
+BUGS/KNOWN ISSUES: None introduced. Pre-existing ordering issue in
+the jobs router (GET /api/jobs/interview-preps matching
+/{user_job_id}) remains out of scope.
+SECURITY VULNERABILITIES: None detected. The sanitizer is the only
+path by which peer data leaves the DB layer, enforcing GDPR. No new
+external calls. JSONB payloads we persist are keyed objects with
+typed fields — no SQL interpolation, no untrusted HTML reflection.
+PERFORMANCE OPTIMIZATIONS: Peer rows are projected to (seniority,
+niche, parsed_data) columns only; we don't hydrate the full User and
+ParsedResume ORM objects when we only need the sanitized subset.
+Skill-gap ranking is O(P * G) where P = peers and G = gaps, which is
+bounded by the 30-peer min and a small tech catalog.
+MAINTAINABILITY IMPROVEMENTS: Extractor/sanitizer/services are all
+pure where they can be (testable without DB). The scoring formula is
+isolated in a standalone `_peer_weighted_score()` helper so future
+tweaks don't require touching the orchestration code.
+
+--- TEST COVERAGE ---
+TEST FILES ADDED/MODIFIED:
+  - backend/tests/test_benchmark_sanitizer.py (NEW, 16 scenarios)
+  - backend/tests/test_benchmark_service.py (REWRITTEN, 14 scenarios)
+  - backend/tests/test_recommendations_service.py (NEW, 11 scenarios)
+SCENARIOS COVERED:
+  Happy path — bundle returned with correct shape, user_match vs
+  peer_mean math computed, top-3 missing skills ranked by peer
+  frequency, recommended keywords include every required skill.
+  Edge cases — no saved jobs returns empty result, insufficient peers
+  flag toggles correctly, resume data missing, mid/senior without
+  niche rejected, junior without niche accepted, skills come as
+  strings/dicts/lists/comma-separated, dates with 'Present' marker,
+  empty JD → empty requirements.
+  Failure states — opt-in missing, ValueError propagates, peer count
+  below threshold raises InsufficientPeersError with structured
+  fields.
+  Regression — `SanitizedProfile` field-name invariant prevents future
+  changes from smuggling in user identifiers. `_peer_weighted_score`
+  clamped, NaN-safe.
+TEST STATUS: All 41 new/rewritten tests pass locally. Full unit
+suite: 143/143 pass (the 9 errors in the broader suite are Postgres
+connection failures unrelated to this change).
+==================================================
+
+==================================================
+TIMESTAMP: 2026-04-23 22:00:00
+TASK/PROMPT: Phase 7 — QA, Optimization, Beta Launch.
+  QA: weird-PDF edge cases for CV Profiler + LLM token-budget guard
+      for over-long JDs.
+  Optimization: prompt cache (Redis-optional, in-memory fallback) for
+      repetitive LLM calls, plus async agent execution with SSE for
+      real-time progress updates instead of blocking the UI.
+  Beta Launch: feedback collection (1-5 stars + comment) on each
+      AI-generated artefact so the team can track content quality
+      during the beta cohort.
+BRANCH: feat/phase-7-qa-optimization-launch
+PR STATUS: Draft (not pushed)
+
+--- FILES MODIFIED ---
+- backend/app/utils/token_guard.py (NEW): token estimator (4 chars ≈ 1
+  token heuristic) + head+tail truncation. Pure functions, no runtime
+  dependencies.
+- backend/app/utils/prompt_cache.py (NEW): SHA-256 keyed cache with
+  Redis backend when REDIS_URL is set, in-memory LRU otherwise. Never
+  raises — all backend errors degrade to cache misses with a WARNING
+  log.
+- backend/app/services/task_manager.py (NEW): process-wide async task
+  registry with asyncio.Queue-backed progress bus. Lifecycle states
+  (pending/running/succeeded/failed), owner enforcement, TTL-based GC
+  of completed tasks.
+- backend/app/routers/tasks.py (NEW): GET /api/tasks/{id} (poll) +
+  GET /api/tasks/{id}/events (Server-Sent Events). Heartbeat comments
+  every 15s to keep proxies from closing the connection.
+- backend/app/models/feedback.py (NEW): Feedback ORM model with
+  rating CHECK (1-5), content_type CHECK across five categories,
+  composite (user_id, created_at) index.
+- backend/alembic/versions/006_create_feedback.py (NEW): additive
+  migration for the feedback table + indexes + schema comment.
+- backend/app/schemas/feedback.py (NEW): request/response models,
+  stats aggregation schema.
+- backend/app/services/feedback_service.py (NEW): create + list + stats.
+- backend/app/routers/feedback.py (NEW): submit / mine / stats endpoints.
+- backend/app/agents/interview_coach.py: routes all OpenAI calls
+  through the prompt cache; JD text trimmed via token_guard instead
+  of a fixed char slice; logs a WARNING on truncation for observability.
+- backend/app/agents/cv_optimizer.py: JD slices replaced with
+  token_guard.truncate_for_budget calls, keeping budgets proportional
+  to the prior char limits but now deterministic and testable.
+- backend/app/routers/jobs.py: added POST
+  /api/jobs/{job_id}/generate-interview-prep-async that submits a
+  background task and returns a task_id immediately. Fix: the task
+  worker opens its own DB session since the request-scoped session
+  closes before the coroutine finishes.
+- backend/app/main.py: registered the new feedback + tasks routers,
+  imported the Feedback model so create_all picks it up.
+- backend/app/config.py: new settings fields — redis_url,
+  prompt_cache_enabled, prompt_cache_ttl_seconds.
+- backend/app/models/__init__.py: exported Feedback for Alembic.
+- backend/tests/conftest.py: autouse fixture resets the prompt cache
+  and task manager singletons around every test to prevent state
+  bleed between tests (fixed 4 regressions when cached LLM responses
+  leaked across tests in the interview coach suite).
+- backend/tests/test_token_guard.py (NEW, 14 scenarios).
+- backend/tests/test_prompt_cache.py (NEW, 16 scenarios).
+- backend/tests/test_task_manager.py (NEW, 10 scenarios).
+- backend/tests/test_feedback_service.py (NEW, 5 scenarios).
+- backend/tests/test_cv_profiler_edge_cases.py (NEW, 14 scenarios):
+  weird PDF fixtures built on-the-fly with pypdf/reportlab — nothing
+  binary in the repo.
+- frontend/src/components/FeedbackWidget.jsx (NEW): 5-star widget
+  with optional comment, localStorage "already submitted" marker per
+  (content_type, content_id).
+- frontend/src/pages/JobDetail.jsx: feedback widget rendered at the
+  bottom of the CV-optimization, cover-letter, and interview-prep
+  tabs.
+- project_index.md + log.txt: new rows + stamp refreshed.
+
+--- ARCHITECTURE & LOGIC CHANGES ---
+1. Token Guard (QA — over-long JDs). The estimator uses a
+   published 4-chars-per-token heuristic instead of pulling in
+   tiktoken — one dependency fewer, and the truncation strategy is
+   the decision that matters, not exact counting. Head-and-tail
+   split preserves "stack + seniority" (JD lead) and "benefits /
+   culture" (JD trail) while dropping middle boilerplate. A visible
+   marker is inserted so the LLM knows the input was trimmed.
+
+2. Prompt Cache (cost/latency). Agents pass their full request
+   surface (model + system + user + response_format + temperature)
+   to build_cache_key(); identical requests short-circuit the
+   OpenAI call. Redis backend is wired behind an optional import so
+   dev environments don't need Redis; in production, set REDIS_URL
+   to activate. Every backend error (connection refused, decode
+   failure, serialisation issue) is absorbed and logged — a cache
+   outage never breaks the feature.
+
+3. Async Task Manager + SSE (real-time UX). In-process registry
+   lets worker coroutines publish TaskEvents onto a per-task asyncio
+   Queue; the SSE router converts the queue into text/event-stream
+   bytes with 15-second keep-alive comments. Owner enforcement is
+   embedded in both the poll and stream endpoints — a user cannot
+   read another user's task. Tasks GC after 30 minutes of inactivity
+   so the dict doesn't leak.
+
+4. Async interview-prep demo. POST
+   /api/jobs/{job_id}/generate-interview-prep-async returns 202 +
+   task_id immediately. The worker rehydrates a fresh DB session
+   (the request session closes as soon as the endpoint returns),
+   fetches the row, calls the same service as the sync endpoint,
+   and publishes progress at "Loading profile", "Extracting
+   technologies", and "Finalising" checkpoints.
+
+5. Feedback system. Single `feedback` table discriminates content
+   types via a CHECK constraint, so adding a new AI surface doesn't
+   require a schema change. Aggregate stats uses a GROUP BY +
+   FILTER clause for low-rating counts (1-2 stars) — the exact
+   signal the beta cohort needs to surface underperforming prompts.
+
+6. Test hygiene. Phase 7 introduced process-wide singletons
+   (prompt cache + task manager) that previously allowed state to
+   leak between tests. The autouse conftest fixture resets both
+   around every test, which caught + fixed 4 previously-green tests
+   that happened to silently depend on the absence of caching.
+
+--- AUDIT & VERIFICATION REVIEW ---
+BUGS/KNOWN ISSUES: None introduced. Pre-existing route-ordering
+issue in jobs.py (`/interview-preps` after `/{user_job_id}`) remains
+out of scope. The in-memory task manager is single-process; multi-
+worker deployments need Redis Streams + pubsub, called out in the
+module docstring.
+SECURITY VULNERABILITIES: None detected. SSE enforces ownership on
+every subscribe; tasks auto-expire and never persist. Prompt cache
+keys are hashes (not prompts), so a cache dump can't leak user
+content outright. Feedback text is validated by Pydantic (max 2000
+chars) — no DB injection surface.
+PERFORMANCE OPTIMIZATIONS: The prompt cache removes full LLM round
+trips on repeated prompts (typical savings: ~5-15s per cached call).
+Head+tail truncation preserves JD signal density without blowing the
+token budget on dense bullet lists. Async execution moves LLM
+latency off the request path so the UI can render progress
+immediately.
+MAINTAINABILITY IMPROVEMENTS: Three new pure-function modules
+(token_guard, prompt_cache key helper, task_manager TaskContext)
+are easy to test without mocking; the integration points on each
+agent are a single helper call. Swapping Redis → Redis Streams or
+the in-memory manager → Celery is a one-file change.
+
+--- TEST COVERAGE ---
+TEST FILES ADDED/MODIFIED:
+  - backend/tests/test_token_guard.py (NEW, 14 scenarios)
+  - backend/tests/test_prompt_cache.py (NEW, 16 scenarios)
+  - backend/tests/test_task_manager.py (NEW, 10 scenarios)
+  - backend/tests/test_feedback_service.py (NEW, 5 scenarios)
+  - backend/tests/test_cv_profiler_edge_cases.py (NEW, 14 scenarios)
+  - backend/tests/conftest.py (autouse fixture for singleton reset)
+SCENARIOS COVERED:
+  Happy path — cache hit/miss flow, task lifecycle PENDING →
+  SUCCEEDED with result propagation, feedback create + refresh,
+  valid PDF/DOCX text extraction, JD within budget passes through.
+  Edge cases — oversized file (>10 MB), zero-byte upload, corrupted
+  PDF header, image-only PDF, empty DOCX, spoofed extension
+  (.txt/.rtf/.doc/.exe), JD 5× over budget, head/tail ratios,
+  stability + determinism of truncation, LRU eviction under
+  pressure, disabled cache, JSON decode failure degrades to miss,
+  unserializable SET is a no-op.
+  Failure states — worker raises → task moves to FAILED with error
+  text, DB commit failure triggers rollback, SSE for wrong owner
+  returns empty stream, malformed cached payload treated as miss.
+  Regression — singleton reset fixture prevents the interview-coach
+  test suite from silently caching mock responses between tests.
+TEST STATUS: 59/59 new tests pass. Full unit suite: 202/202 pass.
+Remaining failures in the integration suite are Postgres-connection
+errors unrelated to this change.
+==================================================

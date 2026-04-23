@@ -57,6 +57,11 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+    environment:
+      # vite.config.js reads VITE_API_TARGET; default is 127.0.0.1:8000
+      # so local dev works, and inside Compose we point at the backend
+      # service name instead.
+      VITE_API_TARGET: http://backend:8000
     volumes:
       - ./frontend:/app  # Hot reload for development
       - /app/node_modules  # Preserve node_modules in container

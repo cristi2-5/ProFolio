@@ -9,6 +9,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { get, patch } from '../api/client';
+import GdprConsentModal from '../components/GdprConsentModal';
+
+const CONSENT_SEEN_STORAGE_KEY = 'profolio.benchmark.consent_seen';
 
 /**
  * Benchmarks page component.
@@ -28,28 +31,42 @@ function Benchmarks() {
 
   const [loading, setLoading] = useState(true);
   const [benchmarks, setBenchmarks] = useState([]);
-  const [optInStatus, setOptInStatus] = useState(false);
+  const [recommendations, setRecommendations] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState(null);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+
+  // Opt-in status lives in AuthContext (refreshed by login/register/updateUser).
+  // Deriving it here instead of holding a duplicate state variable keeps the
+  // two views from drifting if the context updates but the page doesn't.
+  const optInStatus = user?.benchmark_opt_in ?? false;
 
   /**
-   * Fetch user benchmarks and opt-in status.
+   * Fetch user benchmarks and (if opted in) recommendations.
    */
   const fetchBenchmarks = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch opt-in status
       const optInData = await get('/auth/benchmark-opt-in');
-      setOptInStatus(optInData.benchmark_opt_in);
+      updateUser({ benchmark_opt_in: optInData.benchmark_opt_in });
 
-      // Fetch benchmarks if opted in
+      const consentSeen = localStorage.getItem(CONSENT_SEEN_STORAGE_KEY) === '1';
+      if (!optInData.benchmark_opt_in && !consentSeen) {
+        setShowConsentModal(true);
+      }
+
       if (optInData.benchmark_opt_in) {
-        const benchmarkData = await get('/benchmarks');
+        const [benchmarkData, recommendationData] = await Promise.all([
+          get('/benchmarks'),
+          get('/benchmarks/recommendations').catch(() => null),
+        ]);
         setBenchmarks(benchmarkData.benchmarks || []);
+        setRecommendations(recommendationData);
       } else {
         setBenchmarks([]);
+        setRecommendations(null);
       }
 
     } catch (err) {
@@ -63,24 +80,20 @@ function Benchmarks() {
   /**
    * Update benchmark opt-in status.
    */
-  const updateOptInStatus = async (status) => {
+  const updateOptInStatus = async (nextStatus) => {
     try {
       setUpdating(true);
       setError(null);
 
-      await patch('/auth/benchmark-opt-in', { benchmark_opt_in: status });
-      setOptInStatus(status);
+      await patch('/auth/benchmark-opt-in', { benchmark_opt_in: nextStatus });
+      updateUser({ benchmark_opt_in: nextStatus });
+      localStorage.setItem(CONSENT_SEEN_STORAGE_KEY, '1');
 
-      // Update user context
-      updateUser({ benchmark_opt_in: status });
-
-      // Refresh benchmarks if enabling
-      if (status) {
-        setTimeout(() => {
-          fetchBenchmarks();
-        }, 1000);
+      if (nextStatus) {
+        await fetchBenchmarks();
       } else {
         setBenchmarks([]);
+        setRecommendations(null);
       }
 
     } catch (err) {
@@ -88,6 +101,16 @@ function Benchmarks() {
     } finally {
       setUpdating(false);
     }
+  };
+
+  const handleConsentAccept = async () => {
+    setShowConsentModal(false);
+    await updateOptInStatus(true);
+  };
+
+  const handleConsentDecline = () => {
+    setShowConsentModal(false);
+    localStorage.setItem(CONSENT_SEEN_STORAGE_KEY, '1');
   };
 
   /**
@@ -113,35 +136,6 @@ function Benchmarks() {
   };
 
   /**
-   * Get most common skill gaps across benchmarks.
-   */
-  const getTopSkillGaps = () => {
-    const skillGapCounts = {};
-
-    benchmarks.forEach(benchmark => {
-      if (benchmark.skill_gaps) {
-        benchmark.skill_gaps.forEach(gap => {
-          if (skillGapCounts[gap.skill]) {
-            skillGapCounts[gap.skill].count++;
-            skillGapCounts[gap.skill].priorities.push(gap.priority);
-          } else {
-            skillGapCounts[gap.skill] = {
-              skill: gap.skill,
-              count: 1,
-              priorities: [gap.priority],
-              recommendation: gap.recommendation,
-            };
-          }
-        });
-      }
-    });
-
-    return Object.values(skillGapCounts)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  };
-
-  /**
    * Load data on mount.
    */
   useEffect(() => {
@@ -149,7 +143,6 @@ function Benchmarks() {
   }, []);
 
   const stats = getAggregateStats();
-  const topSkillGaps = getTopSkillGaps();
 
   if (loading) {
     return (
@@ -175,6 +168,14 @@ function Benchmarks() {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: 'var(--space-6)' }}>
+      <GdprConsentModal
+        open={showConsentModal}
+        submitting={updating}
+        onOptIn={handleConsentAccept}
+        onOptOut={handleConsentDecline}
+        onDismiss={handleConsentDecline}
+      />
+
       {/* Header */}
       <div style={{ marginBottom: 'var(--space-6)' }}>
         <h1 style={{
@@ -368,72 +369,15 @@ function Benchmarks() {
             />
             <StatCard
               icon="🎯"
-              label="Skill Gaps"
-              value={topSkillGaps.length.toString()}
-              subtext="areas to improve"
+              label="Top gaps"
+              value={recommendations?.top_missing_skills?.length?.toString() || '0'}
+              subtext="across saved jobs"
               color="var(--color-warning)"
             />
           </div>
 
-          {/* Top Skill Gaps */}
-          {topSkillGaps.length > 0 && (
-            <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-              <h3 style={{
-                fontSize: 'var(--font-size-xl)',
-                fontWeight: 'var(--font-weight-bold)',
-                marginBottom: 'var(--space-4)',
-              }}>
-                Top Skill Development Opportunities
-              </h3>
-              <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-                {topSkillGaps.map((gap, index) => (
-                  <div
-                    key={gap.skill}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: 'var(--space-3)',
-                      background: 'var(--color-bg-secondary)',
-                      borderRadius: 'var(--radius-md)',
-                    }}
-                  >
-                    <div>
-                      <div style={{
-                        fontSize: 'var(--font-size-md)',
-                        fontWeight: 'var(--font-weight-medium)',
-                        marginBottom: 'var(--space-1)',
-                        textTransform: 'capitalize',
-                      }}>
-                        {gap.skill}
-                      </div>
-                      <div style={{
-                        fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-secondary)',
-                      }}>
-                        {gap.recommendation}
-                      </div>
-                    </div>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 'var(--space-2)',
-                    }}>
-                      <span style={{
-                        background: 'var(--color-accent)',
-                        color: 'white',
-                        padding: 'var(--space-1) var(--space-2)',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: 'var(--font-size-xs)',
-                      }}>
-                        {gap.count} job{gap.count !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Recommendations (US 5.3) */}
+          {recommendations && <RecommendationsPanel recommendations={recommendations} />}
 
           {/* Individual Benchmarks */}
           <div className="card">
@@ -604,6 +548,129 @@ function BenchmarkCard({ benchmark, onClick }) {
           percentile
         </span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Recommendations Panel — Top 3 missing skills + recommended ATS keywords.
+ * Powered by GET /api/benchmarks/recommendations (US 5.3).
+ */
+function RecommendationsPanel({ recommendations }) {
+  const {
+    top_missing_skills: missingSkills = [],
+    recommended_keywords: keywords = [],
+    jobs_analyzed: jobsAnalyzed = 0,
+    peer_group_size: peerGroupSize = 0,
+    insufficient_peers: insufficientPeers = false,
+  } = recommendations || {};
+
+  if (jobsAnalyzed === 0) {
+    return (
+      <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-2)' }}>
+          Save a few jobs to unlock recommendations
+        </h3>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+          Once you've saved at least one role from the Jobs tab, we'll mine its
+          requirements against your CV to surface the Top 3 skills to learn next.
+        </p>
+      </div>
+    );
+  }
+
+  const priorityColor = {
+    high: 'var(--color-error)',
+    medium: 'var(--color-warning)',
+    low: 'var(--color-info)',
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+      <header style={{ marginBottom: 'var(--space-4)' }}>
+        <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-1)' }}>
+          🎯 Top skills to learn next
+        </h3>
+        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+          Based on {jobsAnalyzed} saved job{jobsAnalyzed !== 1 ? 's' : ''}
+          {insufficientPeers
+            ? ' — peer comparison skipped (fewer than 30 peers at your level/niche yet).'
+            : ` · ${peerGroupSize} peer${peerGroupSize !== 1 ? 's' : ''} at your level/niche.`}
+        </p>
+      </header>
+
+      {missingSkills.length === 0 ? (
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+          You're already covering every technology your saved JDs require. Time to save some harder roles. 🎉
+        </p>
+      ) : (
+        <div style={{ display: 'grid', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
+          {missingSkills.map((skill) => (
+            <div
+              key={skill.skill}
+              style={{
+                padding: 'var(--space-3) var(--space-4)',
+                background: 'var(--color-bg-secondary)',
+                borderRadius: 'var(--radius-md)',
+                borderLeft: `3px solid ${priorityColor[skill.priority] || 'var(--color-border)'}`,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-1)', flexWrap: 'wrap' }}>
+                <strong style={{ fontSize: 'var(--font-size-md)', textTransform: 'capitalize' }}>
+                  {skill.skill}
+                </strong>
+                <span
+                  style={{
+                    background: priorityColor[skill.priority] || 'var(--color-accent)',
+                    color: 'white',
+                    fontSize: 'var(--font-size-xs)',
+                    padding: '2px var(--space-2)',
+                    borderRadius: 'var(--radius-sm)',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {skill.priority} priority
+                </span>
+              </div>
+              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', margin: 0 }}>
+                {skill.justification}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {keywords.length > 0 && (
+        <section>
+          <h4 style={{ fontSize: 'var(--font-size-sm)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-accent)', marginBottom: 'var(--space-2)' }}>
+            ATS keywords to surface on your CV
+          </h4>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+            {keywords.map((kw) => (
+              <span
+                key={kw.keyword}
+                title={kw.in_cv
+                  ? `Already on your CV · requested in ${kw.jd_count} saved job${kw.jd_count !== 1 ? 's' : ''}`
+                  : `Missing from your CV · requested in ${kw.jd_count} saved job${kw.jd_count !== 1 ? 's' : ''}`
+                }
+                style={{
+                  background: kw.in_cv
+                    ? 'oklch(from var(--color-success) l c h / 0.15)'
+                    : 'oklch(from var(--color-warning) l c h / 0.15)',
+                  color: kw.in_cv ? 'var(--color-success)' : 'var(--color-warning)',
+                  border: `1px solid ${kw.in_cv ? 'var(--color-success)' : 'var(--color-warning)'}`,
+                  padding: '2px var(--space-2)',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: 'var(--font-weight-medium)',
+                }}
+              >
+                {kw.in_cv ? '✓' : '+'} {kw.keyword}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -4,24 +4,25 @@ import react from '@vitejs/plugin-react';
 /**
  * Vite Configuration for Auto-Apply Frontend.
  *
- * Features:
- * - React plugin with Fast Refresh for HMR.
- * - API proxy to FastAPI backend (avoids CORS issues in dev).
- * - Build output to 'dist/' for production.
+ * Proxy target resolves via VITE_API_TARGET:
+ *   - Docker Compose sets it to `http://backend:8000` (service name).
+ *   - Local `npm run dev` falls back to `http://127.0.0.1:8000`.
  */
+const API_TARGET = process.env.VITE_API_TARGET || 'http://127.0.0.1:8000';
+
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: '0.0.0.0', // Allow external connections
+    host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: 'http://backend:8000', // Use Docker service name
+        target: API_TARGET,
         changeOrigin: true,
         secure: false,
       },
       '/health': {
-        target: 'http://backend:8000', // Use Docker service name
+        target: API_TARGET,
         changeOrigin: true,
         secure: false,
       },

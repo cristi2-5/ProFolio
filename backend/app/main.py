@@ -17,13 +17,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import engine, Base, async_session_factory
-from app.routers import auth, benchmarks, cv_optimizer, jobs, resumes
+from app.routers import auth, benchmarks, cv_optimizer, feedback, jobs, resumes, tasks
 
 # Import all models to ensure they're registered with Base.metadata
 from app.models.user import User, JobPreference
 from app.models.resume import ParsedResume
 from app.models.job import ScrapedJob, UserJob
 from app.models.benchmark import BenchmarkScore
+from app.models.feedback import Feedback
 
 # Configure logging
 logging.basicConfig(
@@ -131,6 +132,8 @@ app.include_router(resumes.router)
 app.include_router(jobs.router)
 app.include_router(cv_optimizer.router)
 app.include_router(benchmarks.router)
+app.include_router(feedback.router)
+app.include_router(tasks.router)
 
 
 @app.get(

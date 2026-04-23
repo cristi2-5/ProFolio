@@ -24,15 +24,22 @@ from app.utils.file_processing import extract_text_from_file, clean_extracted_te
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-# OpenAI client initialization
-# Only create client for valid API keys (not test/development keys)
+# Gemini client initialization via the OpenAI-compatible endpoint.
+# Dev-mode is now gated only on the key itself, not on ENVIRONMENT —
+# setting a real key used to be silently overridden by ENVIRONMENT=development.
 is_development_mode = (
-    not settings.openai_api_key or
-    settings.openai_api_key.startswith("test-") or
-    settings.environment == "development"
+    not settings.openai_api_key
+    or settings.openai_api_key.startswith("test-")
 )
 
-openai_client = None if is_development_mode else AsyncOpenAI(api_key=settings.openai_api_key)
+openai_client = (
+    None
+    if is_development_mode
+    else AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+    )
+)
 
 if is_development_mode:
     logger.warning("Running CV Profiler in development mode. Real parsing disabled.")
@@ -116,7 +123,7 @@ class CVProfilerAgent:
             logger.error("OpenAI API key not configured. CV parsing will not work.")
 
         # GPT-4 configuration
-        self.model = "gpt-4o-mini"  # Faster and cheaper for structured tasks
+        self.model = "gemini-2.0-flash"  # Cheap JSON-capable model on Gemini
         self.max_tokens = 2000
         self.temperature = 0.1  # Low for consistent structured output
 

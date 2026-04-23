@@ -88,3 +88,30 @@ class BenchmarkScore(Base):
             f"<BenchmarkScore(user_id={self.user_id}, "
             f"score={self.score}, level='{self.seniority_level}')>"
         )
+
+    # ------------------------------------------------------------------
+    # Typed accessors for the JSONB payloads the service writes.
+    # These are the single source of truth for the payload shape so the
+    # router doesn't need to peek inside the JSONB.
+    # ------------------------------------------------------------------
+
+    def skill_gap_items(self) -> list[dict]:
+        """Unpack the ``missing_skills`` payload written by BenchmarkService."""
+        raw = self.missing_skills
+        if isinstance(raw, dict):
+            items = raw.get("items")
+            return items if isinstance(items, list) else []
+        if isinstance(raw, list):
+            return raw
+        return []
+
+    def keyword_payload(self) -> dict:
+        """Unpack the ``recommended_keywords`` payload. Keys:
+        ``items``, ``matched``, ``user_match_score``, ``peer_mean_match_score``.
+        """
+        raw = self.recommended_keywords
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, list):
+            return {"items": raw}
+        return {}
