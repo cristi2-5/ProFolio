@@ -11,15 +11,15 @@ services:
     image: postgres:16-alpine
     container_name: autoapply-db
     environment:
-      POSTGRES_USER: autoapply
-      POSTGRES_PASSWORD: changeme
-      POSTGRES_DB: autoapply_db
+      POSTGRES_USER: ${POSTGRES_USER:-autoapply}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-autoapply_db}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U autoapply -d autoapply_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autoapply} -d ${POSTGRES_DB:-autoapply_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -33,14 +33,16 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://autoapply:changeme@db:5432/autoapply_db
-      SECRET_KEY: dev-docker-secret-key
-      ENVIRONMENT: development
-      CORS_ORIGINS: '["http://localhost:5173"]'
-      OPENAI_API_KEY: test-key-for-development
-      ADZUNA_APP_ID: 39ceffa1
-      ADZUNA_APP_KEY: 4c1f7a953ad74bcc8e3c755d8015d98d
-      UPLOAD_DIR: ./uploads
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-autoapply}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-autoapply_db}
+      SECRET_KEY: ${SECRET_KEY:-dev-docker-secret-key}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ORIGINS: ${CORS_ORIGINS:-'["http://localhost:5173"]'}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY}
+      UPLOAD_DIR: ${UPLOAD_DIR:-./uploads}
     depends_on:
       db:
         condition: service_healthy
