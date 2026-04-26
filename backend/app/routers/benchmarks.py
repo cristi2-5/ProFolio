@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.jobs import get_user_job_or_403
 from app.models.benchmark import BenchmarkScore
 from app.models.job import ScrapedJob
 from app.models.user import User
@@ -119,8 +120,12 @@ async def get_recommendations(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     return RecommendationsResponse(
-        top_missing_skills=[RecommendedSkill(**item) for item in result.top_missing_skills],
-        recommended_keywords=[RecommendedKeyword(**item) for item in result.recommended_keywords],
+        top_missing_skills=[
+            RecommendedSkill(**item) for item in result.top_missing_skills
+        ],
+        recommended_keywords=[
+            RecommendedKeyword(**item) for item in result.recommended_keywords
+        ],
         jobs_analyzed=result.jobs_analyzed,
         peer_group_size=result.peer_group_size,
         insufficient_peers=result.insufficient_peers,
@@ -142,9 +147,11 @@ async def get_benchmark_for_job(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BenchmarkScoreResponse:
-    job = await db.get(ScrapedJob, job_id)
-    if not job:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    job, _ = await get_user_job_or_403(
+        job_id=job_id,
+        current_user=current_user,
+        db=db,
+    )
 
     stmt = select(BenchmarkScore).where(
         BenchmarkScore.user_id == current_user.id,
@@ -217,7 +224,9 @@ def _row_to_response(
         company_name=job.company_name,
         score=row.score,
         user_match_score=float(keyword_payload.get("user_match_score") or 0.0),
-        peer_mean_match_score=float(keyword_payload.get("peer_mean_match_score") or 0.0),
+        peer_mean_match_score=float(
+            keyword_payload.get("peer_mean_match_score") or 0.0
+        ),
         peer_group=PeerGroupMetadata(
             size=row.peer_group_size or 0,
             seniority_level=row.seniority_level,

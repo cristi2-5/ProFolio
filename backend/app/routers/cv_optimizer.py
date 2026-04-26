@@ -9,24 +9,27 @@ import logging
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.jobs import get_user_job_or_403
 from app.models.job import ScrapedJob
 from app.models.user import User
 from app.schemas.cv_optimizer import (
-    CVOptimizationRequest,
-    CVOptimizationResponse,
     CoverLetterRequest,
     CoverLetterResponse,
+    CVOptimizationRequest,
+    CVOptimizationResponse,
     OptimizationSuggestionsRequest,
     OptimizationSuggestionsResponse,
     OptimizedMaterialsResponse,
     PDFExportResponse,
 )
 from app.services.cv_optimizer_service import CVOptimizerService
+from app.utils.exceptions import AgentError
+from app.utils.rate_limit import limiter, user_id_key
 
 router = APIRouter(prefix="/api/cv-optimizer", tags=["CV Optimizer"])
 
@@ -41,8 +44,10 @@ cv_optimizer_service = CVOptimizerService()
     status_code=status.HTTP_200_OK,
     summary="Optimize CV for specific job",
 )
+@limiter.limit("20/hour", key_func=user_id_key)
 async def optimize_cv_for_job(
-    request: CVOptimizationRequest,
+    request: Request,
+    payload: CVOptimizationRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CVOptimizationResponse:
@@ -63,13 +68,12 @@ async def optimize_cv_for_job(
         HTTPException: 404 if job not found, 400 if no resume, 500 if optimization fails.
     """
     try:
-        # Get the job record
-        job = await db.get(ScrapedJob, request.job_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found",
-            )
+        # Get the job record (404 if missing, 403 if user not linked)
+        job, _ = await get_user_job_or_403(
+            job_id=payload.job_id,
+            current_user=current_user,
+            db=db,
+        )
 
         # Perform CV optimization
         optimized_cv = await cv_optimizer_service.optimize_cv_for_job(
@@ -86,11 +90,18 @@ async def optimize_cv_for_job(
         )
 
     except ValueError as e:
-        logger.warning(f"CV optimization validation error for user {current_user.id}: {e}")
+        logger.warning(
+            f"CV optimization validation error for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+    except AgentError as e:
+        logger.warning(
+            f"CV optimization agent error for user {current_user.id}: {e.message}"
+        )
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
         logger.error(f"CV optimization failed for user {current_user.id}: {e}")
         raise HTTPException(
@@ -105,8 +116,10 @@ async def optimize_cv_for_job(
     status_code=status.HTTP_200_OK,
     summary="Generate cover letter for job application",
 )
+@limiter.limit("20/hour", key_func=user_id_key)
 async def generate_cover_letter(
-    request: CoverLetterRequest,
+    request: Request,
+    payload: CoverLetterRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CoverLetterResponse:
@@ -127,20 +140,19 @@ async def generate_cover_letter(
         HTTPException: 404 if job not found, 400 if no resume, 500 if generation fails.
     """
     try:
-        # Get the job record
-        job = await db.get(ScrapedJob, request.job_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found",
-            )
+        # Get the job record (404 if missing, 403 if user not linked)
+        job, _ = await get_user_job_or_403(
+            job_id=payload.job_id,
+            current_user=current_user,
+            db=db,
+        )
 
         # Generate cover letter
         cover_letter = await cv_optimizer_service.generate_cover_letter(
             user=current_user,
             job=job,
             db=db,
-            user_motivation=request.user_motivation,
+            user_motivation=payload.user_motivation,
         )
 
         return CoverLetterResponse(
@@ -151,11 +163,18 @@ async def generate_cover_letter(
         )
 
     except ValueError as e:
-        logger.warning(f"Cover letter generation validation error for user {current_user.id}: {e}")
+        logger.warning(
+            f"Cover letter generation validation error for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+    except AgentError as e:
+        logger.warning(
+            f"Cover letter agent error for user {current_user.id}: {e.message}"
+        )
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
         logger.error(f"Cover letter generation failed for user {current_user.id}: {e}")
         raise HTTPException(
@@ -169,8 +188,10 @@ async def generate_cover_letter(
     response_model=OptimizationSuggestionsResponse,
     summary="Get CV optimization suggestions",
 )
+@limiter.limit("5/minute", key_func=user_id_key)
 async def get_optimization_suggestions(
-    request: OptimizationSuggestionsRequest,
+    request: Request,
+    payload: OptimizationSuggestionsRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> OptimizationSuggestionsResponse:
@@ -194,18 +215,25 @@ async def get_optimization_suggestions(
         # Get optimization suggestions
         suggestions = await cv_optimizer_service.get_optimization_suggestions(
             user=current_user,
-            job_description=request.job_description,
+            job_description=payload.job_description,
             db=db,
         )
 
         return OptimizationSuggestionsResponse(**suggestions)
 
     except ValueError as e:
-        logger.warning(f"Suggestions generation validation error for user {current_user.id}: {e}")
+        logger.warning(
+            f"Suggestions generation validation error for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+    except AgentError as e:
+        logger.warning(
+            f"Suggestions agent error for user {current_user.id}: {e.message}"
+        )
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
         logger.error(f"Suggestions generation failed for user {current_user.id}: {e}")
         raise HTTPException(
@@ -244,7 +272,9 @@ async def list_optimized_materials(
         return [OptimizedMaterialsResponse(**material) for material in materials]
 
     except Exception as e:
-        logger.error(f"Failed to retrieve optimized materials for user {current_user.id}: {e}")
+        logger.error(
+            f"Failed to retrieve optimized materials for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve materials. Please try again later.",
@@ -295,7 +325,9 @@ async def export_optimized_cv_pdf(
         )
 
     except ValueError as e:
-        logger.warning(f"CV PDF export validation error for user {current_user.id}: {e}")
+        logger.warning(
+            f"CV PDF export validation error for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
@@ -334,13 +366,12 @@ async def export_cover_letter_pdf(
         HTTPException: 404 if cover letter not found, 500 if export fails.
     """
     try:
-        # Get job for PDF generation context
-        job = await db.get(ScrapedJob, job_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found",
-            )
+        # Get job for PDF generation context (404 if missing, 403 if user not linked)
+        job, _ = await get_user_job_or_403(
+            job_id=job_id,
+            current_user=current_user,
+            db=db,
+        )
 
         # Export cover letter as PDF
         pdf_data, filename = await cv_optimizer_service.export_cover_letter_pdf(
@@ -360,7 +391,9 @@ async def export_cover_letter_pdf(
         )
 
     except ValueError as e:
-        logger.warning(f"Cover letter PDF export validation error for user {current_user.id}: {e}")
+        logger.warning(
+            f"Cover letter PDF export validation error for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),

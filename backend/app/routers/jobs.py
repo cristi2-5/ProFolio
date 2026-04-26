@@ -9,34 +9,36 @@ import logging
 from datetime import datetime, timezone
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database import get_db
+from app.agents.job_scanner import JobScannerAgent
+from app.database import async_session_factory, get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.jobs import get_user_job_or_403
+from app.models.job import ScrapedJob, UserJob
 from app.models.user import JobPreference, User
-from app.models.job import UserJob, ScrapedJob
-from app.schemas.user import JobPreferenceCreate, JobPreferenceResponse
-from app.schemas.job import UserJobStatusUpdate, UserJobResponse, UserJobListResponse
-from app.schemas.interview_coach import (
-    InterviewPrepGenerateRequest,
-    InterviewPrepResponse,
-    InterviewPrepUpdateRequest,
-    InterviewPrepListResponse,
-)
 from app.schemas.benchmark import (
     BenchmarkCalculateRequest,
     BenchmarkScoreResponse,
     InsufficientPeersResponse,
 )
-from app.database import async_session_factory
-from app.services.job_service import JobService
-from app.services.interview_coach_service import InterviewCoachService
+from app.schemas.interview_coach import (
+    InterviewPrepGenerateRequest,
+    InterviewPrepListResponse,
+    InterviewPrepResponse,
+    InterviewPrepUpdateRequest,
+)
+from app.schemas.job import UserJobListResponse, UserJobResponse, UserJobStatusUpdate
+from app.schemas.user import JobPreferenceCreate, JobPreferenceResponse
 from app.services.benchmark_service import BenchmarkService, InsufficientPeersError
+from app.services.interview_coach_service import InterviewCoachService
+from app.services.job_service import JobService
 from app.services.task_manager import TaskContext, get_task_manager
-from app.agents.job_scanner import JobScannerAgent
+from app.utils.exceptions import AgentError
+from app.utils.rate_limit import limiter, user_id_key
 
 router = APIRouter(prefix="/api/jobs", tags=["Jobs"])
 
@@ -53,10 +55,15 @@ job_scanner = JobScannerAgent()
 # ------------------------------------------------------------------
 _scan_last_called: dict[str, datetime] = {}
 
+# Shared advisory-lock key for /jobs/scan (manual) and the daily cron.
+# Same value on both sides — a process holding it blocks the other path.
+SCAN_ADVISORY_LOCK = 0xCAFEBABE
+
 
 # ================================================================
 # Job Preferences Management
 # ================================================================
+
 
 @router.post(
     "/preferences",
@@ -136,6 +143,7 @@ async def get_job_preferences(
 # Job Listing & Management
 # ================================================================
 
+
 @router.get(
     "/",
     response_model=UserJobListResponse,
@@ -144,10 +152,21 @@ async def get_job_preferences(
 async def list_jobs(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    status_filter: Annotated[Optional[str], Query(description="Filter by job status")] = None,
-    search: Annotated[Optional[str], Query(description="Search by title or company name")] = None,
-    sort_by: Annotated[str, Query(description="Sort column (match_score, created_at, company_name, job_title)")] = "match_score",
-    sort_order: Annotated[str, Query(description="Sort direction: asc or desc")] = "desc",
+    status_filter: Annotated[
+        Optional[str], Query(description="Filter by job status")
+    ] = None,
+    search: Annotated[
+        Optional[str], Query(description="Search by title or company name")
+    ] = None,
+    sort_by: Annotated[
+        str,
+        Query(
+            description="Sort column (match_score, created_at, company_name, job_title)"
+        ),
+    ] = "match_score",
+    sort_order: Annotated[
+        str, Query(description="Sort direction: asc or desc")
+    ] = "desc",
     limit: Annotated[int, Query(ge=1, le=100, description="Page size")] = 20,
     offset: Annotated[int, Query(ge=0, description="Pagination offset")] = 0,
 ) -> UserJobListResponse:
@@ -296,11 +315,15 @@ async def update_job_status(
                 detail="Job not found or you don't have permission to update it",
             )
 
-        # Update status using job service
+        # Update status using job service. We pass ``user_id`` so the
+        # underlying atomic UPDATE is also scoped to the owner, eliminating
+        # any TOCTOU window between the ownership SELECT above and the
+        # write below.
         updated_user_job = await job_service.update_job_status(
             user_job_id=user_job_id,
             new_status=status_update.status,
             db=db,
+            user_id=str(current_user.id),
         )
 
         if not updated_user_job:
@@ -349,6 +372,7 @@ async def trigger_job_scan(
                       500 if scan fails.
     """
     from app.config import get_settings as _get_settings
+
     settings = _get_settings()
     user_id_str = str(current_user.id)
 
@@ -370,7 +394,29 @@ async def trigger_job_scan(
             )
 
     # --- Preferences check ---
+    # Track whether we acquired the cross-process advisory lock so the
+    # ``finally`` only releases what we actually took. SQLite tests skip
+    # the lock entirely (advisory locks are PG-only).
+    use_lock = False
+    lock_acquired = False
     try:
+        dialect = getattr(db.bind, "dialect", None)
+        use_lock = dialect is not None and dialect.name == "postgresql"
+
+        if use_lock:
+            # Non-blocking try-lock: if a scan (manual or cron) is already
+            # running we want immediate 429 feedback rather than tying up
+            # a request worker for minutes.
+            result = await db.execute(
+                text("SELECT pg_try_advisory_lock(:k)").bindparams(k=SCAN_ADVISORY_LOCK)
+            )
+            lock_acquired = bool(result.scalar())
+            if not lock_acquired:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="A scan is already running. Try again in a moment.",
+                )
+
         stmt = select(JobPreference).where(JobPreference.user_id == current_user.id)
         result = await db.execute(stmt)
         preferences = result.scalar_one_or_none()
@@ -414,11 +460,25 @@ async def trigger_job_scan(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Job scan failed. Please try again later.",
         )
+    finally:
+        if use_lock and lock_acquired:
+            try:
+                await db.execute(
+                    text("SELECT pg_advisory_unlock(:k)").bindparams(
+                        k=SCAN_ADVISORY_LOCK
+                    )
+                )
+            except Exception as exc:
+                # Don't mask the original exception (if any) — just log.
+                # The lock is also session-scoped, so it'll be released
+                # when the connection returns to the pool.
+                logger.warning(f"Failed to release scan advisory lock: {exc}")
 
 
 # ================================================================
 # Interview Coach & Preparation Materials
 # ================================================================
+
 
 @router.post(
     "/{job_id}/generate-interview-prep",
@@ -426,9 +486,11 @@ async def trigger_job_scan(
     status_code=status.HTTP_201_CREATED,
     summary="Generate comprehensive interview preparation materials",
 )
+@limiter.limit("30/hour", key_func=user_id_key)
 async def generate_interview_prep_materials(
     job_id: str,
-    request: InterviewPrepGenerateRequest,
+    request: Request,
+    payload: InterviewPrepGenerateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> InterviewPrepResponse:
@@ -452,20 +514,21 @@ async def generate_interview_prep_materials(
                       500 if AI generation fails.
     """
     try:
-        job = await db.get(ScrapedJob, job_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found",
-            )
-
-        prep_materials = await interview_coach_service.generate_interview_prep_materials(
-            user=current_user,
-            job=job,
+        job, _ = await get_user_job_or_403(
+            job_id=job_id,
+            current_user=current_user,
             db=db,
-            include_user_background=request.include_user_background,
-            technical_count=request.technical_count,
-            behavioral_count=request.behavioral_count,
+        )
+
+        prep_materials = (
+            await interview_coach_service.generate_interview_prep_materials(
+                user=current_user,
+                job=job,
+                db=db,
+                include_user_background=payload.include_user_background,
+                technical_count=payload.technical_count,
+                behavioral_count=payload.behavioral_count,
+            )
         )
 
         return InterviewPrepResponse(
@@ -479,6 +542,9 @@ async def generate_interview_prep_materials(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+    except AgentError as e:
+        logger.warning(f"Interview prep agent error for job {job_id}: {e.message}")
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
         logger.error(f"Failed to generate interview prep for job {job_id}: {e}")
         raise HTTPException(
@@ -492,9 +558,11 @@ async def generate_interview_prep_materials(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Kick off interview prep generation in the background",
 )
+@limiter.limit("30/hour", key_func=user_id_key)
 async def generate_interview_prep_async(
     job_id: str,
-    request: InterviewPrepGenerateRequest,
+    request: Request,
+    payload: InterviewPrepGenerateRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
@@ -505,15 +573,15 @@ async def generate_interview_prep_async(
     final result. This keeps the UI responsive for the 10-20 seconds
     the LLM normally blocks.
     """
-    job = await db.get(ScrapedJob, job_id)
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
-        )
+    job, _ = await get_user_job_or_403(
+        job_id=job_id,
+        current_user=current_user,
+        db=db,
+    )
 
-    include_background = request.include_user_background
-    technical_count = request.technical_count
-    behavioral_count = request.behavioral_count
+    include_background = payload.include_user_background
+    technical_count = payload.technical_count
+    behavioral_count = payload.behavioral_count
     user_id_str = str(current_user.id)
 
     async def worker(ctx: TaskContext) -> dict:
@@ -544,9 +612,7 @@ async def generate_interview_prep_async(
                 "company_name": task_job.company_name,
             }
 
-    task_id = await get_task_manager().submit(
-        owner_user_id=user_id_str, worker=worker
-    )
+    task_id = await get_task_manager().submit(owner_user_id=user_id_str, worker=worker)
     return {"task_id": task_id, "status": "pending"}
 
 
@@ -575,12 +641,11 @@ async def get_interview_prep_materials(
                       403 if user doesn't have access.
     """
     try:
-        job = await db.get(ScrapedJob, job_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found",
-            )
+        job, _ = await get_user_job_or_403(
+            job_id=job_id,
+            current_user=current_user,
+            db=db,
+        )
 
         prep_materials = await interview_coach_service.get_interview_prep_materials(
             user=current_user,
@@ -595,9 +660,7 @@ async def get_interview_prep_materials(
             )
 
         response_data = dict(prep_materials)
-        response_data.setdefault(
-            "generated_at", datetime.now(timezone.utc).isoformat()
-        )
+        response_data.setdefault("generated_at", datetime.now(timezone.utc).isoformat())
         response_data["job_title"] = job.job_title
         response_data["company_name"] = job.company_name
         return InterviewPrepResponse(**response_data)
@@ -645,26 +708,25 @@ async def update_interview_prep_materials(
                       403 if user doesn't have access.
     """
     try:
-        job = await db.get(ScrapedJob, job_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found",
-            )
-
-        updates_dict = updates.model_dump(exclude_none=True)
-
-        updated_materials = await interview_coach_service.update_interview_prep_materials(
-            user=current_user,
+        job, _ = await get_user_job_or_403(
             job_id=job_id,
-            updated_materials=updates_dict,
+            current_user=current_user,
             db=db,
         )
 
-        response_data = dict(updated_materials)
-        response_data.setdefault(
-            "generated_at", datetime.now(timezone.utc).isoformat()
+        updates_dict = updates.model_dump(exclude_none=True)
+
+        updated_materials = (
+            await interview_coach_service.update_interview_prep_materials(
+                user=current_user,
+                job_id=job_id,
+                updated_materials=updates_dict,
+                db=db,
+            )
         )
+
+        response_data = dict(updated_materials)
+        response_data.setdefault("generated_at", datetime.now(timezone.utc).isoformat())
         response_data["job_title"] = job.job_title
         response_data["company_name"] = job.company_name
         return InterviewPrepResponse(**response_data)
@@ -726,15 +788,19 @@ async def list_user_interview_preps(
 # Benchmark Scoring & Competitive Analysis
 # ================================================================
 
+
 @router.post(
     "/{job_id}/calculate-benchmark",
     response_model=BenchmarkScoreResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Calculate GDPR-compliant benchmark score for a job",
     responses={
-        422: {"model": InsufficientPeersResponse, "description": "Not enough peers for reliable scoring"},
+        422: {
+            "model": InsufficientPeersResponse,
+            "description": "Not enough peers for reliable scoring",
+        },
         400: {"description": "User not opted into benchmarking"},
-    }
+    },
 )
 async def calculate_benchmark_score(
     job_id: str,
@@ -760,12 +826,11 @@ async def calculate_benchmark_score(
                       422 if insufficient peers, 500 if calculation fails.
     """
     try:
-        job = await db.get(ScrapedJob, job_id)
-        if not job:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Job not found",
-            )
+        job, _ = await get_user_job_or_403(
+            job_id=job_id,
+            current_user=current_user,
+            db=db,
+        )
 
         result = await benchmark_service.calculate_benchmark_score(
             user=current_user,
