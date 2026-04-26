@@ -88,28 +88,26 @@ jobs:
           echo "::group::Flake8 Linting"
           flake8 app/ tests/ --count --statistics --format='::error file=%(path)s,line=%(row)d,col=%(col)d::%(text)s'
           echo "::endgroup::"
-        continue-on-error: true
+        continue-on-error: true  # TODO: 197 pre-existing E501/F401 violations — fix in a dedicated cleanup PR, then make blocking.
 
       - name: Check formatting with Black
         run: |
           echo "::group::Black Formatting Check"
           black --check --diff app/ tests/
           echo "::endgroup::"
-        continue-on-error: true
 
       - name: Check import ordering with isort
         run: |
           echo "::group::Import Sorting Check"
           isort --check-only --diff app/ tests/
           echo "::endgroup::"
-        continue-on-error: true
 
       - name: Type checking with mypy
         run: |
           echo "::group::Type Checking"
           mypy app/ --ignore-missing-imports --show-error-codes
           echo "::endgroup::"
-        continue-on-error: true  # Non-blocking for now
+        continue-on-error: true  # TODO: 107 pre-existing type errors — fix in a dedicated cleanup PR, then make blocking.
 
       # ============================================================
       # Database & Migration Testing
@@ -220,23 +218,20 @@ jobs:
       - name: Lint with ESLint
         run: |
           echo "::group::ESLint Analysis"
-          npm run lint -- --format=@microsoft/eslint-formatter-sarif --output-file eslint-results.sarif
+          npm run lint
           echo "::endgroup::"
-        continue-on-error: true
 
       - name: Check formatting with Prettier
         run: |
           echo "::group::Prettier Format Check"
           npx prettier --check "src/**/*.{js,jsx,ts,tsx,css,json,md}"
           echo "::endgroup::"
-        continue-on-error: true  # Formatting issues are warnings, not blockers
 
       - name: Run frontend tests
         run: |
           echo "::group::Frontend Tests"
-          npm test -- --coverage --watchAll=false --testResultsProcessor=jest-sonar-reporter
+          npm test
           echo "::endgroup::"
-        continue-on-error: true  # Tests might not exist yet
 
       - name: Build production bundle
         run: |

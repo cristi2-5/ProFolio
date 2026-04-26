@@ -7,6 +7,7 @@ Each test runs in a transaction that rolls back automatically.
 
 import asyncio
 from typing import AsyncGenerator
+from urllib.parse import urlparse, urlunparse
 
 import pytest
 import pytest_asyncio
@@ -23,25 +24,50 @@ from app.config import get_settings
 from app.database import Base, get_db
 from app.main import app
 
-from urllib.parse import urlparse, urlunparse
-
 # Test database configuration
 settings = get_settings()
 
 db_url = settings.database_url
 parsed = urlparse(db_url)
 if parsed.path == "/autoapply_db":
-    TEST_DATABASE_URL = urlunparse((parsed.scheme, parsed.netloc, "/autoapply_test_db", parsed.params, parsed.query, parsed.fragment))
+    TEST_DATABASE_URL = urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            "/autoapply_test_db",
+            parsed.params,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
 elif parsed.path == "/autoapply_test_db":
     TEST_DATABASE_URL = db_url
 else:
     db_name = parsed.path.lstrip("/")
     if not db_name.endswith("_test") and not db_name.endswith("_test_db"):
-        TEST_DATABASE_URL = urlunparse((parsed.scheme, parsed.netloc, f"/{db_name}_test", parsed.params, parsed.query, parsed.fragment))
+        TEST_DATABASE_URL = urlunparse(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                f"/{db_name}_test",
+                parsed.params,
+                parsed.query,
+                parsed.fragment,
+            )
+        )
     else:
         TEST_DATABASE_URL = db_url
 
-ADMIN_DATABASE_URL = urlunparse((parsed.scheme, parsed.netloc, "/postgres", parsed.params, parsed.query, parsed.fragment))
+ADMIN_DATABASE_URL = urlunparse(
+    (
+        parsed.scheme,
+        parsed.netloc,
+        "/postgres",
+        parsed.params,
+        parsed.query,
+        parsed.fragment,
+    )
+)
 TEST_DB_NAME = urlparse(TEST_DATABASE_URL).path.lstrip("/")
 
 
@@ -52,9 +78,8 @@ def event_loop_policy():
     Required for pytest-asyncio to work with session-scoped fixtures.
     """
     policy = asyncio.get_event_loop_policy()
-    
+
     return policy
-    
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -78,6 +103,7 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     await admin_engine.dispose()
 
     from sqlalchemy.pool import NullPool
+
     # Create engine for test database
     engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=NullPool)
 
@@ -118,14 +144,29 @@ def _reset_phase7_singletons():
     test — otherwise one test's cached LLM response returns on another
     test's "first" call, or a leftover task ID leaks into an assertion.
     """
-    from app.utils.prompt_cache import reset_prompt_cache_for_tests
     from app.services.task_manager import reset_task_manager_for_tests
+    from app.utils.prompt_cache import reset_prompt_cache_for_tests
 
     reset_prompt_cache_for_tests()
     reset_task_manager_for_tests()
     yield
     reset_prompt_cache_for_tests()
     reset_task_manager_for_tests()
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Reset slowapi state so per-IP/per-user rate limits don't bleed across tests.
+
+    Without this, hitting /register or /login many times across the suite
+    eventually trips the production limit (e.g. 5/min on register) and
+    later tests fail with 429.
+    """
+    from app.utils.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest_asyncio.fixture
