@@ -27,6 +27,7 @@ import FeedbackWidget from '../components/FeedbackWidget';
 function JobDetail() {
   const { jobId } = useParams();
   const navigate = useNavigate();
+  // eslint-disable-next-line no-unused-vars
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -54,13 +55,14 @@ function JobDetail() {
   /**
    * Fetch job details and existing AI content.
    */
-  const fetchJobDetails = async () => {
+  const fetchJobDetails = async (signal) => {
     try {
       setLoading(true);
       setError(null);
 
       // Fetch job details
-      const jobData = await get(`/jobs/${jobId}`);
+      const jobData = await get(`/jobs/${jobId}`, { signal });
+      if (signal?.aborted) return;
       setJob(jobData);
 
       // Fetch existing AI content if available
@@ -78,18 +80,22 @@ function JobDetail() {
 
       // Try to fetch benchmark if exists
       try {
-        const benchmarkData = await get(`/benchmarks/job/${jobId}`);
+        const benchmarkData = await get(`/benchmarks/job/${jobId}`, { signal });
+        if (signal?.aborted) return;
         setBenchmark(benchmarkData);
       } catch (err) {
+        if (err.name === 'AbortError') return;
         // Benchmark doesn't exist yet
         setBenchmark(null);
       }
-
     } catch (err) {
-      console.error('Failed to fetch job details:', err);
+      if (err.name === 'AbortError') return;
+      if (import.meta.env.DEV) {
+        console.error('Failed to fetch job details:', err);
+      }
       setError(err.message || 'Failed to load job details');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
@@ -97,9 +103,12 @@ function JobDetail() {
    * Optimize CV for this job.
    */
   const optimizeCV = async () => {
+    if (optimizing) return;
     try {
       setOptimizing(true);
-      const response = await post(`/cv-optimizer/optimize`, { job_id: job.job_id });
+      const response = await post(`/cv-optimizer/optimize`, {
+        job_id: job.job_id,
+      });
       setOptimizedCV(response.optimized_cv ?? response);
       setActiveTab('cv-optimization');
     } catch (err) {
@@ -113,6 +122,7 @@ function JobDetail() {
    * Generate cover letter, optionally with user motivation.
    */
   const generateCoverLetter = async () => {
+    if (generatingCover) return;
     try {
       setGeneratingCover(true);
       const response = await post(`/cv-optimizer/cover-letter`, {
@@ -132,9 +142,13 @@ function JobDetail() {
    * Prepare interview materials.
    */
   const prepareInterview = async () => {
+    if (preparingInterview) return;
     try {
       setPreparingInterview(true);
-      const response = await post(`/jobs/${job.job_id}/generate-interview-prep`, {});
+      const response = await post(
+        `/jobs/${job.job_id}/generate-interview-prep`,
+        {}
+      );
       setInterviewPrep(response);
       setActiveTab('interview-prep');
     } catch (err) {
@@ -148,18 +162,37 @@ function JobDetail() {
    * Calculate benchmark score.
    */
   const calculateBenchmark = async () => {
+    if (calculatingBenchmark) return;
     try {
       setCalculatingBenchmark(true);
       const response = await post(`/jobs/${job.job_id}/calculate-benchmark`);
       setBenchmark(response);
       setActiveTab('benchmark');
     } catch (err) {
-      if (err.message.includes('insufficient_peers')) {
-        setError('Not enough peer data for competitive benchmarking (minimum 30 users required)');
-      } else if (err.message.includes('opt into benchmarking')) {
-        setError('You need to opt into benchmarking in Settings to use this feature');
+      // Prefer structured detail (err.data) over string-matching err.message.
+      const detail = err.data;
+      const errorCode =
+        (detail && typeof detail === 'object' && detail.error) ||
+        (typeof err.message === 'string' && err.message);
+      if (errorCode && String(errorCode).includes('insufficient_peers')) {
+        const peersFound = detail?.peers_found;
+        const peersRequired = detail?.peers_required ?? 30;
+        setError(
+          peersFound !== undefined
+            ? `Not enough peer data — found ${peersFound} of ${peersRequired} required. More users need to opt in.`
+            : `Not enough peer data for competitive benchmarking (minimum ${peersRequired} users required)`
+        );
+      } else if (
+        errorCode &&
+        String(errorCode).includes('opt into benchmarking')
+      ) {
+        setError(
+          'You need to opt into benchmarking in Settings to use this feature'
+        );
       } else {
-        setError('Failed to calculate benchmark: ' + err.message);
+        setError(
+          'Failed to calculate benchmark: ' + (err.message || 'unknown error')
+        );
       }
     } finally {
       setCalculatingBenchmark(false);
@@ -171,11 +204,14 @@ function JobDetail() {
    */
   const exportCV = async () => {
     try {
-      const response = await fetch(`/api/cv-optimizer/export/cv/${job.job_id}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
+      const response = await fetch(
+        `/api/cv-optimizer/export/cv/${job.job_id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+          },
+        }
+      );
 
       if (!response.ok) throw new Error('Export failed');
 
@@ -198,11 +234,14 @@ function JobDetail() {
    */
   const exportCoverLetter = async () => {
     try {
-      const response = await fetch(`/api/cv-optimizer/export/cover-letter/${job.job_id}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
+      const response = await fetch(
+        `/api/cv-optimizer/export/cover-letter/${job.job_id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+          },
+        }
+      );
 
       if (!response.ok) throw new Error('Export failed');
 
@@ -225,7 +264,9 @@ function JobDetail() {
    */
   const saveOptimizedCV = async () => {
     try {
-      await patch(`/jobs/${job.job_id}/optimized-cv`, { optimized_cv: optimizedCV });
+      await patch(`/jobs/${job.job_id}/optimized-cv`, {
+        optimized_cv: optimizedCV,
+      });
       setEditingCV(false);
     } catch (err) {
       setError('Failed to save CV changes: ' + err.message);
@@ -237,7 +278,9 @@ function JobDetail() {
    */
   const saveCoverLetter = async () => {
     try {
-      await patch(`/jobs/${job.job_id}/cover-letter`, { cover_letter: coverLetter });
+      await patch(`/jobs/${job.job_id}/cover-letter`, {
+        cover_letter: coverLetter,
+      });
       setEditingCover(false);
     } catch (err) {
       setError('Failed to save cover letter: ' + err.message);
@@ -248,19 +291,22 @@ function JobDetail() {
    * Load job details on mount.
    */
   useEffect(() => {
-    if (jobId) {
-      fetchJobDetails();
-    }
+    if (!jobId) return undefined;
+    const ctrl = new AbortController();
+    fetchJobDetails(ctrl.signal);
+    return () => ctrl.abort();
   }, [jobId]);
 
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '50vh',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '50vh',
+        }}
+      >
         <div
           style={{
             width: '40px',
@@ -277,7 +323,15 @@ function JobDetail() {
 
   if (!job) {
     return (
-      <div className="card" style={{ textAlign: 'center', padding: 'var(--space-10)', maxWidth: '600px', margin: '0 auto' }}>
+      <div
+        className="card"
+        style={{
+          textAlign: 'center',
+          padding: 'var(--space-10)',
+          maxWidth: '600px',
+          margin: '0 auto',
+        }}
+      >
         <h2>Job Not Found</h2>
         <p>The requested job could not be found.</p>
         <button onClick={() => navigate('/jobs')} className="btn btn-primary">
@@ -289,14 +343,35 @@ function JobDetail() {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: '📋' },
-    { id: 'cv-optimization', label: 'CV Optimization', icon: '📝', content: optimizedCV },
-    { id: 'cover-letter', label: 'Cover Letter', icon: '💌', content: coverLetter },
-    { id: 'interview-prep', label: 'Interview Prep', icon: '🎯', content: interviewPrep },
+    {
+      id: 'cv-optimization',
+      label: 'CV Optimization',
+      icon: '📝',
+      content: optimizedCV,
+    },
+    {
+      id: 'cover-letter',
+      label: 'Cover Letter',
+      icon: '💌',
+      content: coverLetter,
+    },
+    {
+      id: 'interview-prep',
+      label: 'Interview Prep',
+      icon: '🎯',
+      content: interviewPrep,
+    },
     { id: 'benchmark', label: 'Benchmark', icon: '📊', content: benchmark },
   ];
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: 'var(--space-6)' }}>
+    <div
+      style={{
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: 'var(--space-6)',
+      }}
+    >
       {/* Header */}
       <div style={{ marginBottom: 'var(--space-6)' }}>
         <button
@@ -313,74 +388,90 @@ function JobDetail() {
           ← Back to Jobs
         </button>
 
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 'var(--space-6)',
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            gap: 'var(--space-6)',
+          }}
+        >
           <div style={{ flex: 1 }}>
-            <h1 style={{
-              fontSize: 'var(--font-size-2xl)',
-              fontWeight: 'var(--font-weight-bold)',
-              marginBottom: 'var(--space-2)',
-            }}>
+            <h1
+              style={{
+                fontSize: 'var(--font-size-2xl)',
+                fontWeight: 'var(--font-weight-bold)',
+                marginBottom: 'var(--space-2)',
+              }}
+            >
               {job.job_title}
             </h1>
-            <p style={{
-              fontSize: 'var(--font-size-lg)',
-              color: 'var(--color-text-secondary)',
-              marginBottom: 'var(--space-1)',
-            }}>
+            <p
+              style={{
+                fontSize: 'var(--font-size-lg)',
+                color: 'var(--color-text-secondary)',
+                marginBottom: 'var(--space-1)',
+              }}
+            >
               {job.company_name}
             </p>
             {job.location && (
-              <p style={{
-                fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-text-muted)',
-              }}>
+              <p
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-muted)',
+                }}
+              >
                 📍 {job.location}
               </p>
             )}
           </div>
 
           {/* Match Score */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-          }}>
-            <div style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '50%',
-              background: `conic-gradient(var(--color-accent) ${job.match_score * 3.6}deg, var(--color-border) 0deg)`,
+          <div
+            style={{
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <div style={{
-                width: '64px',
-                height: '64px',
+              gap: 'var(--space-2)',
+            }}
+          >
+            <div
+              style={{
+                width: '80px',
+                height: '80px',
                 borderRadius: '50%',
-                background: 'var(--color-bg-primary)',
+                background: `conic-gradient(var(--color-accent) ${job.match_score * 3.6}deg, var(--color-border) 0deg)`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 'var(--font-size-lg)',
-                fontWeight: 'var(--font-weight-bold)',
-                color: 'var(--color-accent)',
-              }}>
+              }}
+            >
+              <div
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  background: 'var(--color-bg-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 'var(--font-size-lg)',
+                  fontWeight: 'var(--font-weight-bold)',
+                  color: 'var(--color-accent)',
+                }}
+              >
                 {Math.round(job.match_score)}%
               </div>
             </div>
-            <span style={{
-              fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-text-secondary)',
-              textAlign: 'center',
-              fontWeight: 'var(--font-weight-medium)',
-            }}>
+            <span
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--color-text-secondary)',
+                textAlign: 'center',
+                fontWeight: 'var(--font-weight-medium)',
+              }}
+            >
               Match Score
             </span>
           </div>
@@ -419,19 +510,23 @@ function JobDetail() {
 
       {/* AI Tools Quick Actions */}
       <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-        <h3 style={{
-          fontSize: 'var(--font-size-lg)',
-          fontWeight: 'var(--font-weight-medium)',
-          marginBottom: 'var(--space-4)',
-        }}>
+        <h3
+          style={{
+            fontSize: 'var(--font-size-lg)',
+            fontWeight: 'var(--font-weight-medium)',
+            marginBottom: 'var(--space-4)',
+          }}
+        >
           AI-Powered Tools
         </h3>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: 'var(--space-3)',
-        }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 'var(--space-3)',
+          }}
+        >
           <button
             onClick={optimizeCV}
             disabled={optimizing}
@@ -444,7 +539,16 @@ function JobDetail() {
             }}
           >
             {optimizing ? (
-              <div style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTop: '2px solid currentColor', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <div
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid currentColor',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }}
+              />
             ) : (
               '📝'
             )}
@@ -463,7 +567,16 @@ function JobDetail() {
             }}
           >
             {generatingCover ? (
-              <div style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTop: '2px solid currentColor', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <div
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid currentColor',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }}
+              />
             ) : (
               '💌'
             )}
@@ -482,7 +595,16 @@ function JobDetail() {
             }}
           >
             {preparingInterview ? (
-              <div style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTop: '2px solid currentColor', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <div
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid currentColor',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }}
+              />
             ) : (
               '🎯'
             )}
@@ -501,7 +623,16 @@ function JobDetail() {
             }}
           >
             {calculatingBenchmark ? (
-              <div style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTop: '2px solid currentColor', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <div
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid currentColor',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }}
+              />
             ) : (
               '📊'
             )}
@@ -512,20 +643,24 @@ function JobDetail() {
 
       {/* Tabs */}
       <div style={{ marginBottom: 'var(--space-6)' }}>
-        <div style={{
-          display: 'flex',
-          gap: 'var(--space-1)',
-          borderBottom: '1px solid var(--color-border)',
-          marginBottom: 'var(--space-6)',
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--space-1)',
+            borderBottom: '1px solid var(--color-border)',
+            marginBottom: 'var(--space-6)',
+          }}
+        >
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               style={{
                 padding: 'var(--space-3) var(--space-4)',
-                background: activeTab === tab.id ? 'var(--color-accent)' : 'transparent',
-                color: activeTab === tab.id ? 'white' : 'var(--color-text-primary)',
+                background:
+                  activeTab === tab.id ? 'var(--color-accent)' : 'transparent',
+                color:
+                  activeTab === tab.id ? 'white' : 'var(--color-text-primary)',
                 border: 'none',
                 borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
                 cursor: 'pointer',
@@ -539,13 +674,15 @@ function JobDetail() {
             >
               {tab.icon} {tab.label}
               {tab.content && (
-                <span style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: 'var(--color-success)',
-                  marginLeft: 'var(--space-1)',
-                }} />
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: 'var(--color-success)',
+                    marginLeft: 'var(--space-1)',
+                  }}
+                />
               )}
             </button>
           ))}
@@ -553,9 +690,7 @@ function JobDetail() {
 
         {/* Tab Content */}
         <div className="card">
-          {activeTab === 'overview' && (
-            <JobOverview job={job} />
-          )}
+          {activeTab === 'overview' && <JobOverview job={job} />}
 
           {activeTab === 'cv-optimization' && (
             <CVOptimizationTab
@@ -602,24 +737,39 @@ function JobDetail() {
 function JobOverview({ job }) {
   return (
     <div>
-      <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-4)' }}>
+      <h3
+        style={{
+          fontSize: 'var(--font-size-xl)',
+          fontWeight: 'var(--font-weight-bold)',
+          marginBottom: 'var(--space-4)',
+        }}
+      >
         Job Description
       </h3>
 
-      <div style={{ display: 'grid', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+      <div
+        style={{
+          display: 'grid',
+          gap: 'var(--space-4)',
+          marginBottom: 'var(--space-6)',
+        }}
+      >
         {job.salary_min || job.salary_max ? (
           <div>
             <strong>Salary: </strong>
             {job.salary_min && job.salary_max
               ? `$${(job.salary_min / 1000).toFixed(0)}K - $${(job.salary_max / 1000).toFixed(0)}K`
               : job.salary_min
-              ? `$${(job.salary_min / 1000).toFixed(0)}K+`
-              : `Up to $${(job.salary_max / 1000).toFixed(0)}K`}
+                ? `$${(job.salary_min / 1000).toFixed(0)}K+`
+                : `Up to $${(job.salary_max / 1000).toFixed(0)}K`}
           </div>
         ) : null}
 
         {job.job_type && (
-          <div><strong>Job Type: </strong>{job.job_type.replace('_', ' ')}</div>
+          <div>
+            <strong>Job Type: </strong>
+            {job.job_type.replace('_', ' ')}
+          </div>
         )}
 
         {job.external_url && (
@@ -629,38 +779,66 @@ function JobOverview({ job }) {
               href={job.external_url}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}
+              style={{
+                color: 'var(--color-accent)',
+                textDecoration: 'underline',
+              }}
             >
-              View on {job.external_url.includes('linkedin') ? 'LinkedIn' : 'Job Board'}
+              View on{' '}
+              {job.external_url.includes('linkedin') ? 'LinkedIn' : 'Job Board'}
             </a>
           </div>
         )}
       </div>
 
-      <div style={{
-        background: 'var(--color-bg-secondary)',
-        padding: 'var(--space-4)',
-        borderRadius: 'var(--radius-md)',
-        whiteSpace: 'pre-wrap',
-        lineHeight: 1.6,
-      }}>
+      <div
+        style={{
+          background: 'var(--color-bg-secondary)',
+          padding: 'var(--space-4)',
+          borderRadius: 'var(--radius-md)',
+          whiteSpace: 'pre-wrap',
+          lineHeight: 1.6,
+        }}
+      >
         {job.description}
       </div>
     </div>
   );
 }
 
-function CVOptimizationTab({ job, optimizedCV, editing, onEdit, onSave, onChange, onExport }) {
+function CVOptimizationTab({
+  job,
+  optimizedCV,
+  editing,
+  onEdit,
+  onSave,
+  onChange,
+  onExport,
+}) {
   if (!optimizedCV) {
     return (
       <div style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-        <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>📝</div>
+        <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>
+          📝
+        </div>
         <h3 style={{ marginBottom: 'var(--space-2)' }}>CV Not Optimized Yet</h3>
-        <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)' }}>
-          Click <strong>Optimize CV</strong> above to generate an ATS-optimized resume tailored for this position.
+        <p
+          style={{
+            color: 'var(--color-text-secondary)',
+            marginBottom: 'var(--space-4)',
+          }}
+        >
+          Click <strong>Optimize CV</strong> above to generate an ATS-optimized
+          resume tailored for this position.
         </p>
-        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
-          🔒 The AI will only rephrase your existing experience — no fabrication.
+        <p
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-muted)',
+          }}
+        >
+          🔒 The AI will only rephrase your existing experience — no
+          fabrication.
         </p>
       </div>
     );
@@ -674,25 +852,58 @@ function CVOptimizationTab({ job, optimizedCV, editing, onEdit, onSave, onChange
   return (
     <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
       {/* Header bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 'var(--space-3)',
+        }}
+      >
         <div>
-          <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-1)' }}>
+          <h3
+            style={{
+              fontSize: 'var(--font-size-xl)',
+              fontWeight: 'var(--font-weight-bold)',
+              marginBottom: 'var(--space-1)',
+            }}
+          >
             Optimized CV — {job.company_name}
           </h3>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-muted)',
+            }}
+          >
             Review the AI changes below and export when ready.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
           {editing ? (
             <>
-              <button onClick={onSave} className="btn btn-primary">✅ Save</button>
-              <button onClick={() => onEdit(false)} className="btn btn-secondary">Cancel</button>
+              <button onClick={onSave} className="btn btn-primary">
+                ✅ Save
+              </button>
+              <button
+                onClick={() => onEdit(false)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
             </>
           ) : (
             <>
-              <button onClick={() => onEdit(true)} className="btn btn-secondary">✏️ Edit</button>
-              <button onClick={onExport} className="btn btn-primary">📥 Export PDF</button>
+              <button
+                onClick={() => onEdit(true)}
+                className="btn btn-secondary"
+              >
+                ✏️ Edit
+              </button>
+              <button onClick={onExport} className="btn btn-primary">
+                📥 Export PDF
+              </button>
             </>
           )}
         </div>
@@ -700,26 +911,44 @@ function CVOptimizationTab({ job, optimizedCV, editing, onEdit, onSave, onChange
 
       {/* Changes Summary — AI audit trail */}
       {changesList.length > 0 && (
-        <div style={{
-          background: 'oklch(from var(--color-accent) l c h / 0.08)',
-          border: '1px solid oklch(from var(--color-accent) l c h / 0.3)',
-          borderRadius: 'var(--radius-md)',
-          padding: 'var(--space-4)',
-        }}>
-          <h4 style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--font-weight-semibold)',
-            color: 'var(--color-accent)',
-            marginBottom: 'var(--space-3)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-          }}>
-            🔍 What the AI changed ({changesList.length} modification{changesList.length !== 1 ? 's' : ''})
+        <div
+          style={{
+            background: 'oklch(from var(--color-accent) l c h / 0.08)',
+            border: '1px solid oklch(from var(--color-accent) l c h / 0.3)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-4)',
+          }}
+        >
+          <h4
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--font-weight-semibold)',
+              color: 'var(--color-accent)',
+              marginBottom: 'var(--space-3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+            }}
+          >
+            🔍 What the AI changed ({changesList.length} modification
+            {changesList.length !== 1 ? 's' : ''})
           </h4>
-          <ul style={{ paddingLeft: 'var(--space-5)', display: 'grid', gap: 'var(--space-2)' }}>
+          <ul
+            style={{
+              paddingLeft: 'var(--space-5)',
+              display: 'grid',
+              gap: 'var(--space-2)',
+            }}
+          >
             {changesList.map((change, i) => (
-              <li key={i} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+              <li
+                key={i}
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-secondary)',
+                  lineHeight: 1.5,
+                }}
+              >
                 {change}
               </li>
             ))}
@@ -730,13 +959,23 @@ function CVOptimizationTab({ job, optimizedCV, editing, onEdit, onSave, onChange
       {editing ? (
         /* Edit mode: raw JSON editor */
         <div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-2)' }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-muted)',
+              marginBottom: 'var(--space-2)',
+            }}
+          >
             Edit the CV JSON directly. Only modify existing content.
           </p>
           <textarea
             value={JSON.stringify(optimizedCV, null, 2)}
             onChange={(e) => {
-              try { onChange(JSON.parse(e.target.value)); } catch (_) { /* invalid JSON, keep editing */ }
+              try {
+                onChange(JSON.parse(e.target.value));
+              } catch {
+                /* invalid JSON, keep editing */
+              }
             }}
             style={{
               width: '100%',
@@ -755,29 +994,31 @@ function CVOptimizationTab({ job, optimizedCV, editing, onEdit, onSave, onChange
       ) : (
         /* View mode: structured sections */
         <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
-
           {/* Summary */}
           {cv.summary && (
             <div>
-              <h4 style={{
-                fontSize: 'var(--font-size-base)',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--color-accent)',
-                marginBottom: 'var(--space-2)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                fontSize: 'var(--font-size-xs)',
-              }}>
+              <h4
+                style={{
+                  fontWeight: 'var(--font-weight-semibold)',
+                  color: 'var(--color-accent)',
+                  marginBottom: 'var(--space-2)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  fontSize: 'var(--font-size-xs)',
+                }}
+              >
                 Professional Summary
               </h4>
-              <p style={{
-                lineHeight: 1.7,
-                color: 'var(--color-text-primary)',
-                background: 'var(--color-bg-secondary)',
-                padding: 'var(--space-3)',
-                borderRadius: 'var(--radius-md)',
-                borderLeft: '3px solid var(--color-accent)',
-              }}>
+              <p
+                style={{
+                  lineHeight: 1.7,
+                  color: 'var(--color-text-primary)',
+                  background: 'var(--color-bg-secondary)',
+                  padding: 'var(--space-3)',
+                  borderRadius: 'var(--radius-md)',
+                  borderLeft: '3px solid var(--color-accent)',
+                }}
+              >
                 {cv.summary}
               </p>
             </div>
@@ -786,37 +1027,61 @@ function CVOptimizationTab({ job, optimizedCV, editing, onEdit, onSave, onChange
           {/* Skills */}
           {skills.length > 0 && (
             <div>
-              <h4 style={{
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                fontSize: 'var(--font-size-xs)',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--color-accent)',
-                marginBottom: 'var(--space-3)',
-              }}>
+              <h4
+                style={{
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: 'var(--font-weight-semibold)',
+                  color: 'var(--color-accent)',
+                  marginBottom: 'var(--space-3)',
+                }}
+              >
                 Skills (ATS-ranked)
               </h4>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 'var(--space-2)',
+                }}
+              >
                 {skills.map((skill, i) => (
-                  <span key={i} style={{
-                    background: i < 5
-                      ? 'oklch(from var(--color-accent) l c h / 0.15)'
-                      : 'var(--color-bg-secondary)',
-                    border: i < 5
-                      ? '1px solid oklch(from var(--color-accent) l c h / 0.4)'
-                      : '1px solid var(--color-border)',
-                    color: i < 5 ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                    padding: 'var(--space-1) var(--space-3)',
-                    borderRadius: 'var(--radius-full)',
-                    fontSize: 'var(--font-size-sm)',
-                    fontWeight: i < 5 ? 'var(--font-weight-medium)' : 'normal',
-                  }}>
-                    {i < 5 && '★ '}{skill}
+                  <span
+                    key={i}
+                    style={{
+                      background:
+                        i < 5
+                          ? 'oklch(from var(--color-accent) l c h / 0.15)'
+                          : 'var(--color-bg-secondary)',
+                      border:
+                        i < 5
+                          ? '1px solid oklch(from var(--color-accent) l c h / 0.4)'
+                          : '1px solid var(--color-border)',
+                      color:
+                        i < 5
+                          ? 'var(--color-accent)'
+                          : 'var(--color-text-secondary)',
+                      padding: 'var(--space-1) var(--space-3)',
+                      borderRadius: 'var(--radius-full)',
+                      fontSize: 'var(--font-size-sm)',
+                      fontWeight:
+                        i < 5 ? 'var(--font-weight-medium)' : 'normal',
+                    }}
+                  >
+                    {i < 5 && '★ '}
+                    {skill}
                   </span>
                 ))}
               </div>
               {skills.length > 5 && (
-                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-2)' }}>
+                <p
+                  style={{
+                    fontSize: 'var(--font-size-xs)',
+                    color: 'var(--color-text-muted)',
+                    marginTop: 'var(--space-2)',
+                  }}
+                >
                   ★ Top 5 marked as highest JD relevance
                 </p>
               )}
@@ -826,40 +1091,77 @@ function CVOptimizationTab({ job, optimizedCV, editing, onEdit, onSave, onChange
           {/* Experience */}
           {experience.length > 0 && (
             <div>
-              <h4 style={{
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                fontSize: 'var(--font-size-xs)',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--color-accent)',
-                marginBottom: 'var(--space-3)',
-              }}>
+              <h4
+                style={{
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: 'var(--font-weight-semibold)',
+                  color: 'var(--color-accent)',
+                  marginBottom: 'var(--space-3)',
+                }}
+              >
                 Experience (ATS-optimized)
               </h4>
               <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
                 {experience.map((exp, i) => (
-                  <div key={i} style={{
-                    background: 'var(--color-bg-secondary)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: 'var(--space-4)',
-                    borderLeft: '3px solid var(--color-border)',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-2)', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+                  <div
+                    key={i}
+                    style={{
+                      background: 'var(--color-bg-secondary)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: 'var(--space-4)',
+                      borderLeft: '3px solid var(--color-border)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: 'var(--space-2)',
+                        flexWrap: 'wrap',
+                        gap: 'var(--space-1)',
+                      }}
+                    >
                       <div>
-                        <strong style={{ fontSize: 'var(--font-size-base)', color: 'var(--color-text-primary)' }}>
+                        <strong
+                          style={{
+                            fontSize: 'var(--font-size-base)',
+                            color: 'var(--color-text-primary)',
+                          }}
+                        >
                           {exp.role}
                         </strong>
-                        <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                          {' · '}{exp.company}
+                        <span
+                          style={{
+                            color: 'var(--color-text-secondary)',
+                            fontSize: 'var(--font-size-sm)',
+                          }}
+                        >
+                          {' · '}
+                          {exp.company}
                         </span>
                       </div>
                       {exp.duration && (
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                        <span
+                          style={{
+                            fontSize: 'var(--font-size-xs)',
+                            color: 'var(--color-text-muted)',
+                          }}
+                        >
                           {exp.duration}
                         </span>
                       )}
                     </div>
-                    <p style={{ fontSize: 'var(--font-size-sm)', lineHeight: 1.6, color: 'var(--color-text-secondary)', margin: 0 }}>
+                    <p
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        lineHeight: 1.6,
+                        color: 'var(--color-text-secondary)',
+                        margin: 0,
+                      }}
+                    >
                       {exp.description}
                     </p>
                   </div>
@@ -870,25 +1172,44 @@ function CVOptimizationTab({ job, optimizedCV, editing, onEdit, onSave, onChange
 
           {/* Optimized Keywords */}
           {cv.optimized_keywords && cv.optimized_keywords.length > 0 && (
-            <div style={{
-              background: 'oklch(from var(--color-success) l c h / 0.08)',
-              border: '1px solid oklch(from var(--color-success) l c h / 0.3)',
-              borderRadius: 'var(--radius-md)',
-              padding: 'var(--space-3)',
-            }}>
-              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
+            <div
+              style={{
+                background: 'oklch(from var(--color-success) l c h / 0.08)',
+                border:
+                  '1px solid oklch(from var(--color-success) l c h / 0.3)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-3)',
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-secondary)',
+                  marginBottom: 'var(--space-2)',
+                }}
+              >
                 <strong>✅ Keywords integrated from JD:</strong>
               </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 'var(--space-1)',
+                }}
+              >
                 {cv.optimized_keywords.map((kw, i) => (
-                  <span key={i} style={{
-                    background: 'oklch(from var(--color-success) l c h / 0.15)',
-                    color: 'var(--color-success)',
-                    padding: '2px var(--space-2)',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: 'var(--font-size-xs)',
-                    fontWeight: 'var(--font-weight-medium)',
-                  }}>
+                  <span
+                    key={i}
+                    style={{
+                      background:
+                        'oklch(from var(--color-success) l c h / 0.15)',
+                      color: 'var(--color-success)',
+                      padding: '2px var(--space-2)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: 'var(--font-size-xs)',
+                      fontWeight: 'var(--font-weight-medium)',
+                    }}
+                  >
                     {kw}
                   </span>
                 ))}
@@ -908,30 +1229,62 @@ function CVOptimizationTab({ job, optimizedCV, editing, onEdit, onSave, onChange
 }
 
 function CoverLetterTab({
-  job, coverLetter, editing, onEdit, onSave, onChange, onExport,
-  userMotivation, onMotivationChange, onGenerate, generating,
+  job,
+  coverLetter,
+  editing,
+  onEdit,
+  onSave,
+  onChange,
+  onExport,
+  userMotivation,
+  onMotivationChange,
+  onGenerate,
+  generating,
 }) {
   if (!coverLetter) {
     return (
-      <div style={{ maxWidth: '640px', margin: '0 auto', padding: 'var(--space-8) var(--space-4)' }}>
+      <div
+        style={{
+          maxWidth: '640px',
+          margin: '0 auto',
+          padding: 'var(--space-8) var(--space-4)',
+        }}
+      >
         <div style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
-          <div style={{ fontSize: '3rem', marginBottom: 'var(--space-3)' }}>💌</div>
-          <h3 style={{ marginBottom: 'var(--space-2)' }}>Generate Your Cover Letter</h3>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            AI will write a personalized letter using your CV and the job description.
+          <div style={{ fontSize: '3rem', marginBottom: 'var(--space-3)' }}>
+            💌
+          </div>
+          <h3 style={{ marginBottom: 'var(--space-2)' }}>
+            Generate Your Cover Letter
+          </h3>
+          <p
+            style={{
+              color: 'var(--color-text-secondary)',
+              fontSize: 'var(--font-size-sm)',
+            }}
+          >
+            AI will write a personalized letter using your CV and the job
+            description.
           </p>
         </div>
 
         {/* Optional motivation input */}
         <div style={{ marginBottom: 'var(--space-4)' }}>
-          <label style={{
-            display: 'block',
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--font-weight-medium)',
-            marginBottom: 'var(--space-2)',
-            color: 'var(--color-text-primary)',
-          }}>
-            ✍️ Personal Motivation <span style={{ color: 'var(--color-text-muted)', fontWeight: 'normal' }}>(optional — max 500 chars)</span>
+          <label
+            style={{
+              display: 'block',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--font-weight-medium)',
+              marginBottom: 'var(--space-2)',
+              color: 'var(--color-text-primary)',
+            }}
+          >
+            ✍️ Personal Motivation{' '}
+            <span
+              style={{ color: 'var(--color-text-muted)', fontWeight: 'normal' }}
+            >
+              (optional — max 500 chars)
+            </span>
           </label>
           <textarea
             value={userMotivation}
@@ -951,10 +1304,19 @@ function CoverLetterTab({
               resize: 'vertical',
               transition: 'border-color 0.2s',
             }}
-            onFocus={(e) => e.target.style.borderColor = 'var(--color-accent)'}
-            onBlur={(e) => e.target.style.borderColor = 'var(--color-border)'}
+            onFocus={(e) =>
+              (e.target.style.borderColor = 'var(--color-accent)')
+            }
+            onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')}
           />
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-1)', textAlign: 'right' }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-xs)',
+              color: 'var(--color-text-muted)',
+              marginTop: 'var(--space-1)',
+              textAlign: 'right',
+            }}
+          >
             {userMotivation.length}/500
           </p>
         </div>
@@ -963,41 +1325,97 @@ function CoverLetterTab({
           onClick={onGenerate}
           disabled={generating}
           className="btn btn-primary"
-          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-2)', opacity: generating ? 0.7 : 1 }}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 'var(--space-2)',
+            opacity: generating ? 0.7 : 1,
+          }}
         >
-          {generating
-            ? <><div style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTop: '2px solid currentColor', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Generating...</>
-            : <>💌 Generate Cover Letter</>
-          }
+          {generating ? (
+            <>
+              <div
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid currentColor',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }}
+              />{' '}
+              Generating...
+            </>
+          ) : (
+            <>💌 Generate Cover Letter</>
+          )}
         </button>
       </div>
     );
   }
 
-  const letterText = typeof coverLetter === 'string' ? coverLetter : coverLetter.content || '';
+  const letterText =
+    typeof coverLetter === 'string' ? coverLetter : coverLetter.content || '';
 
   return (
     <div style={{ display: 'grid', gap: 'var(--space-5)' }}>
       {/* Header bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 'var(--space-3)',
+        }}
+      >
         <div>
-          <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-1)' }}>
+          <h3
+            style={{
+              fontSize: 'var(--font-size-xl)',
+              fontWeight: 'var(--font-weight-bold)',
+              marginBottom: 'var(--space-1)',
+            }}
+          >
             Cover Letter — {job.company_name}
           </h3>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-muted)',
+            }}
+          >
             Review, edit, and export your personalized cover letter.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+        <div
+          style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}
+        >
           {editing ? (
             <>
-              <button onClick={onSave} className="btn btn-primary">✅ Save</button>
-              <button onClick={() => onEdit(false)} className="btn btn-secondary">Cancel</button>
+              <button onClick={onSave} className="btn btn-primary">
+                ✅ Save
+              </button>
+              <button
+                onClick={() => onEdit(false)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
             </>
           ) : (
             <>
-              <button onClick={() => onEdit(true)} className="btn btn-secondary">✏️ Edit</button>
-              <button onClick={onExport} className="btn btn-primary">📥 Export PDF</button>
+              <button
+                onClick={() => onEdit(true)}
+                className="btn btn-secondary"
+              >
+                ✏️ Edit
+              </button>
+              <button onClick={onExport} className="btn btn-primary">
+                📥 Export PDF
+              </button>
             </>
           )}
         </div>
@@ -1005,16 +1423,30 @@ function CoverLetterTab({
 
       {/* Motivation reminder */}
       {userMotivation && (
-        <div style={{
-          background: 'oklch(from var(--color-accent) l c h / 0.06)',
-          border: '1px solid oklch(from var(--color-accent) l c h / 0.2)',
-          borderRadius: 'var(--radius-md)',
-          padding: 'var(--space-3)',
-        }}>
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-1)' }}>
+        <div
+          style={{
+            background: 'oklch(from var(--color-accent) l c h / 0.06)',
+            border: '1px solid oklch(from var(--color-accent) l c h / 0.2)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-3)',
+          }}
+        >
+          <p
+            style={{
+              fontSize: 'var(--font-size-xs)',
+              color: 'var(--color-text-muted)',
+              marginBottom: 'var(--space-1)',
+            }}
+          >
             Your motivation included:
           </p>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-secondary)',
+              fontStyle: 'italic',
+            }}
+          >
             "{userMotivation}"
           </p>
         </div>
@@ -1038,38 +1470,51 @@ function CoverLetterTab({
           }}
         />
       ) : (
-        <div style={{
-          background: 'var(--color-bg-secondary)',
-          padding: 'var(--space-6)',
-          borderRadius: 'var(--radius-md)',
-          whiteSpace: 'pre-wrap',
-          lineHeight: 1.8,
-          fontSize: 'var(--font-size-base)',
-          fontFamily: 'Georgia, serif',
-          color: 'var(--color-text-primary)',
-          borderLeft: '4px solid var(--color-accent)',
-        }}>
+        <div
+          style={{
+            background: 'var(--color-bg-secondary)',
+            padding: 'var(--space-6)',
+            borderRadius: 'var(--radius-md)',
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.8,
+            fontSize: 'var(--font-size-base)',
+            fontFamily: 'Georgia, serif',
+            color: 'var(--color-text-primary)',
+            borderLeft: '4px solid var(--color-accent)',
+          }}
+        >
           {letterText}
         </div>
       )}
 
       {/* Re-generate with different motivation */}
-      <div style={{
-        borderTop: '1px solid var(--color-border)',
-        paddingTop: 'var(--space-4)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-3)',
-        flexWrap: 'wrap',
-      }}>
-        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', margin: 0 }}>
+      <div
+        style={{
+          borderTop: '1px solid var(--color-border)',
+          paddingTop: 'var(--space-4)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-3)',
+          flexWrap: 'wrap',
+        }}
+      >
+        <p
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-muted)',
+            margin: 0,
+          }}
+        >
           Not satisfied? Regenerate with different motivation:
         </p>
         <button
           onClick={onGenerate}
           disabled={generating}
           className="btn btn-secondary"
-          style={{ fontSize: 'var(--font-size-sm)', opacity: generating ? 0.7 : 1 }}
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            opacity: generating ? 0.7 : 1,
+          }}
         >
           {generating ? 'Regenerating…' : '🔄 Regenerate'}
         </button>
@@ -1084,16 +1529,19 @@ function CoverLetterTab({
   );
 }
 
-
 function InterviewPrepTab({ job, interviewPrep }) {
   if (!interviewPrep) {
     return (
       <div style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-        <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>🎯</div>
-        <h3 style={{ marginBottom: 'var(--space-2)' }}>Interview Preparation Not Generated Yet</h3>
+        <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>
+          🎯
+        </div>
+        <h3 style={{ marginBottom: 'var(--space-2)' }}>
+          Interview Preparation Not Generated Yet
+        </h3>
         <p style={{ color: 'var(--color-text-secondary)' }}>
-          Click <strong>Interview Prep</strong> above to generate 3 technical + 2 behavioral
-          questions, plus a tech cheat sheet built from the JD.
+          Click <strong>Interview Prep</strong> above to generate 3 technical +
+          2 behavioral questions, plus a tech cheat sheet built from the JD.
         </p>
       </div>
     );
@@ -1107,12 +1555,23 @@ function InterviewPrepTab({ job, interviewPrep }) {
   return (
     <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
       <div>
-        <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-1)' }}>
+        <h3
+          style={{
+            fontSize: 'var(--font-size-xl)',
+            fontWeight: 'var(--font-weight-bold)',
+            marginBottom: 'var(--space-1)',
+          }}
+        >
           Interview Preparation — {job.company_name}
         </h3>
-        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
-          Questions target the JD stack; the cheat sheet covers each technology explicitly
-          mentioned in the posting.
+        <p
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-muted)',
+          }}
+        >
+          Questions target the JD stack; the cheat sheet covers each technology
+          explicitly mentioned in the posting.
         </p>
       </div>
 
@@ -1201,7 +1660,9 @@ function ExtractedTechnologiesBar({ techs }) {
           >
             {tech.name}
             {tech.mentions > 1 && (
-              <span style={{ opacity: 0.6, marginLeft: '4px' }}>×{tech.mentions}</span>
+              <span style={{ opacity: 0.6, marginLeft: '4px' }}>
+                ×{tech.mentions}
+              </span>
             )}
           </span>
         ))}
@@ -1228,7 +1689,13 @@ function QuestionSection({ icon, label, subtitle, children }) {
           {label}
         </h4>
         {subtitle && (
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-xs)',
+              color: 'var(--color-text-muted)',
+              marginTop: '2px',
+            }}
+          >
             {subtitle}
           </p>
         )}
@@ -1239,11 +1706,12 @@ function QuestionSection({ icon, label, subtitle, children }) {
 }
 
 function TechnicalQuestionCard({ index, question }) {
-  const difficultyColor = {
-    easy: 'var(--color-success)',
-    medium: 'var(--color-warning)',
-    hard: 'var(--color-error)',
-  }[(question.difficulty || '').toLowerCase()] || 'var(--color-accent)';
+  const difficultyColor =
+    {
+      easy: 'var(--color-success)',
+      medium: 'var(--color-warning)',
+      hard: 'var(--color-error)',
+    }[(question.difficulty || '').toLowerCase()] || 'var(--color-accent)';
 
   return (
     <div
@@ -1254,7 +1722,15 @@ function TechnicalQuestionCard({ index, question }) {
         borderLeft: `3px solid ${difficultyColor}`,
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: 'var(--space-3)',
+          marginBottom: 'var(--space-2)',
+        }}
+      >
         <p style={{ fontWeight: 'var(--font-weight-medium)', lineHeight: 1.5 }}>
           Q{index + 1}. {question.question}
         </p>
@@ -1276,7 +1752,14 @@ function TechnicalQuestionCard({ index, question }) {
       </div>
 
       {question.topics && question.topics.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: 'var(--space-2)' }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '4px',
+            marginBottom: 'var(--space-2)',
+          }}
+        >
           {question.topics.map((topic, i) => (
             <span
               key={i}
@@ -1296,7 +1779,13 @@ function TechnicalQuestionCard({ index, question }) {
       )}
 
       {question.guidance && (
-        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
+        <p
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+            marginBottom: 'var(--space-2)',
+          }}
+        >
           <strong>Ideal answer covers:</strong> {question.guidance}
         </p>
       )}
@@ -1342,21 +1831,45 @@ function BehavioralQuestionCard({ index, question }) {
         borderLeft: '3px solid var(--color-accent)',
       }}
     >
-      <p style={{ fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-2)', lineHeight: 1.5 }}>
+      <p
+        style={{
+          fontWeight: 'var(--font-weight-medium)',
+          marginBottom: 'var(--space-2)',
+          lineHeight: 1.5,
+        }}
+      >
         Q{index + 1}. {question.question}
       </p>
       {question.scenario && (
-        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
+        <p
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+            marginBottom: 'var(--space-2)',
+          }}
+        >
           <strong>Assesses:</strong> {question.scenario}
         </p>
       )}
       {question.star_guidance && (
-        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
+        <p
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+            marginBottom: 'var(--space-2)',
+          }}
+        >
           <strong>STAR guide:</strong> {question.star_guidance}
         </p>
       )}
       {question.company_context && (
-        <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+        <p
+          style={{
+            fontSize: 'var(--font-size-xs)',
+            color: 'var(--color-text-muted)',
+            fontStyle: 'italic',
+          }}
+        >
           Culture cue: {question.company_context}
         </p>
       )}
@@ -1383,16 +1896,40 @@ function CheatSheetCard({ entry }) {
       >
         {entry.concept}
       </summary>
-      <div style={{ marginTop: 'var(--space-3)', display: 'grid', gap: 'var(--space-2)' }}>
+      <div
+        style={{
+          marginTop: 'var(--space-3)',
+          display: 'grid',
+          gap: 'var(--space-2)',
+        }}
+      >
         {entry.definition && (
-          <p style={{ fontSize: 'var(--font-size-sm)', lineHeight: 1.6, color: 'var(--color-text-secondary)' }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              lineHeight: 1.6,
+              color: 'var(--color-text-secondary)',
+            }}
+          >
             {entry.definition}
           </p>
         )}
         {entry.key_points && entry.key_points.length > 0 && (
-          <ul style={{ paddingLeft: 'var(--space-5)', display: 'grid', gap: '4px' }}>
+          <ul
+            style={{
+              paddingLeft: 'var(--space-5)',
+              display: 'grid',
+              gap: '4px',
+            }}
+          >
             {entry.key_points.map((point, i) => (
-              <li key={i} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+              <li
+                key={i}
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-secondary)',
+                }}
+              >
                 {point}
               </li>
             ))}
@@ -1421,13 +1958,28 @@ function BenchmarkTab({ job, benchmark }) {
   if (!benchmark) {
     return (
       <div style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-        <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>📊</div>
-        <h3 style={{ marginBottom: 'var(--space-2)' }}>Benchmark Not Calculated Yet</h3>
-        <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)' }}>
+        <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>
+          📊
+        </div>
+        <h3 style={{ marginBottom: 'var(--space-2)' }}>
+          Benchmark Not Calculated Yet
+        </h3>
+        <p
+          style={{
+            color: 'var(--color-text-secondary)',
+            marginBottom: 'var(--space-4)',
+          }}
+        >
           Click "Benchmark" above to see how you compare to other candidates.
         </p>
-        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
-          Requires at least 30 users with similar profiles to generate meaningful comparisons.
+        <p
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-muted)',
+          }}
+        >
+          Requires at least 30 users with similar profiles to generate
+          meaningful comparisons.
         </p>
       </div>
     );
@@ -1435,45 +1987,59 @@ function BenchmarkTab({ job, benchmark }) {
 
   return (
     <div>
-      <h3 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'var(--font-weight-bold)', marginBottom: 'var(--space-4)' }}>
+      <h3
+        style={{
+          fontSize: 'var(--font-size-xl)',
+          fontWeight: 'var(--font-weight-bold)',
+          marginBottom: 'var(--space-4)',
+        }}
+      >
         Competitive Benchmark for {job.company_name}
       </h3>
 
       <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
         {/* Score Display */}
         <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: '120px',
-            height: '120px',
-            borderRadius: '50%',
-            background: `conic-gradient(var(--color-success) ${benchmark.score * 3.6}deg, var(--color-border) 0deg)`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto',
-            marginBottom: 'var(--space-3)',
-          }}>
-            <div style={{
-              width: '96px',
-              height: '96px',
+          <div
+            style={{
+              width: '120px',
+              height: '120px',
               borderRadius: '50%',
-              background: 'var(--color-bg-primary)',
+              background: `conic-gradient(var(--color-success) ${benchmark.score * 3.6}deg, var(--color-border) 0deg)`,
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-            }}>
-              <div style={{
-                fontSize: 'var(--font-size-xl)',
-                fontWeight: 'var(--font-weight-bold)',
-                color: 'var(--color-success)',
-              }}>
+              margin: '0 auto',
+              marginBottom: 'var(--space-3)',
+            }}
+          >
+            <div
+              style={{
+                width: '96px',
+                height: '96px',
+                borderRadius: '50%',
+                background: 'var(--color-bg-primary)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 'var(--font-size-xl)',
+                  fontWeight: 'var(--font-weight-bold)',
+                  color: 'var(--color-success)',
+                }}
+              >
                 {benchmark.score}
               </div>
-              <div style={{
-                fontSize: 'var(--font-size-xs)',
-                color: 'var(--color-text-muted)',
-              }}>
+              <div
+                style={{
+                  fontSize: 'var(--font-size-xs)',
+                  color: 'var(--color-text-muted)',
+                }}
+              >
                 percentile
               </div>
             </div>
@@ -1486,17 +2052,35 @@ function BenchmarkTab({ job, benchmark }) {
         {/* Peer Group Info */}
         {benchmark.peer_group && (
           <div>
-            <h4 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-3)', color: 'var(--color-accent)' }}>
+            <h4
+              style={{
+                fontSize: 'var(--font-size-lg)',
+                fontWeight: 'var(--font-weight-medium)',
+                marginBottom: 'var(--space-3)',
+                color: 'var(--color-accent)',
+              }}
+            >
               Peer Group Comparison
             </h4>
-            <div style={{
-              background: 'var(--color-bg-secondary)',
-              padding: 'var(--space-4)',
-              borderRadius: 'var(--radius-md)',
-            }}>
-              <p><strong>Sample Size:</strong> {benchmark.peer_group.size} professionals</p>
-              <p><strong>Experience Level:</strong> {benchmark.peer_group.seniority_level}</p>
-              <p><strong>Privacy Compliant:</strong> ✅ All data anonymized and aggregated</p>
+            <div
+              style={{
+                background: 'var(--color-bg-secondary)',
+                padding: 'var(--space-4)',
+                borderRadius: 'var(--radius-md)',
+              }}
+            >
+              <p>
+                <strong>Sample Size:</strong> {benchmark.peer_group.size}{' '}
+                professionals
+              </p>
+              <p>
+                <strong>Experience Level:</strong>{' '}
+                {benchmark.peer_group.seniority_level}
+              </p>
+              <p>
+                <strong>Privacy Compliant:</strong> ✅ All data anonymized and
+                aggregated
+              </p>
             </div>
           </div>
         )}
@@ -1504,29 +2088,61 @@ function BenchmarkTab({ job, benchmark }) {
         {/* Skill Gaps */}
         {benchmark.skill_gaps && benchmark.skill_gaps.length > 0 && (
           <div>
-            <h4 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-3)', color: 'var(--color-accent)' }}>
+            <h4
+              style={{
+                fontSize: 'var(--font-size-lg)',
+                fontWeight: 'var(--font-weight-medium)',
+                marginBottom: 'var(--space-3)',
+                color: 'var(--color-accent)',
+              }}
+            >
               Skill Development Opportunities
             </h4>
             {benchmark.skill_gaps.map((gap, index) => (
-              <div key={index} style={{
-                padding: 'var(--space-3)',
-                background: 'var(--color-bg-secondary)',
-                borderRadius: 'var(--radius-md)',
-                marginBottom: 'var(--space-3)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-                  <strong style={{ textTransform: 'capitalize' }}>{gap.skill}</strong>
-                  <span style={{
-                    background: gap.priority === 'high' ? 'var(--color-error)' : gap.priority === 'medium' ? 'var(--color-warning)' : 'var(--color-info)',
-                    color: 'white',
-                    padding: 'var(--space-1) var(--space-2)',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: 'var(--font-size-xs)',
-                  }}>
+              <div
+                key={index}
+                style={{
+                  padding: 'var(--space-3)',
+                  background: 'var(--color-bg-secondary)',
+                  borderRadius: 'var(--radius-md)',
+                  marginBottom: 'var(--space-3)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 'var(--space-2)',
+                  }}
+                >
+                  <strong style={{ textTransform: 'capitalize' }}>
+                    {gap.skill}
+                  </strong>
+                  <span
+                    style={{
+                      background:
+                        gap.priority === 'high'
+                          ? 'var(--color-error)'
+                          : gap.priority === 'medium'
+                            ? 'var(--color-warning)'
+                            : 'var(--color-info)',
+                      color: 'white',
+                      padding: 'var(--space-1) var(--space-2)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: 'var(--font-size-xs)',
+                    }}
+                  >
                     {gap.priority} priority
                   </span>
                 </div>
-                <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)' }}>
+                <p
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-secondary)',
+                    marginBottom: 'var(--space-2)',
+                  }}
+                >
                   {gap.peer_frequency} of similar candidates have this skill
                 </p>
                 <p style={{ fontSize: 'var(--font-size-sm)' }}>

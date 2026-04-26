@@ -1,22 +1,23 @@
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 """
 Authentication Middleware Tests.
 
 Tests JWT authentication dependency, rate limiting, and security headers.
 """
 
-from datetime import datetime, timedelta, timezone
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import FastAPI, Depends, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.dependencies.auth import get_current_user, get_current_active_user
-from app.middleware.rate_limit import setup_rate_limiting, limiter
+from app.dependencies.auth import get_current_active_user, get_current_user
+from app.middleware.rate_limit import limiter, setup_rate_limiting
 from app.middleware.security_headers import setup_security_headers
 from app.models.user import User
 
@@ -135,7 +136,9 @@ class TestJWTAuthentication:
         self, app_with_middleware: FastAPI, test_user: User, valid_token: str
     ):
         """Valid JWT token should return authenticated user."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
         response = await client.get(
             "/protected", headers={"Authorization": f"Bearer {valid_token}"}
         )
@@ -148,7 +151,9 @@ class TestJWTAuthentication:
     @pytest.mark.asyncio
     async def test_missing_token_returns_401(self, app_with_middleware: FastAPI):
         """Request without Authorization header should return 401."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
         response = await client.get("/protected")
 
         assert response.status_code == 403  # HTTPBearer returns 403 for missing token
@@ -158,7 +163,9 @@ class TestJWTAuthentication:
         self, app_with_middleware: FastAPI, expired_token: str
     ):
         """Expired JWT token should return 401 Unauthorized."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
         response = await client.get(
             "/protected", headers={"Authorization": f"Bearer {expired_token}"}
         )
@@ -171,7 +178,9 @@ class TestJWTAuthentication:
         self, app_with_middleware: FastAPI, invalid_token: str
     ):
         """Token with invalid signature should return 401."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
         response = await client.get(
             "/protected", headers={"Authorization": f"Bearer {invalid_token}"}
         )
@@ -182,7 +191,9 @@ class TestJWTAuthentication:
     @pytest.mark.asyncio
     async def test_malformed_token_returns_401(self, app_with_middleware: FastAPI):
         """Malformed token (not JWT format) should return 401."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
         response = await client.get(
             "/protected", headers={"Authorization": "Bearer not.a.jwt"}
         )
@@ -200,8 +211,12 @@ class TestJWTAuthentication:
         }
         token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
-        response = await client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
+        response = await client.get(
+            "/protected", headers={"Authorization": f"Bearer {token}"}
+        )
 
         assert response.status_code == 401
 
@@ -216,8 +231,12 @@ class TestJWTAuthentication:
         }
         token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
-        response = await client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
+        response = await client.get(
+            "/protected", headers={"Authorization": f"Bearer {token}"}
+        )
 
         assert response.status_code == 401
 
@@ -226,7 +245,9 @@ class TestJWTAuthentication:
         self, app_with_middleware: FastAPI, test_user: User, valid_token: str
     ):
         """get_current_active_user should return user (no is_active check yet)."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
         response = await client.get(
             "/active-only", headers={"Authorization": f"Bearer {valid_token}"}
         )
@@ -248,7 +269,9 @@ class TestRateLimiting:
         self, app_with_middleware: FastAPI
     ):
         """Requests within rate limit should succeed."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
 
         # First request should succeed
         response = await client.get("/rate-limited")
@@ -262,7 +285,9 @@ class TestRateLimiting:
         self, app_with_middleware: FastAPI
     ):
         """Requests exceeding rate limit should return 429."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
 
         # Make 2 requests (at the limit)
         await client.get("/rate-limited")
@@ -272,7 +297,9 @@ class TestRateLimiting:
         response = await client.get("/rate-limited")
         assert response.status_code == 429
 
-    async def test_default_rate_limit_is_100_per_minute(self, app_with_middleware: FastAPI):
+    async def test_default_rate_limit_is_100_per_minute(
+        self, app_with_middleware: FastAPI
+    ):
         """Routes without explicit @limiter.limit should use default 100/minute."""
         # This test verifies the limiter is configured, not exhaustive testing
         assert ["100/minute"] == ["100/minute"]
@@ -287,9 +314,13 @@ class TestSecurityHeaders:
     pytestmark = pytest.mark.skip(reason="Headers mocked")
     """Test OWASP security headers middleware."""
 
-    async def test_security_headers_present_on_all_routes(self, app_with_middleware: FastAPI):
+    async def test_security_headers_present_on_all_routes(
+        self, app_with_middleware: FastAPI
+    ):
         """All routes should include security headers."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
         response = await client.get("/public")
 
         assert response.status_code == 200
@@ -302,16 +333,16 @@ class TestSecurityHeaders:
             response.headers["Content-Security-Policy"]
             == "default-src 'none'; frame-ancestors 'none'"
         )
-        assert (
-            response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
-        )
+        assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
         assert response.headers["Server"] == "AutoApply API"
 
     async def test_security_headers_present_on_protected_routes(
         self, app_with_middleware: FastAPI, valid_token: str
     ):
         """Protected routes should also include security headers."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
         response = await client.get(
             "/protected", headers={"Authorization": f"Bearer {valid_token}"}
         )
@@ -324,7 +355,9 @@ class TestSecurityHeaders:
         self, app_with_middleware: FastAPI
     ):
         """Even error responses should include security headers."""
-        client = AsyncClient(transport=ASGITransport(app=app_with_middleware), base_url="http://test") # app_with_middleware)
+        client = AsyncClient(
+            transport=ASGITransport(app=app_with_middleware), base_url="http://test"
+        )  # app_with_middleware)
         response = await client.get("/protected")  # No auth token
 
         assert response.status_code == 403

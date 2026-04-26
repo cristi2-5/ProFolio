@@ -15,19 +15,21 @@ import pytest
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.cv_profiler import CVProfilerAgent, ParsedCVData, Experience, Education
+from app.agents.cv_profiler import CVProfilerAgent, Education, Experience, ParsedCVData
 from app.models.resume import ParsedResume
 from app.models.user import User
 from app.services.resume_service import ResumeService
 from app.utils.file_processing import (
-    validate_cv_file, extract_text_from_file,
-    extract_text_from_pdf, extract_text_from_docx
+    extract_text_from_docx,
+    extract_text_from_file,
+    extract_text_from_pdf,
+    validate_cv_file,
 )
-
 
 # =====================================================================
 # Test Fixtures
 # =====================================================================
+
 
 @pytest.fixture
 def sample_cv_text() -> str:
@@ -78,35 +80,53 @@ def mock_gpt_response() -> dict:
         "location": "San Francisco, CA",
         "summary": "Experienced Software Engineer with 5 years of experience in full-stack development.",
         "skills": ["Problem Solving", "Team Collaboration", "Technical Leadership"],
-        "technologies": ["Python", "JavaScript", "TypeScript", "React", "FastAPI", "PostgreSQL", "Docker"],
+        "technologies": [
+            "Python",
+            "JavaScript",
+            "TypeScript",
+            "React",
+            "FastAPI",
+            "PostgreSQL",
+            "Docker",
+        ],
         "experience": [
             {
                 "role": "Senior Software Engineer",
                 "company": "TechCorp Inc",
                 "period": "2020-2023",
                 "description": "Developed REST APIs using Python and FastAPI, built React frontends",
-                "technologies": ["Python", "FastAPI", "React", "TypeScript", "PostgreSQL", "Redis"]
+                "technologies": [
+                    "Python",
+                    "FastAPI",
+                    "React",
+                    "TypeScript",
+                    "PostgreSQL",
+                    "Redis",
+                ],
             },
             {
                 "role": "Software Developer",
                 "company": "StartupXYZ",
                 "period": "2018-2020",
                 "description": "Created web applications using Django and React",
-                "technologies": ["Django", "React", "Docker"]
-            }
+                "technologies": ["Django", "React", "Docker"],
+            },
         ],
         "education": [
             {
                 "degree": "Bachelor of Science in Computer Science",
                 "institution": "University of Tech",
                 "year": "2018",
-                "details": "GPA: 3.8/4.0"
+                "details": "GPA: 3.8/4.0",
             }
         ],
-        "certifications": ["AWS Solutions Architect Associate", "Certified Scrum Master"],
+        "certifications": [
+            "AWS Solutions Architect Associate",
+            "Certified Scrum Master",
+        ],
         "languages": ["English (Native)"],
         "total_years_experience": 5,
-        "senior_technologies": ["Python", "React", "PostgreSQL"]
+        "senior_technologies": ["Python", "React", "PostgreSQL"],
     }
 
 
@@ -119,7 +139,7 @@ def test_user_data() -> dict:
         "password_hash": "hashed_password",
         "full_name": "Test User",
         "seniority_level": "mid",
-        "niche": "Backend Engineering"
+        "niche": "Backend Engineering",
     }
 
 
@@ -137,6 +157,7 @@ async def test_user(test_session: AsyncSession, test_user_data: dict) -> User:
 # File Processing Tests
 # =====================================================================
 
+
 class TestFileProcessing:
     """Test file validation and text extraction utilities."""
 
@@ -147,7 +168,9 @@ class TestFileProcessing:
         pdf_file.write_text("%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj")
 
         is_valid, error = validate_cv_file(str(pdf_file), "test.pdf")
-        assert is_valid is False  # Will fail because it's not a real PDF, but that's expected
+        assert (
+            is_valid is False
+        )  # Will fail because it's not a real PDF, but that's expected
 
     def test_validate_cv_file_unsupported_extension(self, tmp_path):
         """Unsupported file extensions should fail validation."""
@@ -163,7 +186,7 @@ class TestFileProcessing:
         large_file = tmp_path / "large.pdf"
         large_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
         # Create a file larger than 10MB (simulate)
-        with patch('os.path.getsize', return_value=11 * 1024 * 1024):
+        with patch("os.path.getsize", return_value=11 * 1024 * 1024):
             is_valid, error = validate_cv_file(str(large_file), "large.pdf")
             assert is_valid is False
             assert "exceeds limit" in error
@@ -178,6 +201,7 @@ class TestFileProcessing:
 # =====================================================================
 # CV Profiler Agent Tests
 # =====================================================================
+
 
 class TestCVProfilerAgent:
     """Test AI-powered CV parsing agent."""
@@ -195,15 +219,22 @@ class TestCVProfilerAgent:
         assert cv_agent.temperature == 0.1
 
     @pytest.mark.asyncio
-    async def test_parse_cv_success(self, cv_agent, tmp_path, sample_cv_text, mock_gpt_response):
+    async def test_parse_cv_success(
+        self, cv_agent, tmp_path, sample_cv_text, mock_gpt_response
+    ):
         """Successful CV parsing with AI should return structured data."""
         # Create mock PDF file
         test_file = tmp_path / "test_resume.pdf"
         test_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
 
         # Mock file processing and OpenAI API
-        with patch('app.agents.cv_profiler.extract_text_from_file', return_value=sample_cv_text), \
-             patch('app.agents.cv_profiler.openai_client') as mock_client:
+        with (
+            patch(
+                "app.agents.cv_profiler.extract_text_from_file",
+                return_value=sample_cv_text,
+            ),
+            patch("app.agents.cv_profiler.openai_client") as mock_client,
+        ):
 
             # Mock OpenAI response
             mock_response = MagicMock()
@@ -227,11 +258,18 @@ class TestCVProfilerAgent:
         test_file = tmp_path / "test_resume.pdf"
         test_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
 
-        with patch('app.agents.cv_profiler.extract_text_from_file', return_value=sample_cv_text), \
-             patch('app.agents.cv_profiler.openai_client') as mock_client:
+        with (
+            patch(
+                "app.agents.cv_profiler.extract_text_from_file",
+                return_value=sample_cv_text,
+            ),
+            patch("app.agents.cv_profiler.openai_client") as mock_client,
+        ):
 
             # Mock OpenAI API error
-            mock_client.chat.completions.create = AsyncMock(side_effect=Exception("API Error"))
+            mock_client.chat.completions.create = AsyncMock(
+                side_effect=Exception("API Error")
+            )
 
             # Test error handling
             with pytest.raises(Exception) as exc_info:
@@ -241,23 +279,26 @@ class TestCVProfilerAgent:
 
     @pytest.mark.asyncio
     async def test_parse_cv_invalid_json(self, cv_agent, tmp_path, sample_cv_text):
-        """Invalid JSON from OpenAI should be handled."""
+        """Invalid JSON from the LLM should raise CVProfilerError."""
+        from app.utils.exceptions import CVProfilerError
+
         test_file = tmp_path / "test_resume.pdf"
         test_file.write_bytes(b"%PDF-1.4\n%%EOF\n")
 
-        with patch('app.agents.cv_profiler.extract_text_from_file', return_value=sample_cv_text), \
-             patch('app.agents.cv_profiler.openai_client') as mock_client:
+        with (
+            patch(
+                "app.agents.cv_profiler.extract_text_from_file",
+                return_value=sample_cv_text,
+            ),
+            patch("app.agents.cv_profiler.openai_client") as mock_client,
+        ):
 
-            # Mock invalid JSON response
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "invalid json content"
             mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-            # Test error handling
-            with pytest.raises(Exception) as exc_info:
+            with pytest.raises(CVProfilerError, match="malformed CV data"):
                 await cv_agent.parse(str(test_file), "test_resume.pdf")
-
-            assert "AI returned invalid JSON" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_get_parsing_stats(self, cv_agent):
@@ -274,6 +315,7 @@ class TestCVProfilerAgent:
 # =====================================================================
 # Resume Service Tests
 # =====================================================================
+
 
 class TestResumeService:
     """Test resume business logic and file management."""
@@ -292,34 +334,57 @@ class TestResumeService:
         return mock_file
 
     @pytest.mark.asyncio
-    async def test_upload_and_parse_success(self, resume_service, test_session, test_user, mock_upload_file, mock_gpt_response):
+    async def test_upload_and_parse_success(
+        self,
+        resume_service,
+        test_session,
+        test_user,
+        mock_upload_file,
+        mock_gpt_response,
+    ):
         """Successful CV upload and parsing should create resume record."""
-        with patch.object(resume_service.cv_profiler, 'parse', return_value=mock_gpt_response) as mock_parse, \
-             patch('builtins.open', MagicMock()), \
-             patch.object(Path, 'exists', return_value=True), \
-             patch.object(Path, 'unlink'):
+        with (
+            patch.object(
+                resume_service.cv_profiler, "parse", return_value=mock_gpt_response
+            ) as mock_parse,
+            patch("builtins.open", MagicMock()),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "unlink"),
+        ):
 
             # Test upload and parse
-            resume = await resume_service.upload_and_parse(test_session, test_user, mock_upload_file)
+            resume = await resume_service.upload_and_parse(
+                test_session, test_user, mock_upload_file
+            )
 
             # Verify resume creation
             assert resume.user_id == test_user.id
             assert resume.original_filename == "test_resume.pdf"
             assert resume.parsed_data["full_name"] == "John Doe"
-            assert resume.is_active is True   # First resume should be active
+            assert resume.is_active is True  # First resume should be active
             mock_parse.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_upload_and_parse_ai_error(self, resume_service, test_session, test_user, mock_upload_file):
+    async def test_upload_and_parse_ai_error(
+        self, resume_service, test_session, test_user, mock_upload_file
+    ):
         """AI parsing errors should cleanup files and propagate error."""
-        with patch.object(resume_service.cv_profiler, 'parse', side_effect=ValueError("AI parsing failed")), \
-             patch('builtins.open', MagicMock()), \
-             patch.object(Path, 'exists', return_value=True), \
-             patch.object(Path, 'unlink') as mock_unlink:
+        with (
+            patch.object(
+                resume_service.cv_profiler,
+                "parse",
+                side_effect=ValueError("AI parsing failed"),
+            ),
+            patch("builtins.open", MagicMock()),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "unlink") as mock_unlink,
+        ):
 
             # Test error handling
             with pytest.raises(ValueError) as exc_info:
-                await resume_service.upload_and_parse(test_session, test_user, mock_upload_file)
+                await resume_service.upload_and_parse(
+                    test_session, test_user, mock_upload_file
+                )
 
             assert "AI parsing failed" in str(exc_info.value)
             mock_unlink.assert_called_once()  # File should be cleaned up
@@ -332,13 +397,13 @@ class TestResumeService:
             user_id=test_user.id,
             original_filename="resume1.pdf",
             parsed_data={"full_name": "Test User 1"},
-            is_active=True
+            is_active=True,
         )
         resume2 = ParsedResume(
             user_id=test_user.id,
             original_filename="resume2.pdf",
             parsed_data={"full_name": "Test User 2"},
-            is_active=False
+            is_active=False,
         )
         test_session.add_all([resume1, resume2])
         await test_session.flush()
@@ -358,19 +423,21 @@ class TestResumeService:
             user_id=test_user.id,
             original_filename="resume1.pdf",
             parsed_data={"full_name": "Test User 1"},
-            is_active=True
+            is_active=True,
         )
         resume2 = ParsedResume(
             user_id=test_user.id,
             original_filename="resume2.pdf",
             parsed_data={"full_name": "Test User 2"},
-            is_active=False
+            is_active=False,
         )
         test_session.add_all([resume1, resume2])
         await test_session.flush()
 
         # Set resume2 as active
-        updated_resume = await resume_service.set_active_resume(test_session, test_user.id, resume2.id)
+        updated_resume = await resume_service.set_active_resume(
+            test_session, test_user.id, resume2.id
+        )
 
         # Verify activation
         assert updated_resume.is_active is True
@@ -384,6 +451,7 @@ class TestResumeService:
 # Pydantic Model Tests
 # =====================================================================
 
+
 class TestPydanticModels:
     """Test CV data validation models."""
 
@@ -394,7 +462,7 @@ class TestPydanticModels:
             "email": "john@example.com",
             "skills": ["Python", "React"],
             "technologies": ["FastAPI", "PostgreSQL"],
-            "total_years_experience": 5
+            "total_years_experience": 5,
         }
 
         cv_data = ParsedCVData(**data)
@@ -408,7 +476,7 @@ class TestPydanticModels:
             "role": "Software Engineer",
             "company": "TechCorp",
             "period": "2020-2023",
-            "description": "Developed applications"
+            "description": "Developed applications",
         }
 
         experience = Experience(**exp_data)
@@ -420,7 +488,7 @@ class TestPydanticModels:
         edu_data = {
             "degree": "Bachelor of Science in Computer Science",
             "institution": "University of Tech",
-            "year": "2018"
+            "year": "2018",
         }
 
         education = Education(**edu_data)

@@ -5,16 +5,16 @@ Comprehensive test suite for benchmark REST endpoints, opt-in management,
 and score retrieval with privacy compliance validation.
 """
 
-import pytest
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from fastapi import HTTPException
 
+from app.models.benchmark import BenchmarkScore
 from app.models.job import ScrapedJob
 from app.models.user import User
-from app.models.benchmark import BenchmarkScore
 from app.services.benchmark_service import InsufficientPeersError
 
 
@@ -59,23 +59,27 @@ class TestBenchmarkRouterEndpoints:
                     "skill": "docker",
                     "priority": "high",
                     "peer_frequency": "80%",
-                    "recommendation": "Learn containerization basics"
+                    "recommendation": "Learn containerization basics",
                 }
             ],
             "match_criteria": {
                 "required_skills": ["react", "typescript", "javascript"]
             },
-            "match_score": 82.5
+            "match_score": 82.5,
         }
         score.calculated_at = datetime.now(timezone.utc)
         return score
 
     @pytest.mark.asyncio
-    async def test_calculate_benchmark_success(self, async_client, sample_user, sample_job, sample_benchmark_score):
+    async def test_calculate_benchmark_success(
+        self, async_client, sample_user, sample_job, sample_benchmark_score
+    ):
         """Test successful benchmark calculation via API."""
-        with patch("app.routers.jobs.get_current_user", return_value=sample_user), \
-             patch("app.routers.jobs.benchmark_service") as mock_service, \
-             patch("app.routers.jobs.db.get", return_value=sample_job):
+        with (
+            patch("app.routers.jobs.get_current_user", return_value=sample_user),
+            patch("app.routers.jobs.benchmark_service") as mock_service,
+            patch("app.routers.jobs.db.get", return_value=sample_job),
+        ):
 
             # Mock benchmark service
             mock_service.calculate_benchmark_score.return_value = sample_benchmark_score
@@ -85,11 +89,18 @@ class TestBenchmarkRouterEndpoints:
             mock_service._get_user_profile.return_value = {
                 "skills": ["React", "TypeScript", "JavaScript", "Python"]
             }
-            mock_service._extract_user_skills.return_value = ["React", "TypeScript", "JavaScript", "Python"]
+            mock_service._extract_user_skills.return_value = [
+                "React",
+                "TypeScript",
+                "JavaScript",
+                "Python",
+            ]
             mock_service._calculate_match_score.return_value = 82.5
             mock_service.MINIMUM_PEER_COUNT = 30
 
-            response = await async_client.post(f"/api/jobs/{sample_job.id}/calculate-benchmark")
+            response = await async_client.post(
+                f"/api/jobs/{sample_job.id}/calculate-benchmark"
+            )
 
             assert response.status_code == 201
             data = response.json()
@@ -104,11 +115,15 @@ class TestBenchmarkRouterEndpoints:
             assert data["peer_group"]["size"] == 45
 
     @pytest.mark.asyncio
-    async def test_calculate_benchmark_insufficient_peers(self, async_client, sample_user, sample_job):
+    async def test_calculate_benchmark_insufficient_peers(
+        self, async_client, sample_user, sample_job
+    ):
         """Test benchmark calculation with insufficient peers."""
-        with patch("app.routers.jobs.get_current_user", return_value=sample_user), \
-             patch("app.routers.jobs.benchmark_service") as mock_service, \
-             patch("app.routers.jobs.db.get", return_value=sample_job):
+        with (
+            patch("app.routers.jobs.get_current_user", return_value=sample_user),
+            patch("app.routers.jobs.benchmark_service") as mock_service,
+            patch("app.routers.jobs.db.get", return_value=sample_job),
+        ):
 
             # Mock insufficient peers error
             mock_service.calculate_benchmark_score.side_effect = InsufficientPeersError(
@@ -116,7 +131,9 @@ class TestBenchmarkRouterEndpoints:
             )
             mock_service.MINIMUM_PEER_COUNT = 30
 
-            response = await async_client.post(f"/api/jobs/{sample_job.id}/calculate-benchmark")
+            response = await async_client.post(
+                f"/api/jobs/{sample_job.id}/calculate-benchmark"
+            )
 
             assert response.status_code == 422
             data = response.json()
@@ -127,18 +144,24 @@ class TestBenchmarkRouterEndpoints:
             assert "suggestions" in data["detail"]
 
     @pytest.mark.asyncio
-    async def test_calculate_benchmark_user_not_opted_in(self, async_client, sample_user, sample_job):
+    async def test_calculate_benchmark_user_not_opted_in(
+        self, async_client, sample_user, sample_job
+    ):
         """Test benchmark calculation when user not opted in."""
-        with patch("app.routers.jobs.get_current_user", return_value=sample_user), \
-             patch("app.routers.jobs.benchmark_service") as mock_service, \
-             patch("app.routers.jobs.db.get", return_value=sample_job):
+        with (
+            patch("app.routers.jobs.get_current_user", return_value=sample_user),
+            patch("app.routers.jobs.benchmark_service") as mock_service,
+            patch("app.routers.jobs.db.get", return_value=sample_job),
+        ):
 
             # Mock opt-in error
             mock_service.calculate_benchmark_score.side_effect = ValueError(
                 "User has not opted into benchmarking"
             )
 
-            response = await async_client.post(f"/api/jobs/{sample_job.id}/calculate-benchmark")
+            response = await async_client.post(
+                f"/api/jobs/{sample_job.id}/calculate-benchmark"
+            )
 
             assert response.status_code == 400
             assert "opt into benchmarking" in response.json()["detail"]
@@ -146,23 +169,33 @@ class TestBenchmarkRouterEndpoints:
     @pytest.mark.asyncio
     async def test_calculate_benchmark_job_not_found(self, async_client, sample_user):
         """Test benchmark calculation with non-existent job."""
-        with patch("app.routers.jobs.get_current_user", return_value=sample_user), \
-             patch("app.routers.jobs.db.get", return_value=None):
+        with (
+            patch("app.routers.jobs.get_current_user", return_value=sample_user),
+            patch("app.routers.jobs.db.get", return_value=None),
+        ):
 
             fake_job_id = str(uuid.uuid4())
-            response = await async_client.post(f"/api/jobs/{fake_job_id}/calculate-benchmark")
+            response = await async_client.post(
+                f"/api/jobs/{fake_job_id}/calculate-benchmark"
+            )
 
             assert response.status_code == 404
             assert "Job not found" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_get_user_benchmarks_success(self, async_client, sample_user, sample_benchmark_score):
+    async def test_get_user_benchmarks_success(
+        self, async_client, sample_user, sample_benchmark_score
+    ):
         """Test retrieving user's benchmark list."""
-        with patch("app.routers.benchmarks.get_current_user", return_value=sample_user), \
-             patch("app.routers.benchmarks.db") as mock_db:
+        with (
+            patch("app.routers.benchmarks.get_current_user", return_value=sample_user),
+            patch("app.routers.benchmarks.db") as mock_db,
+        ):
 
             # Mock database query
-            mock_db.execute.return_value.scalars.return_value.all.return_value = [sample_benchmark_score]
+            mock_db.execute.return_value.scalars.return_value.all.return_value = [
+                sample_benchmark_score
+            ]
 
             # Mock job retrieval
             sample_job = Mock()
@@ -186,13 +219,19 @@ class TestBenchmarkRouterEndpoints:
             assert benchmark["skill_gaps_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_get_benchmark_details_success(self, async_client, sample_user, sample_benchmark_score):
+    async def test_get_benchmark_details_success(
+        self, async_client, sample_user, sample_benchmark_score
+    ):
         """Test retrieving detailed benchmark score."""
-        with patch("app.routers.benchmarks.get_current_user", return_value=sample_user), \
-             patch("app.routers.benchmarks.db") as mock_db:
+        with (
+            patch("app.routers.benchmarks.get_current_user", return_value=sample_user),
+            patch("app.routers.benchmarks.db") as mock_db,
+        ):
 
             # Mock benchmark retrieval
-            mock_db.execute.return_value.scalar_one_or_none.return_value = sample_benchmark_score
+            mock_db.execute.return_value.scalar_one_or_none.return_value = (
+                sample_benchmark_score
+            )
 
             # Mock job retrieval
             sample_job = Mock()
@@ -201,7 +240,9 @@ class TestBenchmarkRouterEndpoints:
             sample_job.company_name = "TechCorp"
             mock_db.get.return_value = sample_job
 
-            response = await async_client.get(f"/api/benchmarks/{sample_benchmark_score.id}")
+            response = await async_client.get(
+                f"/api/benchmarks/{sample_benchmark_score.id}"
+            )
 
             assert response.status_code == 200
             data = response.json()
@@ -216,8 +257,10 @@ class TestBenchmarkRouterEndpoints:
     @pytest.mark.asyncio
     async def test_get_benchmark_details_not_found(self, async_client, sample_user):
         """Test retrieving non-existent benchmark."""
-        with patch("app.routers.benchmarks.get_current_user", return_value=sample_user), \
-             patch("app.routers.benchmarks.db") as mock_db:
+        with (
+            patch("app.routers.benchmarks.get_current_user", return_value=sample_user),
+            patch("app.routers.benchmarks.db") as mock_db,
+        ):
 
             # Mock no benchmark found
             mock_db.execute.return_value.scalar_one_or_none.return_value = None
@@ -229,26 +272,34 @@ class TestBenchmarkRouterEndpoints:
             assert "not found" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_get_benchmark_for_job_success(self, async_client, sample_user, sample_benchmark_score):
+    async def test_get_benchmark_for_job_success(
+        self, async_client, sample_user, sample_benchmark_score
+    ):
         """Test retrieving benchmark by job ID."""
-        with patch("app.routers.benchmarks.get_current_user", return_value=sample_user), \
-             patch("app.routers.benchmarks.db") as mock_db, \
-             patch("app.routers.benchmarks.get_benchmark_details") as mock_details:
+        with (
+            patch("app.routers.benchmarks.get_current_user", return_value=sample_user),
+            patch("app.routers.benchmarks.db") as mock_db,
+            patch("app.routers.benchmarks.get_benchmark_details") as mock_details,
+        ):
 
             # Mock job and benchmark retrieval
             sample_job = Mock()
             sample_job.id = sample_benchmark_score.job_id
             mock_db.get.return_value = sample_job
-            mock_db.execute.return_value.scalar_one_or_none.return_value = sample_benchmark_score
+            mock_db.execute.return_value.scalar_one_or_none.return_value = (
+                sample_benchmark_score
+            )
 
             # Mock detailed response
             mock_details.return_value = {
                 "score": 78,
                 "job_title": "Senior React Developer",
-                "privacy_compliant": True
+                "privacy_compliant": True,
             }
 
-            response = await async_client.get(f"/api/benchmarks/job/{sample_benchmark_score.job_id}")
+            response = await async_client.get(
+                f"/api/benchmarks/job/{sample_benchmark_score.job_id}"
+            )
 
             assert response.status_code == 200
             mock_details.assert_called_once()
@@ -256,8 +307,10 @@ class TestBenchmarkRouterEndpoints:
     @pytest.mark.asyncio
     async def test_get_benchmark_for_job_no_score(self, async_client, sample_user):
         """Test retrieving benchmark when no score calculated."""
-        with patch("app.routers.benchmarks.get_current_user", return_value=sample_user), \
-             patch("app.routers.benchmarks.db") as mock_db:
+        with (
+            patch("app.routers.benchmarks.get_current_user", return_value=sample_user),
+            patch("app.routers.benchmarks.db") as mock_db,
+        ):
 
             # Mock job exists but no benchmark
             sample_job = Mock()
@@ -274,11 +327,15 @@ class TestBenchmarkRouterEndpoints:
     @pytest.mark.asyncio
     async def test_update_benchmark_opt_in_enable(self, async_client, sample_user):
         """Test enabling benchmark opt-in."""
-        with patch("app.routers.auth.get_current_user", return_value=sample_user), \
-             patch("app.routers.auth.db") as mock_db:
+        with (
+            patch("app.routers.auth.get_current_user", return_value=sample_user),
+            patch("app.routers.auth.db") as mock_db,
+        ):
 
             request_data = {"benchmark_opt_in": True}
-            response = await async_client.patch("/api/auth/benchmark-opt-in", json=request_data)
+            response = await async_client.patch(
+                "/api/auth/benchmark-opt-in", json=request_data
+            )
 
             assert response.status_code == 200
             data = response.json()
@@ -294,11 +351,15 @@ class TestBenchmarkRouterEndpoints:
     @pytest.mark.asyncio
     async def test_update_benchmark_opt_in_disable(self, async_client, sample_user):
         """Test disabling benchmark opt-in."""
-        with patch("app.routers.auth.get_current_user", return_value=sample_user), \
-             patch("app.routers.auth.db") as mock_db:
+        with (
+            patch("app.routers.auth.get_current_user", return_value=sample_user),
+            patch("app.routers.auth.db") as mock_db,
+        ):
 
             request_data = {"benchmark_opt_in": False}
-            response = await async_client.patch("/api/auth/benchmark-opt-in", json=request_data)
+            response = await async_client.patch(
+                "/api/auth/benchmark-opt-in", json=request_data
+            )
 
             assert response.status_code == 200
             data = response.json()
@@ -334,14 +395,18 @@ class TestBenchmarkRouterEndpoints:
     @pytest.mark.asyncio
     async def test_benchmark_opt_in_database_error(self, async_client, sample_user):
         """Test benchmark opt-in update with database error."""
-        with patch("app.routers.auth.get_current_user", return_value=sample_user), \
-             patch("app.routers.auth.db") as mock_db:
+        with (
+            patch("app.routers.auth.get_current_user", return_value=sample_user),
+            patch("app.routers.auth.db") as mock_db,
+        ):
 
             # Mock database error
             mock_db.commit.side_effect = Exception("Database error")
 
             request_data = {"benchmark_opt_in": True}
-            response = await async_client.patch("/api/auth/benchmark-opt-in", json=request_data)
+            response = await async_client.patch(
+                "/api/auth/benchmark-opt-in", json=request_data
+            )
 
             assert response.status_code == 500
             assert "Failed to update" in response.json()["detail"]
@@ -352,8 +417,10 @@ class TestBenchmarkRouterEndpoints:
     @pytest.mark.asyncio
     async def test_get_benchmarks_with_limit(self, async_client, sample_user):
         """Test retrieving benchmarks with limit parameter."""
-        with patch("app.routers.benchmarks.get_current_user", return_value=sample_user), \
-             patch("app.routers.benchmarks.db") as mock_db:
+        with (
+            patch("app.routers.benchmarks.get_current_user", return_value=sample_user),
+            patch("app.routers.benchmarks.db") as mock_db,
+        ):
 
             # Mock empty results
             mock_db.execute.return_value.scalars.return_value.all.return_value = []
@@ -391,7 +458,9 @@ class TestBenchmarkRouterEndpoints:
             await async_client.get("/api/benchmarks/"),
             await async_client.get(f"/api/benchmarks/{benchmark_id}"),
             await async_client.get(f"/api/benchmarks/job/{job_id}"),
-            await async_client.patch("/api/auth/benchmark-opt-in", json={"benchmark_opt_in": True}),
+            await async_client.patch(
+                "/api/auth/benchmark-opt-in", json={"benchmark_opt_in": True}
+            ),
             await async_client.get("/api/auth/benchmark-opt-in"),
         ]
 
@@ -407,8 +476,10 @@ class TestBenchmarkRouterEndpoints:
 
         user2_benchmark_id = str(uuid.uuid4())
 
-        with patch("app.routers.benchmarks.get_current_user", return_value=user1), \
-             patch("app.routers.benchmarks.db") as mock_db:
+        with (
+            patch("app.routers.benchmarks.get_current_user", return_value=user1),
+            patch("app.routers.benchmarks.db") as mock_db,
+        ):
 
             # Mock no benchmark found (because it belongs to different user)
             mock_db.execute.return_value.scalar_one_or_none.return_value = None
@@ -419,13 +490,19 @@ class TestBenchmarkRouterEndpoints:
             assert "not found" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_benchmark_privacy_compliance_headers(self, async_client, sample_user, sample_benchmark_score):
+    async def test_benchmark_privacy_compliance_headers(
+        self, async_client, sample_user, sample_benchmark_score
+    ):
         """Test that all benchmark responses include privacy compliance indicators."""
-        with patch("app.routers.benchmarks.get_current_user", return_value=sample_user), \
-             patch("app.routers.benchmarks.db") as mock_db:
+        with (
+            patch("app.routers.benchmarks.get_current_user", return_value=sample_user),
+            patch("app.routers.benchmarks.db") as mock_db,
+        ):
 
             # Mock benchmark retrieval
-            mock_db.execute.return_value.scalar_one_or_none.return_value = sample_benchmark_score
+            mock_db.execute.return_value.scalar_one_or_none.return_value = (
+                sample_benchmark_score
+            )
 
             # Mock job retrieval
             sample_job = Mock()
@@ -434,7 +511,9 @@ class TestBenchmarkRouterEndpoints:
             sample_job.company_name = "TechCorp"
             mock_db.get.return_value = sample_job
 
-            response = await async_client.get(f"/api/benchmarks/{sample_benchmark_score.id}")
+            response = await async_client.get(
+                f"/api/benchmarks/{sample_benchmark_score.id}"
+            )
 
             assert response.status_code == 200
             data = response.json()

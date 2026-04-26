@@ -30,9 +30,7 @@ from app.utils.benchmark_sanitizer import SanitizedProfile, sanitize_profile
 MID_SENIOR_LEVELS = frozenset({"mid", "senior"})
 
 
-async def load_active_resume(
-    user: User, db: AsyncSession
-) -> Optional[ParsedResume]:
+async def load_active_resume(user: User, db: AsyncSession) -> Optional[ParsedResume]:
     """Return the user's active ``ParsedResume`` row, or ``None`` if missing."""
     stmt = select(ParsedResume).where(
         ParsedResume.user_id == user.id,

@@ -5,13 +5,13 @@ Protects API endpoints from abuse using slowapi (Flask-Limiter for FastAPI).
 Applies per-IP rate limits to prevent brute-force attacks and resource exhaustion.
 """
 
+from fastapi import FastAPI, Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from fastapi import Request, FastAPI
+from slowapi.util import get_remote_address
 
 # Initialize limiter with IP-based key function
-DEFAULT_RATE_LIMITS=["100/minute"]
+DEFAULT_RATE_LIMITS = ["100/minute"]
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 

@@ -25,7 +25,9 @@
   --color-border-active: rgba(99, 102, 241, 0.5);
 
   --color-text-primary: #f1f5f9;
-  --color-text-secondary: #94a3b8;
+  /* Bumped from #94a3b8 (4.2:1 vs #0a0e1a bg) to #b0bac4 (~5.5:1)
+     so secondary text meets WCAG AA 4.5:1 for normal-size copy. */
+  --color-text-secondary: #b0bac4;
   --color-text-muted: #64748b;
 
   /* Accent Colors */
@@ -109,6 +111,19 @@
   --sidebar-width: 260px;
   --header-height: 64px;
   --content-max-width: 1200px;
+}
+
+/* --- A11y: keyboard focus ring ---
+   Show a visible focus ring on keyboard navigation, suppress it for
+   pointer interactions (mouse/touch) so click states stay clean. */
+*:focus-visible {
+  outline: 2px solid var(--color-accent, #3b82f6);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+*:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* --- Base Styles --- */

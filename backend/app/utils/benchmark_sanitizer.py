@@ -99,7 +99,9 @@ def extract_job_requirements(job_description: str) -> JobRequirements:
     actually mentions.
     """
     if not job_description:
-        return JobRequirements(required_skills=frozenset(), min_years_experience=0.0, keywords=[])
+        return JobRequirements(
+            required_skills=frozenset(), min_years_experience=0.0, keywords=[]
+        )
 
     techs = extract_technologies(job_description, max_results=30)
     skills = frozenset(t.name.lower() for t in techs)

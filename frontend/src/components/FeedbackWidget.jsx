@@ -28,7 +28,11 @@ function storageKey(contentType, contentId) {
   return `profolio.feedback.${contentType}:${contentId || '-'}`;
 }
 
-function FeedbackWidget({ contentType, contentId, label = 'Was this useful?' }) {
+function FeedbackWidget({
+  contentType,
+  contentId,
+  label = 'Was this useful?',
+}) {
   const alreadySubmitted = useMemo(() => {
     try {
       return localStorage.getItem(storageKey(contentType, contentId)) === '1';
@@ -97,8 +101,20 @@ function FeedbackWidget({ contentType, contentId, label = 'Was this useful?' }) 
         borderRadius: 'var(--radius-md)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-3)',
+          flexWrap: 'wrap',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+          }}
+        >
           {label}
         </span>
         <div
@@ -129,7 +145,9 @@ function FeedbackWidget({ contentType, contentId, label = 'Was this useful?' }) 
                   border: 'none',
                   cursor: submitting ? 'default' : 'pointer',
                   fontSize: 'var(--font-size-lg)',
-                  color: active ? 'var(--color-warning)' : 'var(--color-text-muted)',
+                  color: active
+                    ? 'var(--color-warning)'
+                    : 'var(--color-text-muted)',
                   padding: '2px',
                   transition: 'transform 0.15s ease',
                   transform: active ? 'scale(1.1)' : 'scale(1)',
@@ -141,7 +159,12 @@ function FeedbackWidget({ contentType, contentId, label = 'Was this useful?' }) 
           })}
         </div>
         {rating > 0 && (
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+          <span
+            style={{
+              fontSize: 'var(--font-size-xs)',
+              color: 'var(--color-text-muted)',
+            }}
+          >
             {RATING_LABELS[rating]}
           </span>
         )}
@@ -177,7 +200,12 @@ function FeedbackWidget({ contentType, contentId, label = 'Was this useful?' }) 
               flexWrap: 'wrap',
             }}
           >
-            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+            <span
+              style={{
+                fontSize: 'var(--font-size-xs)',
+                color: 'var(--color-text-muted)',
+              }}
+            >
               {comment.length}/2000
             </span>
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
@@ -199,7 +227,10 @@ function FeedbackWidget({ contentType, contentId, label = 'Was this useful?' }) 
                 className="btn btn-primary"
                 onClick={handleSubmit}
                 disabled={submitting}
-                style={{ fontSize: 'var(--font-size-sm)', opacity: submitting ? 0.7 : 1 }}
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  opacity: submitting ? 0.7 : 1,
+                }}
               >
                 {submitting ? 'Sending…' : 'Send feedback'}
               </button>
@@ -209,7 +240,13 @@ function FeedbackWidget({ contentType, contentId, label = 'Was this useful?' }) 
       )}
 
       {error && (
-        <p style={{ marginTop: 'var(--space-2)', color: 'var(--color-error)', fontSize: 'var(--font-size-sm)' }}>
+        <p
+          style={{
+            marginTop: 'var(--space-2)',
+            color: 'var(--color-error)',
+            fontSize: 'var(--font-size-sm)',
+          }}
+        >
           {error}
         </p>
       )}

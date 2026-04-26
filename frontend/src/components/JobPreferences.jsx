@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { get, post, patch } from '../api/client';
+import { get, post } from '../api/client';
 
 /**
  * Job preferences configuration component.
@@ -44,24 +44,28 @@ function JobPreferences({ onPreferencesSaved }) {
   /**
    * Fetch existing preferences.
    */
-  const fetchPreferences = async () => {
+  const fetchPreferences = async (signal) => {
     try {
       setLoading(true);
-      const data = await get('/jobs/preferences');
+      const data = await get('/jobs/preferences', { signal });
+      if (signal?.aborted) return;
       if (data && Object.keys(data).length > 0) {
-        setPreferences(prev => ({
+        setPreferences((prev) => ({
           ...prev,
           ...data,
         }));
       }
     } catch (err) {
-      console.error('Failed to fetch preferences:', err);
+      if (err.name === 'AbortError') return;
+      if (import.meta.env.DEV) {
+        console.error('Failed to fetch preferences:', err);
+      }
       // Don't show error for missing preferences (404 expected for new users)
       if (err.message && !err.message.includes('404')) {
         setError('Failed to load preferences');
       }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
@@ -69,6 +73,7 @@ function JobPreferences({ onPreferencesSaved }) {
    * Save preferences to backend.
    */
   const savePreferences = async () => {
+    if (saving) return;
     try {
       setSaving(true);
       setError(null);
@@ -99,7 +104,6 @@ function JobPreferences({ onPreferencesSaved }) {
       if (onPreferencesSaved) {
         onPreferencesSaved(preferences);
       }
-
     } catch (err) {
       setError(err.message || 'Failed to save preferences');
     } finally {
@@ -111,7 +115,7 @@ function JobPreferences({ onPreferencesSaved }) {
    * Handle form field changes.
    */
   const handleChange = (field, value) => {
-    setPreferences(prev => ({ ...prev, [field]: value }));
+    setPreferences((prev) => ({ ...prev, [field]: value }));
     setError(null);
   };
 
@@ -120,8 +124,12 @@ function JobPreferences({ onPreferencesSaved }) {
    */
   const addKeyword = () => {
     const keyword = keywordInput.trim().toLowerCase();
-    if (keyword && !preferences.keywords.includes(keyword) && preferences.keywords.length < 10) {
-      setPreferences(prev => ({
+    if (
+      keyword &&
+      !preferences.keywords.includes(keyword) &&
+      preferences.keywords.length < 10
+    ) {
+      setPreferences((prev) => ({
         ...prev,
         keywords: [...prev.keywords, keyword],
       }));
@@ -133,9 +141,9 @@ function JobPreferences({ onPreferencesSaved }) {
    * Remove keyword from list.
    */
   const removeKeyword = (keywordToRemove) => {
-    setPreferences(prev => ({
+    setPreferences((prev) => ({
       ...prev,
-      keywords: prev.keywords.filter(k => k !== keywordToRemove),
+      keywords: prev.keywords.filter((k) => k !== keywordToRemove),
     }));
   };
 
@@ -153,17 +161,21 @@ function JobPreferences({ onPreferencesSaved }) {
    * Load preferences on mount.
    */
   useEffect(() => {
-    fetchPreferences();
+    const ctrl = new AbortController();
+    fetchPreferences(ctrl.signal);
+    return () => ctrl.abort();
   }, []);
 
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '200px',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '200px',
+        }}
+      >
         <div
           style={{
             width: '32px',
@@ -180,11 +192,13 @@ function JobPreferences({ onPreferencesSaved }) {
 
   return (
     <div className="card" style={{ maxWidth: '600px' }}>
-      <h3 style={{
-        fontSize: 'var(--font-size-xl)',
-        fontWeight: 'var(--font-weight-bold)',
-        marginBottom: 'var(--space-6)',
-      }}>
+      <h3
+        style={{
+          fontSize: 'var(--font-size-xl)',
+          fontWeight: 'var(--font-weight-bold)',
+          marginBottom: 'var(--space-6)',
+        }}
+      >
         Job Search Preferences
       </h3>
 
@@ -201,7 +215,8 @@ function JobPreferences({ onPreferencesSaved }) {
             fontSize: 'var(--font-size-sm)',
           }}
         >
-          ✅ Preferences saved successfully! Job scanning will use these criteria.
+          ✅ Preferences saved successfully! Job scanning will use these
+          criteria.
         </div>
       )}
 
@@ -249,7 +264,13 @@ function JobPreferences({ onPreferencesSaved }) {
         </div>
 
         {/* Location Preferences */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 'var(--space-3)',
+          }}
+        >
           <div>
             <label htmlFor="location_type" style={labelStyle}>
               Work Arrangement
@@ -289,7 +310,13 @@ function JobPreferences({ onPreferencesSaved }) {
             Skill Keywords * ({preferences.keywords.length}/10)
           </label>
 
-          <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--space-2)',
+              marginBottom: 'var(--space-2)',
+            }}
+          >
             <input
               type="text"
               id="keyword_input"
@@ -302,7 +329,9 @@ function JobPreferences({ onPreferencesSaved }) {
             <button
               type="button"
               onClick={addKeyword}
-              disabled={!keywordInput.trim() || preferences.keywords.length >= 10}
+              disabled={
+                !keywordInput.trim() || preferences.keywords.length >= 10
+              }
               style={{
                 padding: 'var(--space-2) var(--space-3)',
                 background: 'var(--color-accent)',
@@ -311,7 +340,10 @@ function JobPreferences({ onPreferencesSaved }) {
                 borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
                 fontSize: 'var(--font-size-sm)',
-                opacity: !keywordInput.trim() || preferences.keywords.length >= 10 ? 0.5 : 1,
+                opacity:
+                  !keywordInput.trim() || preferences.keywords.length >= 10
+                    ? 0.5
+                    : 1,
               }}
             >
               Add
@@ -319,7 +351,9 @@ function JobPreferences({ onPreferencesSaved }) {
           </div>
 
           {/* Keywords List */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+          <div
+            style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}
+          >
             {preferences.keywords.map((keyword) => (
               <span
                 key={keyword}
@@ -356,14 +390,22 @@ function JobPreferences({ onPreferencesSaved }) {
           </div>
 
           <p style={helpTextStyle}>
-            Add 3-10 skills that are important to you. Press Enter or click Add to include each skill.
+            Add 3-10 skills that are important to you. Press Enter or click Add
+            to include each skill.
           </p>
         </div>
 
         {/* Salary Range */}
         <div>
           <label style={labelStyle}>Salary Range (Optional)</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 'var(--space-2)', alignItems: 'center' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto 1fr',
+              gap: 'var(--space-2)',
+              alignItems: 'center',
+            }}
+          >
             <input
               type="number"
               value={preferences.min_salary}

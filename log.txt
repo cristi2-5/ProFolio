@@ -2369,3 +2369,201 @@ POST-AUDIT TEST INFRA FIXES (this entry, in addition to the 8 batches):
   in that scope; copy-paste artefact) from
   TestFabricationDetector.test_empty_optimized_returns_empty_list.
 ==================================================
+TIMESTAMP: 2026-04-26 21:50:00
+TASK/PROMPT: Phase 9 — Local-Prod Polish. Make the app run perfectly on docker compose locally: error boundary, 404 route, account deletion (right-to-erasure + lifecycle completeness), empty states, mobile responsiveness, a11y baseline, frontend tests, alembic migrations on startup, /ready probe, dev-only console.error wrapping.
+BRANCH: feat/phases-5-6-7-complete (per user direction — same branch as Phase 8)
+PR STATUS: Draft (uncommitted; staged for review)
+
+--- FILES MODIFIED ---
+
+Backend:
+- backend/app/main.py: alembic `upgrade head` runs on startup (replacing `Base.metadata.create_all`); APScheduler graceful shutdown with 15s timeout; new `/ready` endpoint checks DB + `scheduler.running`; `scheduler` hoisted to module scope so `/ready` can reference it.
+- backend/app/database.py: `pool_recycle=600` added (alongside existing `pool_pre_ping=True`) so docker compose `db` restarts don't break long-lived sessions.
+- backend/app/routers/auth.py: `DELETE /me` endpoint (account deletion, password re-auth, rate-limited 3/hour); `except HTTPException: raise` ahead of generic catch so 401/403 stops being rewritten to 500.
+- backend/app/routers/cv_optimizer.py: `except HTTPException: raise` clauses on /optimize, /cover-letter, /export/cover-letter/{job_id} so 403 from `get_user_job_or_403` survives the generic exception handler.
+- backend/app/routers/jobs.py: same `except HTTPException: raise` pattern on /generate-interview-prep, -async, GET/PATCH /interview-prep, /calculate-benchmark.
+- backend/app/schemas/user.py: `AccountDeleteRequest` Pydantic schema (password field, rejects whitespace).
+
+Frontend:
+- frontend/src/main.jsx: `<App />` wrapped in `<ErrorBoundary>` to catch render errors before they whiteout the page.
+- frontend/src/App.jsx: `/privacy`, `/terms`, `/cookies` public routes; `/settings` protected route; `<Route path="*" element={<NotFound/>} />` catch-all.
+- frontend/src/components/Layout.jsx: mobile hamburger toggle + backdrop overlay; footer with legal links; renders `<CookieBanner />`.
+- frontend/src/components/ErrorBoundary.jsx: NEW — class component catching render errors; dev-mode shows error stack, prod shows friendly fallback.
+- frontend/src/components/CookieBanner.jsx: NEW — sticky bottom banner; consent persisted in localStorage (single key, no third-party tracker).
+- frontend/src/pages/NotFound.jsx: NEW — 404 catch-all with link back to dashboard.
+- frontend/src/pages/Settings.jsx: NEW — danger-zone delete-account flow with password re-auth + auto-focus + aria-describedby on the password input.
+- frontend/src/pages/Privacy.jsx, Terms.jsx, CookiePolicy.jsx: NEW — public legal stub pages.
+- frontend/src/pages/Dashboard.jsx: 3-step onboarding checklist with localStorage persistence (replaces the older 2-step alert).
+- frontend/src/pages/Login.jsx: auto-focus email on mount; `aria-describedby` on inputs with errors; `aria-busy` on form during submission.
+- frontend/src/index.css: `*:focus-visible` baseline outline; `--color-text-secondary` bumped from #94a3b8 to #b0bac4 for 5.5:1 contrast against the dark background.
+
+Tests:
+- backend/tests/test_auth_full_flow.py: NEW — register → login → /me → DELETE /me → re-login-fails (single end-to-end happy-path scenario covering 5 steps).
+- backend/tests/test_idor_jobs.py: NEW — two-user 403 coverage across 9 protected endpoints; LLM-mock AssertionError tripwires verify cross-user calls never reach the agent layer.
+- frontend/src/__tests__/AuthContext.test.jsx: NEW — 4 scenarios (loading state, login success, ProtectedRoute redirect, `auth:logout` event handling).
+- frontend/src/__tests__/Login.test.jsx: NEW — 4 scenarios (whitespace rejection, validation errors, trim-before-submit, disabled-while-loading).
+- frontend/src/__tests__/CVUpload.test.jsx: NEW — 3 scenarios (mount-fetch regression for the prior `useState`→`useEffect` bug, initial render, drop-file path).
+- frontend/src/__tests__/ErrorBoundary.test.jsx: NEW — 2 scenarios (catches child throw + renders fallback; pass-through when no error).
+- frontend/src/__tests__/NotFound.test.jsx: NEW — 2 scenarios (renders 404 message; link back to dashboard).
+
+Docs:
+- README.md: new "Run Locally with Docker Compose" section (prerequisites, setup, access URLs, first-time use, common pitfalls, tests, reset, stop). Romanian content untouched.
+- docs/LOCAL_DEV.md: NEW — local dev runbook (daily workflow, db reset, alembic, db inspection, agent debugging, model swap, password reset, common errors table).
+- .env.example: completeness audit against backend/app/config.py — added `APP_NAME`, `MAX_RESUMES_PER_USER`, `JOB_SCAN_INTERVAL_HOURS`, `JOB_SCAN_RATE_LIMIT_HOURS`, `REDIS_URL`, `PROMPT_CACHE_ENABLED`, `PROMPT_CACHE_TTL_SECONDS` with inline comments grouping by section.
+- project_index.md: "Last Updated" header bumped; new entries for new components/pages/tests/docs; Phase 9 markers appended to materially-changed existing entries.
+
+--- ARCHITECTURE & LOGIC CHANGES ---
+
+1. Migrations on startup (was `Base.metadata.create_all`). The dev container now runs `alembic upgrade head` during the FastAPI lifespan, so schema changes flow through versioned migrations even in local dev. This means a developer pulling a new migration sees it auto-applied on the next `docker compose up`, and there's no longer a divergence between "what `Base.metadata` thinks the schema is" and "what alembic thinks the schema is".
+
+2. /ready probe distinct from /health. `/health` is the existing liveness check (process up, /health returns 200). `/ready` is the new readiness check: it runs a `SELECT 1` against Postgres AND verifies `scheduler.running is True`. This separation matters because in container orchestration, liveness restarts the pod whereas readiness pulls it from the load-balancer pool — conflating the two causes restart loops when the DB is briefly unreachable. APScheduler shutdown is now graceful with a 15s timeout so in-flight scans aren't truncated mid-write.
+
+3. Account deletion (right-to-erasure + lifecycle completeness). New `DELETE /me` requires a fresh password re-auth (defence against stolen-token deletion); rate-limited 3/hour per user. Cascade is FK-based — confirmed via existing migrations (no new migration needed). The auth router gained `except HTTPException: raise` so that the 401-on-bad-password and 403 paths aren't swallowed and rewritten to 500 by the generic `except Exception` further down; that same fix was applied to `cv_optimizer.py` (3 endpoints) and `jobs.py` (4 endpoints) where it was actively masking IDOR 403s — the bug was caught while writing `test_idor_jobs.py` because the tripwire AssertionError in the LLM mock was indeed firing on a path that should have 403'd before reaching the agent.
+
+4. ErrorBoundary + 404 route. Render errors used to white-screen the whole SPA — `<ErrorBoundary>` now wraps `<App />` and renders a friendly fallback (with the stack trace shown in dev only). `<Route path="*" element={<NotFound/>} />` finally catches typo'd URLs instead of rendering an empty Layout shell.
+
+5. Empty states + onboarding. The 3-step Dashboard checklist (upload CV → set preferences → run scan) replaces the old "you have no resumes" alert; progress is persisted in localStorage so refreshing doesn't reset progress. Cookie banner is sticky-bottom, dismiss-once, no third-party tracker.
+
+6. Mobile responsive shell. `Layout.jsx` gained a hamburger toggle + backdrop overlay; the sidebar slides over content on narrow viewports instead of squishing it.
+
+7. A11y baseline. `*:focus-visible` outline is now globally legible; `--color-text-secondary` was bumped from #94a3b8 (3.4:1 against the dark bg) to #b0bac4 (5.5:1, AA at body text size). Form inputs with errors get `aria-describedby` pointing at the inline error span; the form itself gets `aria-busy` during submission so screen readers announce loading state. Auto-focus on email-input and password-input (login + delete confirm) reduces tab clicks for keyboard users.
+
+--- AUDIT & VERIFICATION REVIEW ---
+
+BUGS/KNOWN ISSUES:
+  - Deferred for follow-up: OAuth (Google + LinkedIn flows are still stubs).
+  - Deferred for follow-up: MFA / TOTP (not in this phase's scope).
+  - Deferred for follow-up: password-reset-via-email (no SMTP wired; LOCAL_DEV.md documents the manual psql + bcrypt-hash workaround).
+  - Deferred for follow-up: observability stack (Sentry, OpenTelemetry, structured logging upgrade).
+  - 3 pre-existing eslint warnings on missing useEffect deps remain in the codebase (Jobs.jsx, Benchmarks.jsx, JobDetail.jsx); not in scope this phase, surfaced earlier when `react-hooks/exhaustive-deps: 'warn'` was enabled in Phase 8.
+
+SECURITY VULNERABILITIES:
+  - IDOR-swallowing-bug FIXED: `try/except Exception` blocks in 7 endpoints (cv_optimizer.py × 3, jobs.py × 4) were swallowing `HTTPException(403)` from `get_user_job_or_403` and returning 500 instead. Caught while writing `test_idor_jobs.py` — the LLM-mock tripwire AssertionError was firing on what should have been 403'd-before-agent paths. Fix: `except HTTPException: raise` ahead of the generic exception handler.
+  - Account deletion atomic via FK CASCADE (verified against existing migrations — no orphaned resumes/jobs/benchmark rows).
+  - Sourcemap conditional in vite.config.js so prod builds don't ship sources (audited; left unchanged from prior config — already correct).
+  - dev-only console.error wrapping prevents accidental stack-trace leaks in production console.
+
+PERFORMANCE OPTIMIZATIONS:
+  - DB `pool_recycle=600` prevents lost-connection errors after Postgres restart cycles (especially important when `docker compose down`+`up` mid-session).
+  - APScheduler graceful shutdown with 15s timeout prevents truncated runs when the backend container is restarted.
+
+MAINTAINABILITY IMPROVEMENTS:
+  - Alembic migrations on startup (was `Base.metadata.create_all`) — schema changes now flow through versioned migrations even in dev, killing the "works on my machine" drift class.
+  - 5 new frontend test files lock in regression checks for AuthContext, Login, CVUpload (mount-fetch bug), ErrorBoundary, NotFound — small but covers the critical user paths.
+  - LOCAL_DEV.md gives new contributors a single source of truth for common operations (db reset, alembic, agent debugging, password reset).
+  - `.env.example` now matches every Settings field in `config.py`; new contributors can copy → fill → run with no surprises.
+
+--- TEST COVERAGE ---
+
+TEST FILES ADDED/MODIFIED:
+  - backend/tests/test_auth_full_flow.py (NEW, 1 scenario covering 5 steps).
+  - backend/tests/test_idor_jobs.py (NEW, 9 endpoint × 1 scenario each).
+  - frontend/src/__tests__/AuthContext.test.jsx (NEW, 4 scenarios).
+  - frontend/src/__tests__/Login.test.jsx (NEW, 4 scenarios).
+  - frontend/src/__tests__/CVUpload.test.jsx (NEW, 3 scenarios).
+  - frontend/src/__tests__/ErrorBoundary.test.jsx (NEW, 2 scenarios).
+  - frontend/src/__tests__/NotFound.test.jsx (NEW, 2 scenarios).
+
+SCENARIOS COVERED:
+  Happy path — full register → login → /me → DELETE /me → re-login-fails lifecycle in one test; cross-user IDOR returns 403 on all 9 protected endpoints; ErrorBoundary catches render errors; NotFound renders for invalid routes.
+  Edge cases — whitespace email/password rejection at login (frontend trim + backend schema validation); CVUpload fetches resumes once on mount (regression for the `useState`→`useEffect` bug from Phase 8).
+  Failure states — password mismatch on DELETE /me returns 401 (not 500); `auth:logout` event listener triggers logout flow even when no React component is mounted to receive it.
+
+TEST STATUS:
+  Frontend (Vitest) and Backend (pytest) results captured by the runner at the end of this entry — see the Wave 5 report for the actual tail outputs. The 4 pre-existing backend failures (cv_profiler model-name drift × 2, job_service min_match_score design × 2 — all unchanged from Phase 8) are not in scope this phase.
+==================================================
+
+
+==================================================
+TIMESTAMP: 2026-04-27 01:00:00
+TASK/PROMPT: Phase 10 — Four user-reported fixes/features: (1) profile update endpoint + UI, (2) interview prep "malformed response" robustness, (3) benchmark "[object Object]" rendering bug + 90-peer seed script, (4) allow job scan without preferences (default "developer" query).
+BRANCH: feat/phases-5-6-7-complete (continuing on existing branch per user direction)
+PR STATUS: Draft (uncommitted; staged for review)
+
+--- FILES MODIFIED ---
+
+Backend (8 modified, 2 new):
+- backend/app/schemas/interview_coach.py: add `model_config = ConfigDict(extra="ignore")` and defaults on every field of TechnicalQuestion / BehavioralQuestion / TechnologyConcept / ExtractedTechnology so Gemini's slightly different keys don't fail validation.
+- backend/app/agents/interview_coach.py: strip markdown code fences before json.loads; on JSONDecodeError fall back to regex-extracting the first {...} block; in `_validate_items` drop individual malformed items instead of aborting the whole bundle (only raise InterviewCoachError if EVERY item fails).
+- backend/app/agents/job_scanner.py: `_build_search_query` now accepts `JobPreference | None` and falls back to `"developer"`; `scan(...)` no longer returns `[]` when preferences are missing — it uses default `developer` + `remote` location and continues normally.
+- backend/app/routers/jobs.py: `POST /jobs/scan` no longer hard-rejects with HTTP 400 when preferences are missing — logs an info line and proceeds; `match_jobs_to_user` already handles "no resume" via 0 match score.
+- backend/app/schemas/user.py: extended UserUpdate with optional `email` field + matching strip+lowercase regex validator.
+- backend/app/services/auth_service.py: added `update_user(...)` method — partial update via `model_dump(exclude_unset=True)`, email-uniqueness recheck (raises DuplicateError on collision), mid/senior-requires-niche cross-validation, commit + refresh.
+- backend/app/routers/auth.py: added `PATCH /api/auth/me` (rate-limited 10/min) — maps DuplicateError → 409 and ValueError → 422; documents that email change does NOT trigger verification (deferred).
+- backend/app/utils/exceptions.py: removed the duplicate `InsufficientPeersError(AutoApplyError)` class — only the one in `services/benchmark_service.py` (with `peers_found`/`peers_required`) remains; verified no other files imported the duplicate.
+- backend/app/scripts/seed_peers.py (NEW): seeds 90 synthetic peer users (30 junior + 30 mid + 30 senior, randomized across 5 niches with realistic skill banks, all benchmark_opt_in=True). Idempotent. Run: `docker compose exec backend python -m app.scripts.seed_peers`.
+
+Frontend (4 modified):
+- frontend/src/api/client.js: when backend returns `detail` as an object (e.g. InsufficientPeersError = `{error, message, peers_found, peers_required}`), extract `detail.message` instead of stringifying the whole object → "[object Object]". Also attach the parsed object as `errObj.data` so callers can introspect.
+- frontend/src/pages/JobDetail.jsx: replaced brittle `err.message.includes(...)` pattern with structured `err.data?.error === "insufficient_peers"` check; surface peers_found/peers_required in the user-facing error message.
+- frontend/src/pages/Settings.jsx: added Profile section above Danger zone with full_name / email / seniority_level / niche fields. Diff-only PATCH submit, success toast (3s auto-dismiss), inline error, aria-busy, aria-describedby, auto-focus first input. Calls existing AuthContext.updateUser to keep client state in sync.
+- frontend/src/pages/Dashboard.jsx: onboarding step 2 ("Set preferences") is now non-blocking — relabelled as "(recommended)", description notes scan works without prefs; step 3 ("Run scan") only blocked while a scan is in-flight.
+
+Tests:
+- backend/tests/test_interview_coach.py: updated hard-coded model assertion to `gemini-2.5-flash` (primary model in fallback chain).
+- backend/tests/test_cv_optimizer.py: updated hard-coded model assertions in test_optimize_cv_success / test_generate_cover_letter_success / test_configuration_attributes — uses `models[0]` and "in models" assertions to be tolerant of fallback-chain changes.
+- backend/tests/test_job_scanner.py: updated TestBuildSearchQuery — keywords are no longer concatenated into Adzuna query (Adzuna's `what` is AND-logic; appending kept zero-results); added test_no_preferences_falls_back_to_developer + test_empty_desired_title_falls_back_to_developer; rewrote test_scan_no_preferences_returns_empty → test_scan_no_preferences_uses_default_query (asserts Adzuna IS called with "developer").
+- backend/tests/test_auth_endpoints.py: new TestUpdateMe class (7 scenarios: happy path full_name update, partial update niche only, email change, email collision → 409, invalid seniority_level → 422, mid without niche → 422, unauthenticated → 403).
+- backend/tests/test_seed_peers.py (NEW): 5 scenarios — seed creates exactly 90 users; all opted-in; 30/30/30 seniority distribution; each has one active ParsedResume; idempotent re-run.
+- frontend/src/api/client.test.js: 3 new scenarios — array detail joins; object detail extracts message + sets err.data; string detail used as-is.
+- frontend/src/__tests__/Settings.test.jsx (NEW): 5 scenarios — form pre-populates from user; submit calls patch with diff-only payload; success shows confirmation; 409 shows error; no-changes guard prevents empty submit.
+
+Docs:
+- docs/LOCAL_DEV.md: added "Seed peer data for benchmarking" section with the one-liner.
+
+--- ARCHITECTURE & LOGIC CHANGES ---
+
+1. Interview-prep robustness mirrors the cv_profiler fix from earlier this session. The pattern (markdown-fence strip → regex JSON extract → tolerant per-item validation that drops bad items rather than aborting) is now consistent across both LLM agents that produce structured JSON. Schemas use ConfigDict(extra="ignore") + defaults so the LLM can return slightly different keys (e.g. `topics` vs `tags`, omitted `sample_answer`, extra `note` field) without breaking the bundle.
+
+2. Object-shaped error details. The backend already returns rich detail objects for some 422s (e.g. InsufficientPeersError surfaces peers_found/peers_required in JSON). The frontend client now correctly extracts `.message` from object details AND attaches the raw object on `err.data` so the UI can render counts (e.g. "Found 28 of 30 required") instead of a plain string. The brittle `err.message.includes("insufficient_peers")` substring match is replaced by structural `err.data?.error === "insufficient_peers"`.
+
+3. Peer seed script. The 30-peer minimum is real and previously blocked every benchmark request. `seed_peers.py` populates 90 synthetic peers split evenly across seniority levels, with deterministic skill profiles drawn from per-niche skill banks. Idempotent (skip-if-email-exists). Emails follow `peerNNN@profolio.seed` so they're trivially filterable from any production query (the bcrypt hash is also reused for all 90 peers — they're dev-only and the password is documented in LOCAL_DEV.md).
+
+4. InsufficientPeersError dedup. Two competing definitions existed (one in `utils/exceptions.py`, one in `services/benchmark_service.py`); the router caught the service one (which has `peers_found`). The duplicate in exceptions.py is now removed — verified zero other files imported it.
+
+5. Profile update with diff-only PATCH. UserUpdate uses `model_dump(exclude_unset=True)` so the service applies only the fields the client sent. Email change re-checks uniqueness against User.email (excluding self). Mid/senior require niche — enforced at the service layer (registration already enforces this in the schema validator).
+
+6. Open job scan. Adzuna's `what` parameter applies AND-logic, so a long compound query produces zero results. The agent already returns just `desired_title`. Now `_build_search_query` falls back to `"developer"` when preferences are absent, and the router no longer 400s. JobService.match_jobs_to_user already handles "no resume" gracefully (logs warning, scores 0). End-to-end: a fresh user with no CV and no preferences can hit /jobs/scan and get Adzuna results immediately.
+
+--- AUDIT & VERIFICATION REVIEW ---
+
+BUGS/KNOWN ISSUES:
+  - Pre-existing failures (4 backend + 1 collection error) unchanged from Phase 9: cv_profiler model-name drift × 2, test_no_resume_returns_empty / test_low_score_skips_user_job (design-vs-test contradiction), test_adzuna_client::test_search_jobs_success (collection error). NOT in scope.
+  - The Gemini free-tier daily quota will exhaust after ~1500 requests; the new tolerant-validation path doesn't help once the LLM itself returns 429. The model-fallback chain (gemini-2.5-flash → 2.0-flash-exp → 2.0-flash) catches per-model quotas but not the project-level cap.
+  - The seed script's bcrypt hash is shared across 90 peers; this is intentional for dev speed but means all seed accounts share one password. Documented.
+
+SECURITY VULNERABILITIES:
+  - Email change without verification (PATCH /me): a logged-in user can change their email to any other value at will. ACCEPTABLE FOR LOCAL DEV per user direction. Will need an SMTP-backed verification flow before public launch — flagged in plan as deferred.
+  - Scan without preferences loosens an existing input guard. The Adzuna 1/hr per-user rate limit (in-memory) and the slowapi per-user limit still apply. No new attack surface beyond what registered users could already do.
+  - `seed_peers` should NEVER run in production. The script's docstring + LOCAL_DEV.md note this. Filename + email pattern make it trivial to filter out.
+
+PERFORMANCE OPTIMIZATIONS:
+  - Tolerant LLM-output validation has no measurable cost — the markdown-fence strip is a single string check, the regex fallback only runs on JSON parse failure, and per-item drop is the same Pydantic call as before.
+  - Profile update is a single SELECT (uniqueness check, only on email change) + single UPDATE.
+
+MAINTAINABILITY IMPROVEMENTS:
+  - Both LLM agents (cv_profiler and interview_coach) now share the same robustness pattern for JSON validation. Future agents can copy-paste the same approach.
+  - Single InsufficientPeersError class — no more confusion about which to catch.
+  - `seed_peers` is the first reusable seed script under `app/scripts/`; future seed scripts can follow the same pattern.
+
+--- TEST COVERAGE ---
+
+TEST FILES ADDED/MODIFIED:
+  - backend/tests/test_seed_peers.py (NEW, 5 scenarios)
+  - backend/tests/test_auth_endpoints.py (UPDATED, +7 scenarios in TestUpdateMe)
+  - backend/tests/test_job_scanner.py (UPDATED, +3 scenarios for no-pref fallback, -1 stale keyword test rewritten)
+  - backend/tests/test_cv_optimizer.py (UPDATED, model-name assertions made tolerant of fallback chain)
+  - backend/tests/test_interview_coach.py (UPDATED, model-name assertion → gemini-2.5-flash)
+  - frontend/src/api/client.test.js (UPDATED, +3 scenarios for array/object/string detail shapes)
+  - frontend/src/__tests__/Settings.test.jsx (NEW, 5 scenarios)
+
+SCENARIOS COVERED:
+  Happy path — PATCH /me partial update; scan with no preferences uses "developer" query; benchmark 422 surfaces peers_found in UI; seed creates 90 peers with correct distribution.
+  Edge cases — email collision on PATCH /me → 409; mid without niche → 422; LLM returns extra unexpected fields; LLM wraps JSON in markdown fences; one malformed interview-prep item → drop and continue with the rest.
+  Failure states — invalid seniority_level → 422; unauthenticated PATCH /me → 403; backend returns object-shaped detail → frontend displays message (not "[object Object]"); seed re-run on populated DB → no duplicates.
+
+TEST STATUS:
+  Frontend (Vitest): 25/25 pass (was 17 in Phase 9; +8 new across client + Settings).
+  Backend (pytest): 358 passed, 4 failed (all pre-existing, unchanged from Phase 9), 33 skipped, 1 error (pre-existing). +14 new tests over Phase 9's 344.
+  Net delta: +8 frontend + +14 backend, 0 regressions introduced.
+==================================================

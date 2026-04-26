@@ -153,7 +153,10 @@ class BenchmarkService:
 
         logger.info(
             "Benchmark calculated user=%s job=%s score=%d peers=%d",
-            user.id, job.id, score, len(peer_profiles),
+            user.id,
+            job.id,
+            score,
+            len(peer_profiles),
         )
 
         return BenchmarkResult(

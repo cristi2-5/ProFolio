@@ -172,6 +172,7 @@ class ExtractedTech:
 # Compiled patterns (module-level cache)
 # ------------------------------------------------------------------
 
+
 def _compile_alias_pattern(alias: str) -> re.Pattern[str]:
     """Compile an alias into a case-insensitive regex.
 
@@ -193,9 +194,9 @@ def _compile_alias_pattern(alias: str) -> re.Pattern[str]:
     escaped = re.escape(alias)
     left = r"(?<![A-Za-z0-9_])"
     right = (
-        r"(?![A-Za-z0-9_+#])"          # no continuation into tech token
-        r"(?!\.[A-Za-z0-9])"           # no ".js", ".py" suffix
-        r"(?!-[A-Za-z])"               # no "-learn", "-cli" suffix
+        r"(?![A-Za-z0-9_+#])"  # no continuation into tech token
+        r"(?!\.[A-Za-z0-9])"  # no ".js", ".py" suffix
+        r"(?!-[A-Za-z])"  # no "-learn", "-cli" suffix
     )
     return re.compile(rf"{left}{escaped}{right}", re.IGNORECASE)
 

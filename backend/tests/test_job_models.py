@@ -1,9 +1,12 @@
-import pytest
 import uuid
 from datetime import datetime, timezone
+
+import pytest
 from sqlalchemy import select
+
 from app.models.job import ScrapedJob, UserJob
 from app.models.user import User
+
 
 @pytest.mark.asyncio
 async def test_create_scraped_job(test_session):
@@ -14,16 +17,17 @@ async def test_create_scraped_job(test_session):
         description="Test Description",
         external_url="https://test.com/123",
         location="Remote",
-        source_platform="test"
+        source_platform="test",
     )
     test_session.add(job)
     await test_session.commit()
     await test_session.refresh(job)
-    
+
     assert job.id is not None
     assert isinstance(job.id, uuid.UUID)
     assert job.company_name == "Test Company"
     assert job.scraped_at is not None
+
 
 @pytest.mark.asyncio
 async def test_create_user_job(test_session):
@@ -32,33 +36,29 @@ async def test_create_user_job(test_session):
     user = User(
         email="test_models@example.com",
         password_hash="password_hash",
-        full_name="Model Tester"
+        full_name="Model Tester",
     )
     test_session.add(user)
-    
+
     # Create a job
     job = ScrapedJob(
         company_name="Relationship Corp",
         job_title="DevOps",
-        external_url="https://rel.com/456"
+        external_url="https://rel.com/456",
     )
     test_session.add(job)
     await test_session.flush()
-    
+
     # Create UserJob
-    user_job = UserJob(
-        user_id=user.id,
-        job_id=job.id,
-        match_score=85,
-        status="new"
-    )
+    user_job = UserJob(user_id=user.id, job_id=job.id, match_score=85, status="new")
     test_session.add(user_job)
     await test_session.commit()
     await test_session.refresh(user_job)
-    
+
     assert user_job.match_score == 85
     assert user_job.status == "new"
     assert user_job.created_at is not None
+
 
 @pytest.mark.asyncio
 async def test_user_job_status_constraints(test_session):
@@ -67,6 +67,7 @@ async def test_user_job_status_constraints(test_session):
     # but we can verify the model attribute assignment.
     user_job = UserJob(status="invalid_status")
     assert user_job.status == "invalid_status"
+
 
 @pytest.mark.asyncio
 async def test_scraped_job_repr(test_session):

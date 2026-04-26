@@ -89,6 +89,9 @@ async def optimize_cv_for_job(
             optimization_date=datetime.now(timezone.utc),
         )
 
+    except HTTPException:
+        # Auth/ownership checks (e.g. 403 from get_user_job_or_403) must propagate.
+        raise
     except ValueError as e:
         logger.warning(
             f"CV optimization validation error for user {current_user.id}: {e}"
@@ -162,6 +165,8 @@ async def generate_cover_letter(
             generation_date=datetime.now(timezone.utc),
         )
 
+    except HTTPException:
+        raise
     except ValueError as e:
         logger.warning(
             f"Cover letter generation validation error for user {current_user.id}: {e}"
@@ -390,6 +395,8 @@ async def export_cover_letter_pdf(
             },
         )
 
+    except HTTPException:
+        raise
     except ValueError as e:
         logger.warning(
             f"Cover letter PDF export validation error for user {current_user.id}: {e}"

@@ -47,9 +47,7 @@ async def submit_feedback(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> FeedbackResponse:
     try:
-        row = await feedback_service.create(
-            user=current_user, payload=payload, db=db
-        )
+        row = await feedback_service.create(user=current_user, payload=payload, db=db)
     except Exception as exc:
         logger.error("Failed to record feedback: %s", exc)
         raise HTTPException(

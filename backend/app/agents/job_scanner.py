@@ -110,7 +110,9 @@ class JobScannerAgent:
         """Scan for new jobs matching a user's preferences.
 
         Fetches jobs from Adzuna API based on user preferences, performs
-        deduplication, and stores new jobs in the database.
+        deduplication, and stores new jobs in the database. If the user has
+        no preferences set, falls back to a default ``developer`` query so
+        the user can still browse jobs (matches will score 0 if no resume).
 
         Args:
             user_id: UUID of the user to scan for.
@@ -120,7 +122,7 @@ class JobScannerAgent:
             list[dict]: Newly discovered and stored jobs.
 
         Raises:
-            ValueError: If user not found or has no preferences.
+            ValueError: If user not found.
             AdzunaAPIError: If Adzuna API fails.
         """
         logger.info(f"Starting job scan for user: {user_id}")
@@ -135,13 +137,18 @@ class JobScannerAgent:
             result = await db.execute(stmt)
             preferences = result.scalar_one_or_none()
 
-            if not preferences:
-                logger.warning(f"User {user_id} has no job preferences set")
-                return []
-
-            # Build search query from preferences
+            # Build search query from preferences (or use defaults if none).
             search_query = self._build_search_query(preferences)
-            location = "" if preferences.location_type == "remote" else "United States"
+            if preferences is None:
+                logger.info(
+                    "User %s has no preferences — using default 'developer' query",
+                    user_id,
+                )
+                location_type = "remote"
+                location = ""
+            else:
+                location_type = preferences.location_type
+                location = "" if location_type == "remote" else "United States"
 
             # Search Adzuna API
             try:
@@ -149,7 +156,7 @@ class JobScannerAgent:
                 adzuna_response = await api_client.search_jobs(
                     query=search_query,
                     location=location,
-                    location_type=preferences.location_type,
+                    location_type=location_type,
                     results_per_page=self.max_jobs_per_scan,
                     max_days_old=self.max_days_old,
                 )
@@ -352,25 +359,27 @@ class JobScannerAgent:
                 return candidate
         return None
 
-    def _build_search_query(self, preferences: JobPreference) -> str:
+    def _build_search_query(self, preferences: "JobPreference | None") -> str:
         """Build Adzuna search query from user preferences.
 
+        Uses only the desired title as the search term. Adzuna's ``what``
+        parameter applies AND-logic across all words, so appending tech keywords
+        (React, TypeScript, etc.) produces zero results — they belong in the
+        post-scan match-scoring step, not the initial API query.
+
+        Falls back to ``"developer"`` when the user has no preferences so the
+        scan can still proceed (the match step will simply score 0 for users
+        without a resume).
+
         Args:
-            preferences: User's job search preferences.
+            preferences: User's job search preferences, or ``None``.
 
         Returns:
-            str: Search query combining title and keywords.
+            str: The desired job title, or ``"developer"`` as a fallback.
         """
-        # Start with desired title
-        query_parts = [preferences.desired_title]
-
-        # Add keywords if available
-        if preferences.keywords:
-            # Limit to first 3 keywords to avoid overly restrictive queries
-            top_keywords = preferences.keywords[:3]
-            query_parts.extend(top_keywords)
-
-        return " ".join(query_parts)
+        if preferences is None or not preferences.desired_title:
+            return "developer"
+        return preferences.desired_title
 
     async def scan_all_users(self, db: AsyncSession) -> int:
         """Run scan for all active users (cron entry point).

@@ -113,7 +113,9 @@ async def _sse_generator(
 
     while True:
         try:
-            event: TaskEvent = await asyncio.wait_for(stream_iter.__anext__(), timeout=15.0)
+            event: TaskEvent = await asyncio.wait_for(
+                stream_iter.__anext__(), timeout=15.0
+            )
         except asyncio.TimeoutError:
             # Heartbeat: SSE ignores lines starting with a colon.
             yield b": keep-alive\n\n"

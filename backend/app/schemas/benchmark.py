@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ----------------------------------------------------------------------
 # Scoring (US 5.1 + 5.2)
 # ----------------------------------------------------------------------
@@ -21,7 +20,8 @@ class SkillGap(BaseModel):
     skill: str
     priority: str = Field(description="high | medium | low")
     peer_frequency: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Fraction of peers at this level/niche who have the skill",
     )
     recommendation: str
@@ -45,15 +45,18 @@ class BenchmarkScoreResponse(BaseModel):
     company_name: str
 
     score: int = Field(
-        ge=0, le=100,
+        ge=0,
+        le=100,
         description="Peer-weighted composite score (0-100), centred on 50",
     )
     user_match_score: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Raw share of required skills the candidate already has",
     )
     peer_mean_match_score: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Peer group's mean share of required skills",
     )
 
@@ -144,7 +147,8 @@ class RecommendedSkill(BaseModel):
     skill: str
     jd_count: int = Field(description="Number of saved JDs requiring this skill")
     peer_frequency: float = Field(
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Fraction of peers at same level/niche who list the skill",
     )
     priority: str = Field(description="high | medium | low")
@@ -164,7 +168,7 @@ class RecommendationsResponse(BaseModel):
     peer_group_size: int
     insufficient_peers: bool = Field(
         description="True when fewer than 30 peers were available; still returns "
-                    "JD-based recommendations but omits peer-frequency signal"
+        "JD-based recommendations but omits peer-frequency signal"
     )
 
 

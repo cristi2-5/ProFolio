@@ -131,7 +131,10 @@ class TestStreamEvents:
 
 class TestSingleton:
     def test_reset_helper_drops_instance(self) -> None:
-        from app.services.task_manager import get_task_manager, reset_task_manager_for_tests
+        from app.services.task_manager import (
+            get_task_manager,
+            reset_task_manager_for_tests,
+        )
 
         reset_task_manager_for_tests()
         first = get_task_manager()

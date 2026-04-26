@@ -112,16 +112,22 @@ class AdzunaClient:
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                logger.info(f"Searching Adzuna: query='{query}', location_type='{location_type}', page={page}")
+                logger.info(
+                    f"Searching Adzuna: query='{query}', location_type='{location_type}', page={page}"
+                )
 
                 response = await client.get(endpoint, params=params)
 
                 # Handle rate limiting
                 if response.status_code == 429:
                     retry_after = int(response.headers.get("Retry-After", 60))
-                    logger.warning(f"Adzuna rate limit exceeded. Retry after {retry_after}s")
+                    logger.warning(
+                        f"Adzuna rate limit exceeded. Retry after {retry_after}s"
+                    )
                     await asyncio.sleep(retry_after)
-                    raise AdzunaAPIError(f"Rate limit exceeded. Retry after {retry_after}s", 429)
+                    raise AdzunaAPIError(
+                        f"Rate limit exceeded. Retry after {retry_after}s", 429
+                    )
 
                 # Handle API errors
                 if response.status_code != 200:
@@ -135,13 +141,17 @@ class AdzunaClient:
 
                 # Validate response structure
                 if "results" not in data:
-                    logger.error(f"Invalid Adzuna response structure: {list(data.keys())}")
+                    logger.error(
+                        f"Invalid Adzuna response structure: {list(data.keys())}"
+                    )
                     raise AdzunaAPIError("Invalid API response structure")
 
                 # Log success
                 result_count = len(data.get("results", []))
                 total_count = data.get("count", 0)
-                logger.info(f"Adzuna search successful: {result_count} results (total: {total_count})")
+                logger.info(
+                    f"Adzuna search successful: {result_count} results (total: {total_count})"
+                )
 
                 # Filter by location type for better matching
                 if location_type == "remote":
@@ -169,18 +179,29 @@ class AdzunaClient:
             list: Filtered jobs with remote-friendly positions.
         """
         remote_keywords = [
-            "remote", "work from home", "wfh", "telecommute",
-            "distributed", "virtual", "anywhere", "home office"
+            "remote",
+            "work from home",
+            "wfh",
+            "telecommute",
+            "distributed",
+            "virtual",
+            "anywhere",
+            "home office",
         ]
 
         remote_jobs = []
         other_jobs = []
 
         for job in jobs:
-            description = (job.get("description", "") + " " + job.get("title", "")).lower()
+            description = (
+                job.get("description", "") + " " + job.get("title", "")
+            ).lower()
             location = job.get("location", {}).get("display_name", "").lower()
 
-            is_remote = any(keyword in description or keyword in location for keyword in remote_keywords)
+            is_remote = any(
+                keyword in description or keyword in location
+                for keyword in remote_keywords
+            )
 
             if is_remote:
                 remote_jobs.append(job)
@@ -217,7 +238,9 @@ class AdzunaClient:
                 if response.status_code == 404:
                     raise AdzunaAPIError(f"Job {job_id} not found", 404)
                 elif response.status_code != 200:
-                    raise AdzunaAPIError(f"API error: {response.status_code}", response.status_code)
+                    raise AdzunaAPIError(
+                        f"API error: {response.status_code}", response.status_code
+                    )
 
                 return response.json()
 

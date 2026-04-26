@@ -19,6 +19,7 @@ engine = create_async_engine(
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,
+    pool_recycle=600,
 )
 
 # Session factory — produces AsyncSession instances

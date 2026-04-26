@@ -232,6 +232,46 @@ async def list_jobs(
 
 
 @router.get(
+    "/interview-preps",
+    response_model=InterviewPrepListResponse,
+    summary="List all interview preparations for the current user",
+)
+async def list_user_interview_preps(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> InterviewPrepListResponse:
+    """List all interview preparation materials for the authenticated user.
+
+    Provides overview of all jobs with interview prep materials,
+    useful for dashboard display.
+
+    Args:
+        current_user: Authenticated user (injected).
+        db: Database session (injected).
+
+    Returns:
+        InterviewPrepListResponse: List of interview prep summaries.
+    """
+    try:
+        prep_summaries = await interview_coach_service.get_user_interview_preps(
+            user=current_user,
+            db=db,
+        )
+
+        return InterviewPrepListResponse(
+            preparations=prep_summaries,
+            total_count=len(prep_summaries),
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to list interview preps for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve interview preparations",
+        )
+
+
+@router.get(
     "/{user_job_id}",
     response_model=UserJobResponse,
     summary="Get individual job details",
@@ -422,9 +462,12 @@ async def trigger_job_scan(
         preferences = result.scalar_one_or_none()
 
         if not preferences:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Please set job preferences before scanning for jobs",
+            # Don't block — the agent falls back to a "developer" query so users
+            # without preferences can still browse jobs. Match scoring still
+            # works without a CV (it just scores 0).
+            logger.info(
+                "Scan with no preferences for user %s — using default query",
+                user_id_str,
             )
 
         # Mark the scan timestamp before running so concurrent requests are blocked
@@ -537,6 +580,8 @@ async def generate_interview_prep_materials(
             company_name=job.company_name,
         )
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -665,6 +710,8 @@ async def get_interview_prep_materials(
         response_data["company_name"] = job.company_name
         return InterviewPrepResponse(**response_data)
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -731,6 +778,8 @@ async def update_interview_prep_materials(
         response_data["company_name"] = job.company_name
         return InterviewPrepResponse(**response_data)
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -741,46 +790,6 @@ async def update_interview_prep_materials(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update interview preparation materials",
-        )
-
-
-@router.get(
-    "/interview-preps",
-    response_model=InterviewPrepListResponse,
-    summary="List all interview preparations for the current user",
-)
-async def list_user_interview_preps(
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> InterviewPrepListResponse:
-    """List all interview preparation materials for the authenticated user.
-
-    Provides overview of all jobs with interview prep materials,
-    useful for dashboard display.
-
-    Args:
-        current_user: Authenticated user (injected).
-        db: Database session (injected).
-
-    Returns:
-        InterviewPrepListResponse: List of interview prep summaries.
-    """
-    try:
-        prep_summaries = await interview_coach_service.get_user_interview_preps(
-            user=current_user,
-            db=db,
-        )
-
-        return InterviewPrepListResponse(
-            preparations=prep_summaries,
-            total_count=len(prep_summaries),
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to list interview preps for user {current_user.id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve interview preparations",
         )
 
 
@@ -869,6 +878,8 @@ async def calculate_benchmark_score(
             privacy_compliant=True,
         )
 
+    except HTTPException:
+        raise
     except InsufficientPeersError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

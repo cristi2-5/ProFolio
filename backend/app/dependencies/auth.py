@@ -5,9 +5,9 @@ Provides FastAPI dependency injection for protected routes requiring
 authentication. Validates JWT tokens and retrieves authenticated users.
 """
 
+import uuid
 from datetime import datetime, timezone
 from typing import Annotated
-import uuid
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer

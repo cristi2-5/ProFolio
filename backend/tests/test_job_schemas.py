@@ -11,11 +11,13 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
+
 from app.schemas.job import UserJobResponse
 
 
 class MockJob:
     """Mock ScrapedJob for testing schema conversion."""
+
     def __init__(self):
         self.id = uuid.uuid4()
         self.job_title = "Lead Architecture"
@@ -30,6 +32,7 @@ class MockJob:
 
 class MockUserJob:
     """Mock UserJob for testing schema conversion."""
+
     def __init__(self, job):
         self.id = uuid.uuid4()
         self.user_id = uuid.uuid4()
@@ -69,6 +72,7 @@ def test_user_job_response_flattens_nested_job():
 
 def test_user_job_response_handles_missing_job_gracefully():
     """Verify the UserJobResponse doesn't crash if the inner job is None."""
+
     class FakeUserJob:
         id = uuid.uuid4()
         user_id = uuid.uuid4()

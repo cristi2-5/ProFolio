@@ -16,6 +16,72 @@ Sistemul permite utilizatorilor să își încarce CV-ul de bază și să define
 
 ---
 
+## 🚀 Run Locally with Docker Compose
+
+The fastest way to spin up the full stack (Postgres + FastAPI backend + React/Vite frontend) on your machine.
+
+### Prerequisites
+
+- **Docker Desktop** installed and running ([download](https://www.docker.com/products/docker-desktop/)).
+- A **Gemini API key** — the backend talks to Google's Gemini via an OpenAI-compatible endpoint. Generate one at https://aistudio.google.com/app/apikey.
+- An **Adzuna app id + key** — used by the Job Scanner agent. Register a free developer account at https://developer.adzuna.com/ (free tier: 250 requests/month).
+
+### Setup
+
+```bash
+cp .env.example .env
+# Edit .env: set OPENAI_API_KEY (your Gemini key — env-var name kept for back-compat),
+# ADZUNA_APP_ID, ADZUNA_APP_KEY. Leave the rest at defaults for local dev.
+docker compose up --build
+```
+
+### Access
+
+- **Frontend:** http://localhost:5173
+- **Backend API:** http://localhost:8000
+- **API docs (Swagger):** http://localhost:8000/docs
+
+### First-time use
+
+1. Open the frontend and **register an account**.
+2. **Upload your CV** (PDF or DOCX) — the CV Profiler agent parses it automatically.
+3. **Set your job preferences** (title, location, keywords, seniority).
+4. Click **"Scan jobs"** to fetch matching opportunities from Adzuna.
+
+### Common pitfalls
+
+- **Port already in use** (5432, 8000, or 5173): another project is bound to that port. `docker compose down` other projects, or change the host-side port in `docker-compose.yml`.
+- **First build is slow** (3–5 minutes): the Python image installs all backend deps, and the frontend image runs `npm install`. Subsequent builds are cached.
+- **Postgres healthcheck fails repeatedly:** the volume may be wedged. Fix with `docker compose down -v` to wipe the named volume, then `docker compose up --build`.
+- **LLM features need a real Gemini key.** The placeholder string `test-key-for-development` will fail with a 500/503 from any agent endpoint — paste a real key into `.env`.
+
+### Run tests
+
+```bash
+docker compose exec backend pytest
+docker compose exec frontend npm test
+```
+
+### Reset the database
+
+```bash
+docker compose down -v && docker compose up --build
+```
+
+Wipes the Postgres volume; alembic migrations re-run on next startup.
+
+### Stop
+
+`Ctrl+C` in the foreground terminal, then:
+
+```bash
+docker compose down
+```
+
+For more detail (alembic, manual db inspection, debugging agents, password reset), see [`docs/LOCAL_DEV.md`](docs/LOCAL_DEV.md).
+
+---
+
 ## User Stories / Product Backlog
 
 ### Epicul 1: Înregistrare & Dashboard

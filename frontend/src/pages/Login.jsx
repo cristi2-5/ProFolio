@@ -5,7 +5,7 @@
  * Handles login, registration, and validation with proper error display.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, consumeReturnTo } from '../contexts/AuthContext';
 
@@ -38,6 +38,9 @@ function Login() {
     return '/dashboard';
   };
 
+  // Ref used to auto-focus the email field on mount for keyboard users.
+  const emailRef = useRef(null);
+
   // Form state
   const [isRegister, setIsRegister] = useState(false);
   const [formData, setFormData] = useState({
@@ -62,6 +65,11 @@ function Login() {
     clearError();
     setValidationErrors({});
   }, [isRegister, clearError]);
+
+  // Auto-focus email on mount so keyboard users can start typing immediately.
+  useEffect(() => {
+    emailRef.current?.focus();
+  }, []);
 
   /**
    * Handle form field changes.
@@ -136,6 +144,7 @@ function Login() {
    */
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isLoading) return;
     clearError();
 
     const trimmedEmail = formData.email.trim();
@@ -167,7 +176,9 @@ function Login() {
       // Success - AuthContext will handle redirect via useEffect
     } catch (err) {
       // Error is handled by AuthContext and displayed via error state
-      console.error('Auth error:', err);
+      if (import.meta.env.DEV) {
+        console.error('Auth error:', err);
+      }
     }
   };
 
@@ -241,7 +252,7 @@ function Login() {
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} aria-busy={isLoading}>
           {isRegister && (
             <>
               <div style={{ marginBottom: 'var(--space-4)' }}>
@@ -255,13 +266,18 @@ function Login() {
                   value={formData.full_name}
                   onChange={handleChange}
                   placeholder="Enter your full name"
+                  aria-describedby={
+                    validationErrors.full_name ? 'full_name-error' : undefined
+                  }
                   style={{
                     ...inputStyle,
                     ...(validationErrors.full_name && errorInputStyle),
                   }}
                 />
                 {validationErrors.full_name && (
-                  <div style={errorStyle}>{validationErrors.full_name}</div>
+                  <div id="full_name-error" style={errorStyle}>
+                    {validationErrors.full_name}
+                  </div>
                 )}
               </div>
 
@@ -295,13 +311,18 @@ function Login() {
                     value={formData.niche}
                     onChange={handleChange}
                     placeholder="e.g., Frontend Development, DevOps"
+                    aria-describedby={
+                      validationErrors.niche ? 'niche-error' : undefined
+                    }
                     style={{
                       ...inputStyle,
                       ...(validationErrors.niche && errorInputStyle),
                     }}
                   />
                   {validationErrors.niche && (
-                    <div style={errorStyle}>{validationErrors.niche}</div>
+                    <div id="niche-error" style={errorStyle}>
+                      {validationErrors.niche}
+                    </div>
                   )}
                 </div>
               )}
@@ -313,6 +334,7 @@ function Login() {
               Email
             </label>
             <input
+              ref={emailRef}
               type="email"
               id="email"
               name="email"
@@ -320,13 +342,18 @@ function Login() {
               onChange={handleChange}
               placeholder="your@email.com"
               required
+              aria-describedby={
+                validationErrors.email ? 'email-error' : undefined
+              }
               style={{
                 ...inputStyle,
                 ...(validationErrors.email && errorInputStyle),
               }}
             />
             {validationErrors.email && (
-              <div style={errorStyle}>{validationErrors.email}</div>
+              <div id="email-error" style={errorStyle}>
+                {validationErrors.email}
+              </div>
             )}
           </div>
 
@@ -347,13 +374,18 @@ function Login() {
               }
               required
               minLength={8}
+              aria-describedby={
+                validationErrors.password ? 'password-error' : undefined
+              }
               style={{
                 ...inputStyle,
                 ...(validationErrors.password && errorInputStyle),
               }}
             />
             {validationErrors.password && (
-              <div style={errorStyle}>{validationErrors.password}</div>
+              <div id="password-error" style={errorStyle}>
+                {validationErrors.password}
+              </div>
             )}
           </div>
 

@@ -16,13 +16,13 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from openai import AsyncOpenAI, BadRequestError
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.agents._prompt_safety import sanitize_user_text, wrap_user_content
 from app.config import get_settings
-from app.utils.exceptions import CVProfilerError
+from app.utils.exceptions import AgentError, CVProfilerError
 from app.utils.file_processing import clean_extracted_text, extract_text_from_file
-from app.utils.llm_retry import with_retry
+from app.utils.llm_retry import GEMINI_FLASH_MODELS, with_model_fallback
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -55,13 +55,15 @@ if is_development_mode:
 class Experience(BaseModel):
     """Single work experience entry."""
 
-    role: str = Field(..., description="Job title or role name")
-    company: str = Field(..., description="Company or organization name")
+    model_config = ConfigDict(extra="ignore")
+
+    role: str = Field(default="", description="Job title or role name")
+    company: str = Field(default="", description="Company or organization name")
     period: str = Field(
-        ..., description="Employment period (e.g., '2020-2023', 'Jan 2020 - Present')"
+        default="", description="Employment period (e.g., '2020-2023', 'Jan 2020 - Present')"
     )
     description: str = Field(
-        ..., description="Brief description of responsibilities and achievements"
+        default="", description="Brief description of responsibilities and achievements"
     )
     technologies: List[str] = Field(
         default_factory=list, description="Technologies used in this role"
@@ -71,13 +73,15 @@ class Experience(BaseModel):
 class Education(BaseModel):
     """Single education entry."""
 
+    model_config = ConfigDict(extra="ignore")
+
     degree: str = Field(
-        ...,
+        default="",
         description="Degree type and field (e.g., 'Bachelor of Science in Computer Science')",
     )
-    institution: str = Field(..., description="School, university, or institution name")
+    institution: str = Field(default="", description="School, university, or institution name")
     year: str = Field(
-        ..., description="Graduation year or period (e.g., '2020', '2018-2022')"
+        default="", description="Graduation year or period (e.g., '2020', '2018-2022')"
     )
     details: str = Field(
         default="",
@@ -87,6 +91,8 @@ class Education(BaseModel):
 
 class ParsedCVData(BaseModel):
     """Structured CV data output from GPT-4 parsing."""
+
+    model_config = ConfigDict(extra="ignore")
 
     # Core professional information
     full_name: str = Field(
@@ -160,8 +166,7 @@ class CVProfilerAgent:
         if not openai_client:
             logger.error("OpenAI API key not configured. CV parsing will not work.")
 
-        # GPT-4 configuration
-        self.model = "gemini-2.0-flash"  # Cheap JSON-capable model on Gemini
+        self.models = GEMINI_FLASH_MODELS  # fallback chain: 3.0 → 2.5 → 2.0
         self.max_tokens = 2000
         self.temperature = 0.1  # Low for consistent structured output
 
@@ -200,7 +205,7 @@ class CVProfilerAgent:
         except ValueError as e:
             logger.error(f"CV parsing validation error for {original_filename}: {e}")
             raise
-        except CVProfilerError:
+        except (CVProfilerError, AgentError):
             raise
         except Exception as e:
             logger.error(f"CV parsing failed for {original_filename}: {e}")
@@ -269,9 +274,9 @@ class CVProfilerAgent:
             f"{wrapped_cv}"
         )
 
-        async def _call() -> Any:
+        async def _call(model: str) -> Any:
             return await openai_client.chat.completions.create(
-                model=self.model,
+                model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message},
@@ -282,38 +287,77 @@ class CVProfilerAgent:
             )
 
         try:
-            response = await with_retry(_call)
+            response, used_model = await with_model_fallback(_call, self.models)
+            if used_model != self.models[0]:
+                logger.info("CV parsing used fallback model: %s", used_model)
         except BadRequestError as exc:
             logger.error(f"OpenAI rejected request for {filename}: {exc}")
             raise CVProfilerError("LLM rejected the CV parsing request") from exc
 
         response_content = response.choices[0].message.content.strip()
 
+        # Strip markdown code fences (```json ... ``` or ``` ... ```)
+        # Some models wrap JSON in code blocks even when json_object mode is requested.
+        if response_content.startswith("```"):
+            lines = response_content.splitlines()
+            inner = [l for l in lines if not l.startswith("```")]
+            response_content = "\n".join(inner).strip()
+
+        # Extract the first JSON object if there's surrounding text
         try:
             json_data = json.loads(response_content)
-        except json.JSONDecodeError as e:
-            logger.error(
-                "Invalid JSON from GPT-4 for %s: %s | raw=%r",
-                filename,
-                e,
-                response_content[:500],
-            )
-            raise CVProfilerError("LLM returned malformed CV data") from e
+        except json.JSONDecodeError:
+            import re
+            match = re.search(r"\{.*\}", response_content, re.DOTALL)
+            if match:
+                try:
+                    json_data = json.loads(match.group())
+                except json.JSONDecodeError as e2:
+                    logger.error("Cannot extract JSON for %s | raw=%r", filename, response_content[:600])
+                    raise CVProfilerError("LLM returned malformed CV data") from e2
+            else:
+                logger.error("No JSON found for %s | raw=%r", filename, response_content[:600])
+                raise CVProfilerError("LLM returned malformed CV data")
+
+        # Normalise list fields that a model might return as comma-separated strings
+        def _to_list(val: object) -> list:
+            if isinstance(val, list):
+                return val
+            if isinstance(val, str):
+                return [s.strip() for s in val.split(",") if s.strip()]
+            return []
+
+        if isinstance(json_data, dict):
+            for list_field in ("skills", "technologies", "certifications", "languages", "senior_technologies"):
+                if list_field in json_data:
+                    json_data[list_field] = _to_list(json_data[list_field])
 
         try:
-            parsed_data = ParsedCVData(**json_data)
-        except ValidationError as e:
+            parsed_data = ParsedCVData.model_validate(json_data)
+        except (ValidationError, TypeError, Exception) as e:
             logger.error(
-                "Pydantic validation failed for %s: %s | raw=%r",
+                "Pydantic validation failed for %s: %s | keys=%s | raw=%r",
                 filename,
                 e,
-                response_content[:500],
+                list(json_data.keys()) if isinstance(json_data, dict) else type(json_data),
+                response_content[:800],
             )
-            raise CVProfilerError("LLM returned malformed CV data") from e
+            # Last resort: build a minimal ParsedCVData from whatever we can salvage
+            if isinstance(json_data, dict):
+                logger.warning("Falling back to partial CV parse for %s", filename)
+                parsed_data = ParsedCVData(
+                    full_name=str(json_data.get("full_name", "")),
+                    email=str(json_data.get("email", "")),
+                    summary=str(json_data.get("summary", "")),
+                    skills=_to_list(json_data.get("skills", [])),
+                    technologies=_to_list(json_data.get("technologies", [])),
+                )
+            else:
+                raise CVProfilerError("LLM returned malformed CV data") from e
 
         logger.info(
-            f"Successfully parsed CV {filename}: {len(parsed_data.skills)} skills, "
-            f"{len(parsed_data.experience)} jobs"
+            "Successfully parsed CV %s: %d skills, %d jobs",
+            filename, len(parsed_data.skills), len(parsed_data.experience),
         )
         return parsed_data
 
@@ -387,7 +431,7 @@ Return only the JSON object, no additional text or explanations."""
         """
         return {
             "agent_status": "active" if openai_client else "disabled",
-            "model": self.model,
+            "model": self.models[0],
             "api_configured": bool(openai_client),
             "last_health_check": datetime.utcnow().isoformat(),
         }

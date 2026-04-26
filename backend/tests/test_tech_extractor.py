@@ -117,8 +117,7 @@ class TestGroupByCategory:
     )
     def test_multiple_entries_per_category(self, input_categories: list[str]) -> None:
         techs = [
-            ExtractedTech(f"Tech{i}", cat, 1)
-            for i, cat in enumerate(input_categories)
+            ExtractedTech(f"Tech{i}", cat, 1) for i, cat in enumerate(input_categories)
         ]
         grouped = group_by_category(techs)
         assert sum(len(v) for v in grouped.values()) == len(input_categories)

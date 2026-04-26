@@ -27,7 +27,6 @@ from app.services.recommendations_service import (
 )
 from app.utils.benchmark_sanitizer import sanitize_profile
 
-
 # ----------------------------------------------------------------------
 # Fixtures
 # ----------------------------------------------------------------------
@@ -108,10 +107,18 @@ class TestPureHelpers:
 
     def test_peer_frequency_normalizes_to_fraction(self) -> None:
         peers = [
-            sanitize_profile(seniority_level="mid", niche="backend", parsed_resume={"skills": ["Python"]})
+            sanitize_profile(
+                seniority_level="mid",
+                niche="backend",
+                parsed_resume={"skills": ["Python"]},
+            )
             for _ in range(2)
         ] + [
-            sanitize_profile(seniority_level="mid", niche="backend", parsed_resume={"skills": ["Python", "Docker"]})
+            sanitize_profile(
+                seniority_level="mid",
+                niche="backend",
+                parsed_resume={"skills": ["Python", "Docker"]},
+            )
             for _ in range(2)
         ]
         freq = _peer_skill_frequency(peers)
@@ -203,7 +210,11 @@ class TestGenerateRecommendations:
             _job("PostgreSQL Kafka Docker"),
         ]
         peer_rows = [
-            ("mid", "backend", {"skills": ["python", "fastapi", "postgresql", "docker"]})
+            (
+                "mid",
+                "backend",
+                {"skills": ["python", "fastapi", "postgresql", "docker"]},
+            )
             for _ in range(MINIMUM_PEER_COUNT)
         ]
         db = _make_db(

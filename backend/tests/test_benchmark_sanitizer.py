@@ -57,12 +57,16 @@ class TestSanitizeProfile:
 
     def test_skills_can_come_as_dicts(self) -> None:
         resume = {"skills": [{"name": "React"}, {"skill": "TypeScript"}, "Tailwind"]}
-        profile = sanitize_profile(seniority_level="junior", niche=None, parsed_resume=resume)
+        profile = sanitize_profile(
+            seniority_level="junior", niche=None, parsed_resume=resume
+        )
         assert profile.skills == frozenset({"react", "typescript", "tailwind"})
 
     def test_skills_string_fallback(self) -> None:
         resume = {"skills": "Python, JavaScript / TypeScript"}
-        profile = sanitize_profile(seniority_level="junior", niche=None, parsed_resume=resume)
+        profile = sanitize_profile(
+            seniority_level="junior", niche=None, parsed_resume=resume
+        )
         assert profile.skills == frozenset({"python", "javascript", "typescript"})
 
     def test_explicit_years_is_preferred(self) -> None:
@@ -70,7 +74,9 @@ class TestSanitizeProfile:
             "total_years_experience": 7.5,
             "experience": [{"duration": "2020-2023"}],  # ignored
         }
-        profile = sanitize_profile(seniority_level="senior", niche="backend", parsed_resume=resume)
+        profile = sanitize_profile(
+            seniority_level="senior", niche="backend", parsed_resume=resume
+        )
         assert profile.years_experience == 7.5
 
     def test_years_summed_from_role_dates(self) -> None:
@@ -80,13 +86,17 @@ class TestSanitizeProfile:
                 {"start_date": "2020-01-01", "end_date": "2022-01-01"},  # ~2 yrs
             ]
         }
-        profile = sanitize_profile(seniority_level="mid", niche="backend", parsed_resume=resume)
+        profile = sanitize_profile(
+            seniority_level="mid", niche="backend", parsed_resume=resume
+        )
         # Leap-year math gives ~4 years ± a few days.
         assert 3.9 <= profile.years_experience <= 4.1
 
     def test_present_marker_uses_today(self) -> None:
         resume = {"experience": [{"start_date": "2022-01-01", "end_date": "Present"}]}
-        profile = sanitize_profile(seniority_level="mid", niche="frontend", parsed_resume=resume)
+        profile = sanitize_profile(
+            seniority_level="mid", niche="frontend", parsed_resume=resume
+        )
         assert profile.years_experience > 0
 
     def test_niche_preserved_for_mid_senior(self) -> None:
@@ -113,13 +123,17 @@ class TestExtractJobRequirements:
         assert req.keywords == []
 
     def test_delegates_to_tech_extractor(self) -> None:
-        req = extract_job_requirements("We need a Python dev with FastAPI and PostgreSQL.")
+        req = extract_job_requirements(
+            "We need a Python dev with FastAPI and PostgreSQL."
+        )
         assert "python" in req.required_skills
         assert "fastapi" in req.required_skills
         assert "postgresql" in req.required_skills
 
     def test_parses_years_requirement(self) -> None:
-        req = extract_job_requirements("Senior Python engineer — 5+ years experience required.")
+        req = extract_job_requirements(
+            "Senior Python engineer — 5+ years experience required."
+        )
         assert req.min_years_experience == 5.0
 
     def test_parses_yrs_variant(self) -> None:
@@ -165,5 +179,7 @@ class TestSkillGapAndCoverage:
     def test_coverage_empty_requirements_returns_zero(
         self, profile: SanitizedProfile
     ) -> None:
-        empty = JobRequirements(required_skills=frozenset(), min_years_experience=0.0, keywords=[])
+        empty = JobRequirements(
+            required_skills=frozenset(), min_years_experience=0.0, keywords=[]
+        )
         assert skill_coverage_ratio(profile, empty) == 0.0

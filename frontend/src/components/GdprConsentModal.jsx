@@ -28,7 +28,13 @@ import { useEffect } from 'react';
  *   - submitting: boolean — disables buttons while the backend call is in
  *                           flight to prevent duplicate submissions.
  */
-function GdprConsentModal({ open, onOptIn, onOptOut, onDismiss, submitting = false }) {
+function GdprConsentModal({
+  open,
+  onOptIn,
+  onOptOut,
+  onDismiss,
+  submitting = false,
+}) {
   useEffect(() => {
     if (!open) return undefined;
     const handleKey = (event) => {
@@ -108,7 +114,12 @@ function GdprConsentModal({ open, onOptIn, onOptOut, onDismiss, submitting = fal
             fontSize: 'var(--font-size-sm)',
           }}
         >
-          <p style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--space-2)' }}>
+          <p
+            style={{
+              fontWeight: 'var(--font-weight-semibold)',
+              marginBottom: 'var(--space-2)',
+            }}
+          >
             If you opt in, we extract only:
           </p>
           <ul
