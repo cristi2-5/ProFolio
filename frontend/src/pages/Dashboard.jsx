@@ -42,20 +42,23 @@ function Dashboard() {
   /**
    * Fetch dashboard statistics.
    */
-  const fetchStats = async () => {
+  const fetchStats = async (signal) => {
     try {
       setLoading(true);
 
       // Fetch resumes count (backend returns list directly)
-      const resumeData = await get('/resumes/');
-      const resumeCount = Array.isArray(resumeData) ? resumeData.length : (resumeData.resumes?.length || 0);
+      const resumeData = await get('/resumes/', { signal });
+      const resumeCount = Array.isArray(resumeData)
+        ? resumeData.length
+        : resumeData.resumes?.length || 0;
 
       // Try to fetch job preferences
       let preferencesSet = false;
       try {
-        const prefsData = await get('/jobs/preferences');
+        const prefsData = await get('/jobs/preferences', { signal });
         preferencesSet = prefsData && Object.keys(prefsData).length > 0;
       } catch (err) {
+        if (err.name === 'AbortError') throw err;
         // 404 expected for users without preferences
         preferencesSet = false;
       }
@@ -63,20 +66,27 @@ function Dashboard() {
       // Try to fetch jobs count
       let jobsData = { total_count: 0, jobs: [] };
       try {
-        jobsData = await get('/jobs/');
+        jobsData = await get('/jobs/', { signal });
       } catch (err) {
+        if (err.name === 'AbortError') throw err;
         // Might fail if no preferences set
         jobsData = { total_count: 0, jobs: [] };
       }
 
       // Calculate average match score
-      const avgScore = jobsData.jobs?.length > 0
-        ? jobsData.jobs.reduce((sum, job) => sum + (job.match_score || 0), 0) / jobsData.jobs.length
-        : 0;
+      const avgScore =
+        jobsData.jobs?.length > 0
+          ? jobsData.jobs.reduce(
+              (sum, job) => sum + (job.match_score || 0),
+              0
+            ) / jobsData.jobs.length
+          : 0;
 
       // Count optimized CVs and interview prep
-      const optimizedCount = jobsData.jobs?.filter(job => job.optimized_cv).length || 0;
-      const interviewCount = jobsData.jobs?.filter(job => job.interview_prep).length || 0;
+      const optimizedCount =
+        jobsData.jobs?.filter((job) => job.optimized_cv).length || 0;
+      const interviewCount =
+        jobsData.jobs?.filter((job) => job.interview_prep).length || 0;
 
       setStats({
         jobsFound: jobsData.total_count || 0,
@@ -91,11 +101,11 @@ function Dashboard() {
       if (resumeCount > 0 && !preferencesSet) {
         setShowPreferences(true);
       }
-
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('Failed to fetch dashboard stats:', err);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
@@ -115,7 +125,6 @@ function Dashboard() {
       setTimeout(() => {
         fetchStats();
       }, 2000);
-
     } catch (err) {
       console.error('Failed to trigger job scan:', err);
     } finally {
@@ -142,17 +151,21 @@ function Dashboard() {
    * Load dashboard data on mount.
    */
   useEffect(() => {
-    fetchStats();
+    const ctrl = new AbortController();
+    fetchStats(ctrl.signal);
+    return () => ctrl.abort();
   }, []);
 
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '50vh',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '50vh',
+        }}
+      >
         <div
           style={{
             width: '40px',
@@ -181,7 +194,10 @@ function Dashboard() {
             Your AI-powered job hunting command center
           </p>
         </div>
-        <div className="header-actions" style={{ display: 'flex', gap: 'var(--space-3)' }}>
+        <div
+          className="header-actions"
+          style={{ display: 'flex', gap: 'var(--space-3)' }}
+        >
           <button
             className="btn btn-secondary"
             onClick={() => navigate('/resumes')}
@@ -191,13 +207,15 @@ function Dashboard() {
           <button
             className="btn btn-primary"
             onClick={triggerJobScan}
-            disabled={!stats.resumeUploaded || !stats.preferencesSet || scanning}
+            disabled={
+              !stats.resumeUploaded || !stats.preferencesSet || scanning
+            }
             title={
               !stats.resumeUploaded
                 ? 'Upload a resume first'
                 : !stats.preferencesSet
-                ? 'Set job preferences first'
-                : 'Scan for new jobs'
+                  ? 'Set job preferences first'
+                  : 'Scan for new jobs'
             }
           >
             {scanning ? '⏳ Scanning...' : '🔍 Find Jobs'}
@@ -217,11 +235,23 @@ function Dashboard() {
             color: 'var(--color-info)',
           }}
         >
-          <h4 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--space-2)' }}>
+          <h4
+            style={{
+              fontSize: 'var(--font-size-lg)',
+              fontWeight: 'var(--font-weight-medium)',
+              marginBottom: 'var(--space-2)',
+            }}
+          >
             Complete Your Profile
           </h4>
           <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+              }}
+            >
               <span style={{ fontSize: 'var(--font-size-lg)' }}>
                 {stats.resumeUploaded ? '✅' : '⭕'}
               </span>
@@ -243,7 +273,13 @@ function Dashboard() {
                 </button>
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+              }}
+            >
               <span style={{ fontSize: 'var(--font-size-lg)' }}>
                 {stats.preferencesSet ? '✅' : '⭕'}
               </span>
@@ -289,14 +325,22 @@ function Dashboard() {
           icon="🔍"
           label="Jobs Found"
           value={stats.jobsFound.toString()}
-          subtext={stats.jobsFound > 0 ? "Jobs matched to your profile" : "Set preferences to find jobs"}
+          subtext={
+            stats.jobsFound > 0
+              ? 'Jobs matched to your profile'
+              : 'Set preferences to find jobs'
+          }
           color="var(--color-info)"
         />
         <StatsCard
           icon="🎯"
           label="Avg. Match Score"
-          value={stats.avgMatchScore > 0 ? `${stats.avgMatchScore}%` : "—"}
-          subtext={stats.avgMatchScore > 0 ? "Your profile compatibility" : "Upload CV to begin"}
+          value={stats.avgMatchScore > 0 ? `${stats.avgMatchScore}%` : '—'}
+          subtext={
+            stats.avgMatchScore > 0
+              ? 'Your profile compatibility'
+              : 'Upload CV to begin'
+          }
           color="var(--color-accent)"
         />
         <StatsCard
@@ -317,7 +361,14 @@ function Dashboard() {
 
       {/* Job Listings or Setup Guide */}
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 'var(--space-4)',
+          }}
+        >
           <h3
             style={{
               fontSize: 'var(--font-size-lg)',
@@ -330,7 +381,10 @@ function Dashboard() {
             <button
               className="btn btn-secondary"
               onClick={() => navigate('/jobs')}
-              style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 'var(--font-size-sm)' }}
+              style={{
+                padding: 'var(--space-2) var(--space-3)',
+                fontSize: 'var(--font-size-sm)',
+              }}
             >
               View All Jobs
             </button>
@@ -362,8 +416,8 @@ function Dashboard() {
               {!stats.resumeUploaded
                 ? 'Upload your resume to get started'
                 : !stats.preferencesSet
-                ? 'Set your job preferences to find matches'
-                : 'No jobs found yet'}
+                  ? 'Set your job preferences to find matches'
+                  : 'No jobs found yet'}
             </p>
             <p style={{ marginTop: 'var(--space-2)' }}>
               {!stats.resumeUploaded || !stats.preferencesSet
@@ -374,7 +428,8 @@ function Dashboard() {
         ) : (
           <div style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
             <p style={{ color: 'var(--color-text-secondary)' }}>
-              {stats.jobsFound} job{stats.jobsFound !== 1 ? 's' : ''} found and ready for review!
+              {stats.jobsFound} job{stats.jobsFound !== 1 ? 's' : ''} found and
+              ready for review!
             </p>
           </div>
         )}
