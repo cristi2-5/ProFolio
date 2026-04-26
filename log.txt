@@ -2179,3 +2179,193 @@ TEST STATUS: 59/59 new tests pass. Full unit suite: 202/202 pass.
 Remaining failures in the integration suite are Postgres-connection
 errors unrelated to this change.
 ==================================================
+
+
+==================================================
+TIMESTAMP: 2026-04-26 18:00:00
+TASK/PROMPT: End-to-end security & quality audit of the application; remediate Phase 1-4 of the resulting fix plan (auth hardening, IDOR, file-upload security, LLM hardening, race conditions, frontend critical bugs, CI/test maturity, polish); then back-fill rules.md compliance (log.txt entry, project_index.md update, .gitignore restoration).
+BRANCH: feat/phases-5-6-7-complete (recommend follow-up commit on a dedicated `fix/security-audit-remediation` branch before merge)
+PR STATUS: Draft (uncommitted; staged for review)
+
+--- FILES MODIFIED ---
+
+Configuration & infrastructure:
+- docker-compose.yml: env-var interpolation (`${VAR}`) for OPENAI_API_KEY, ADZUNA_*, SECRET_KEY, POSTGRES_*, CORS_ORIGINS, etc., with safe `:-` fallbacks; backend now reads real keys from .env instead of hardcoded literals.
+- .env: Adzuna keys filled in.
+- .gitignore: added `/test_*.py` orphan-script ignore; restored `!log.txt` whitelist after an earlier batch removed it.
+- .github/workflows/ci.yml: removed `continue-on-error: true` from black, isort, ESLint, Prettier, and the frontend test step; removed broken Jest-only flags and missing `eslint-formatter-sarif` reference; flake8 + mypy retain `continue-on-error` (197 + 107 pre-existing violations — flagged for follow-up).
+
+Backend — auth & rate limiting:
+- backend/app/config.py: added `model_validator(mode="after")` that refuses startup if `environment == "production"` AND secret_key is the default OR shorter than 32 chars; added `max_resumes_per_user: int = 5`.
+- backend/app/utils/security.py: removed UTF-8 truncation hack (`[:72].decode(errors="ignore")`); now raises `ValueError` if password > 72 bytes.
+- backend/app/schemas/user.py: `UserCreate.email` now `.strip().lower()`; `password` validator rejects whitespace-only and >72-byte passwords; `LoginRequest` mirrors the trim/whitespace check.
+- backend/app/utils/rate_limit.py: NEW. Centralises slowapi `Limiter` and `user_id_key` helper (decodes Bearer JWT to derive a per-user key, falls back to `request.state.user`, then to remote address).
+- backend/app/main.py: registers `app.state.limiter`, `RateLimitExceeded` exception handler, and `SlowAPIMiddleware`; APScheduler `max_instances=1`+`coalesce=True`; cron job wraps `pg_advisory_lock` (PG-only); `/health` now `SELECT 1` and returns 503 + `{"status":"degraded","database":"unreachable"}` on failure.
+- backend/app/routers/auth.py: `@limiter.limit("5/minute")` on /register, `"10/minute"` on /login; both endpoints take `request: Request`.
+
+Backend — IDOR remediation:
+- backend/app/dependencies/jobs.py: NEW. `get_user_job_or_403(job_id, current_user, db)` — single SELECT...JOIN for happy path, falls back to a second SELECT to disambiguate 404 (job missing) vs 403 (job exists but user not linked).
+- backend/app/routers/cv_optimizer.py: ownership check on /optimize, /cover-letter, and /export/cover-letter/{job_id}; per-user rate limits (20/hr optimize+cover-letter, 5/min suggestions); AgentError → HTTP mapping; body params renamed to `payload` to free `request: Request` for slowapi.
+- backend/app/routers/jobs.py: ownership check on /generate-interview-prep, -async, GET/PATCH /interview-prep, and /calculate-benchmark; per-user rate limits (30/hr interview); pg_try_advisory_lock guard on /jobs/scan returning 429 on contention; AgentError mapping.
+- backend/app/routers/benchmarks.py: ownership check on GET /api/benchmarks/job/{job_id}.
+
+Backend — file-upload security:
+- backend/app/utils/file_processing.py: magic-byte verification (`%PDF`, `PK\x03\x04`); DOCX archives must contain `word/document.xml` (validated via stdlib `zipfile`); rejects MIME spoofing; no new system dependency.
+- backend/app/services/resume_service.py: `_count_user_resumes(...)` precheck against `MAX_RESUMES_PER_USER` raises `HTTPException(413)`; configurable.
+- backend/app/routers/resumes.py: `except HTTPException: raise` clause keeps 413 from being swallowed by the generic 500 handler.
+
+Backend — LLM hardening:
+- backend/app/utils/exceptions.py: NEW exception hierarchy — `AgentError`, `CVProfilerError` (422), `CVOptimizerError` (422), `InterviewCoachError` (422), `LLMRateLimitError` (429), `LLMUnavailableError` (503), `LLMConfigurationError` (500).
+- backend/app/utils/llm_retry.py: NEW. `with_retry(coro_factory, max_retries=2)` — exponential backoff (1s, 4s) on `RateLimitError`/`APITimeoutError`/`APIConnectionError`; immediate fail on `AuthenticationError` (logged CRITICAL); `BadRequestError` re-raised without retry. Coroutines built per-attempt because they're single-use.
+- backend/app/agents/_prompt_safety.py: NEW. `sanitize_user_text(text, max_chars=50_000)` strips role tags (`<system>`, `<user>`, `<assistant>`); `wrap_user_content(label, content)` adds BEGIN/END delimiters so the LLM can be told to treat enclosed content as untrusted data.
+- backend/app/agents/cv_profiler.py: `ValidationError` no longer returns empty `ParsedCVData()` — raises `CVProfilerError` after logging the malformed payload (truncated to 500 chars); user CV text wrapped via `_prompt_safety`; `with_retry` wraps the OpenAI call.
+- backend/app/agents/cv_optimizer.py: full Pydantic `OptimizedCV` schema validation after `json.loads` (replaces the type-only `_validate_optimized_cv`); `with_retry` + AgentError; JD/CV inputs wrapped/sanitized; heuristic `_detect_potential_fabrications(original_skills, optimized_text)` returns tokens that look tech-shaped (suffix list, capitalisation) but aren't in the original CV's skill set — non-blocking, attached to response as `potential_fabrications: List[str]`.
+- backend/app/agents/interview_coach.py: Pydantic schemas validate technical/behavioral/cheat-sheet outputs; `with_retry` + AgentError; JD wrapped via `_prompt_safety`; `jd_truncated: bool` and `jd_truncation_chars_dropped: int` propagated to the response so the UI can warn the user.
+- backend/app/agents/job_scanner.py: `normalize_company_name()` strips `Inc/Ltd/LLC/Corp/...` suffixes + punctuation; fuzzy-match dedup acquires a `pg_advisory_xact_lock` keyed on a deterministic `int.from_bytes(sha256(normalized_company|normalized_title)[:8])` (NOT Python's `hash()`, which is per-process random); skipped on non-PG dialects.
+- backend/app/agents/prompts/interview_coach.py: removed redundant `"""..."""` JD wrapping (now covered by `_prompt_safety.wrap_user_content`); system prompt notes BEGIN/END markers are untrusted.
+- backend/app/schemas/cv_optimizer.py: NEW `OptimizedCV` + `OptimizedExperience` schemas; `potential_fabrications: List[str]` field.
+- backend/app/schemas/interview_coach.py: `jd_truncated`, `jd_truncation_chars_dropped` fields.
+- backend/app/services/job_service.py: `update_job_status` is now a single atomic `UPDATE...RETURNING UserJob.id` with `WHERE applied_at IS NULL` for the apply transition; idempotent — re-applying returns 200 with current state instead of duplicating `applied_at`.
+- backend/app/services/peer_data.py: audited (verdict: SAFE) — `SanitizedProfile` dataclass has only 4 fields (seniority_level, niche, years_experience, skills); structural typing prevents PII leakage; SQL query already filters `User.benchmark_opt_in.is_(True)`; threshold of 30 enforced before scoring. New tests lock these invariants.
+
+Frontend — critical bugs & UX:
+- frontend/src/components/CVUpload.jsx: bug fix — `useState(() => fetchResumes(), [])` was a typo for `useEffect`. Without this fix the resume list never loaded on mount.
+- frontend/src/api/client.js: `signal` passthrough; on any 401 response, clears `access_token` from localStorage and dispatches `auth:logout` CustomEvent with `returnTo` detail.
+- frontend/src/contexts/AuthContext.jsx: inline `decodeJWT`/`getTokenExpMs` helpers (no jwt-decode dep); rejects already-expired tokens on app init; schedules a `setTimeout` to auto-logout 1s after `exp`; listens for `auth:logout` events and stores `returnTo` in sessionStorage; `ProtectedRoute` now uses `<Navigate to="/login" state={{ from: location }} replace />` instead of `window.location.href`.
+- frontend/src/pages/Login.jsx: trims email/full_name/niche before validation+submit; rejects whitespace-only password; reads `location.state?.from?.pathname` then sessionStorage `returnTo` for post-login redirect.
+- frontend/src/pages/Jobs.jsx, Dashboard.jsx, Benchmarks.jsx, Interview.jsx: each data-fetching `useEffect` wraps an `AbortController`, swallows `AbortError`, and skips state updates after abort.
+- frontend/eslint.config.js: enabled `react-hooks/rules-of-hooks: 'error'` and `react-hooks/exhaustive-deps: 'warn'` (would have caught CVUpload bug); added node globals for vite/vitest config files; auto-fixed 12 errors and 15 prettier files via `eslint --fix` + `prettier --write`.
+- frontend/vitest.config.js: NEW. jsdom env (with explicit `url: 'http://localhost/'` so jsdom emits a non-opaque origin), globals enabled, v8 coverage, references setup file.
+- frontend/src/test/setup.js: NEW. Registers `@testing-library/jest-dom/vitest` matchers, `cleanup()` after each test, and a memory-storage shim for `localStorage`/`sessionStorage` because Node 25 + Vitest 4 + jsdom shadow Storage prototypes inconsistently.
+- frontend/src/api/client.test.js: NEW. 2 sample tests covering 2xx parse path and 401-clears-token-and-dispatches-event path.
+- frontend/package.json: `test` script switched to `vitest run`; added `test:watch`; added vitest, @testing-library/react, @testing-library/jest-dom, jsdom devDependencies.
+
+Process / repo-hygiene cleanup:
+- Deleted root-level orphan integration scripts that hit localhost:8000 with hardcoded creds: test_get_job.py, test_list_jobs.py, test_flattened_job.py, test_job_scan.py.
+- Deleted tracked_files.tmp (Windows-encoded UTF-16 LE artefact, content was a stale `Get-ChildItem`-style file listing).
+
+Remediation (this entry, after rule audit):
+- Restored log.txt (rules.md §7 audit log; prior batch mistook 126KB log for build noise and deleted it).
+- Restored logs.txt (Phase 4 dev journal, separate from §7 log) and parsed_logs.txt (empty placeholder).
+- Restored .gitignore `!log.txt` whitelist.
+- This entry written to log.txt; project_index.md update for new files + materially-changed entries follows.
+
+--- ARCHITECTURE & LOGIC CHANGES ---
+
+1. Rate-limiting gate at the edge. Centralised `slowapi.Limiter` instance lives in app/utils/rate_limit.py; `SlowAPIMiddleware` is registered before CORS so 429s short-circuit early. Per-user keying decodes the Bearer JWT in the limiter's key function instead of waiting for FastAPI to resolve `get_current_user`, because dependency resolution happens inside the middleware chain (after the limiter check). Anonymous endpoints (/register, /login) fall back to remote address.
+
+2. IDOR remediation as a dependency-style helper. Every endpoint that accepts a `job_id` for a `ScrapedJob` now goes through `get_user_job_or_403`. The helper performs a single `SELECT ScrapedJob, UserJob ... JOIN ... WHERE job.id = ? AND user_job.user_id = ?` for the authorised path; only on miss does it run a second SELECT to differentiate 404 from 403. The audit found three additional vulnerable endpoints beyond the original list (`/export/cover-letter/{job_id}`, `/calculate-benchmark`, `GET /benchmarks/job/{job_id}`) — those are also covered.
+
+3. Defence-in-depth file validation. Magic-byte check (`%PDF`, `PK\x03\x04`) plus DOCX zip-archive structural check (`word/document.xml` member must exist) plus the existing extension/MIME check. Stdlib only — no `python-magic`/libmagic dependency. Quota check (5 resumes/user) runs before any disk write so a 413 quota response doesn't leak partial state.
+
+4. LLM resilience. `with_retry` wraps every OpenAI call with retry-on-transient (RateLimit/Timeout/Connection) + immediate-fail on auth/bad-request. Errors map to `AgentError` subclasses with explicit status codes (429/503/422/500). All LLM JSON outputs now go through Pydantic validation — no more silent empty `ParsedCVData()` returns or unchecked `json.loads` fall-through. Heuristic fabrication detection adds a non-blocking warning list when the optimised CV mentions tech tokens absent from the user's source CV.
+
+5. Prompt-injection mitigation (basic). `sanitize_user_text` defangs role tags and caps content length; `wrap_user_content` adds BEGIN/END delimiters so the system prompt can be explicit about which spans are untrusted user data. Not a full mitigation (LLMs can still be tricked) but raises the attack bar significantly, especially against scraped-JD payloads that the user never sees.
+
+6. Atomic `mark applied`. Read-modify-write replaced with `UPDATE...RETURNING ... WHERE applied_at IS NULL`. Concurrent double-clicks no longer duplicate `applied_at`; idempotent 200 instead of 409 because it's friendlier UX.
+
+7. Concurrent-scan safety. APScheduler `max_instances=1` prevents the cron from overlapping itself. The cron callback wraps a blocking `pg_advisory_lock`; the user-facing /scan endpoint uses `pg_try_advisory_lock` (non-blocking, immediate 429 on contention). For per-job dedup races, `pg_advisory_xact_lock` is keyed on a deterministic SHA-256-derived 63-bit int of `(normalized_company, normalized_title)` — Python's built-in `hash()` is randomised per process and would have given workers different keys, defeating the lock entirely.
+
+8. Production safety guards. Pydantic settings `model_validator(mode="after")` refuses startup in `production` if `secret_key` is the default or shorter than 32 chars. Bcrypt 72-byte limit now raises a clear 422 from registration instead of silently corrupting multi-byte UTF-8 passwords at the truncation boundary.
+
+9. Frontend auth lifecycle. JWT `exp` decoded client-side to schedule proactive logout. 401 responses dispatch a custom `auth:logout` event so the API client (which lives outside React) can trigger AuthContext's logout flow without router coupling. AbortController on every page-level data fetch eliminates "set state on unmounted component" warnings and stale-token race bugs.
+
+10. CI strictness — what changed and what didn't. Black + isort + frontend ESLint + Prettier are now blocking after auto-fixing ~80 backend files and 12 frontend files. flake8 (197 violations) and mypy (107 violations) remain `continue-on-error` because the volume is too large to address responsibly inside this audit; flagged as follow-up tech debt in the next sprint.
+
+--- AUDIT & VERIFICATION REVIEW ---
+
+BUGS/KNOWN ISSUES:
+- Deferred for follow-up: JWT migration to httpOnly cookies (architectural; needs CSRF token plumbing + every API call updated). For now, localStorage usage continues; XSS surface mitigated only by 401-driven logout and AbortController cleanup.
+- Deferred for follow-up: full prompt-templating refactor (Anthropic-style structured prompts). Current basic mitigation is delimiter wrapping + role-tag sanitisation only.
+- Deferred for follow-up: ML-based fabrication detector. Current heuristic uses a regex token extractor + 70-word stopword list + capital/suffix tech-shape filter. False-positive rate non-zero.
+- Deferred for follow-up: flake8/mypy backlog (197 + 107 pre-existing violations).
+- IDOR helper falls back to two queries on miss to disambiguate 404 vs 403; happy path is one query but the unauthorised path costs an extra round-trip. Acceptable given the rarity of the unauthorised path.
+- AbortController coverage is for the four most-used pages; CVUpload, JobPreferences, JobDetail still need auditing in a future pass.
+- Per-user resume quota constant is hardcoded at 5 (configurable in app/config.py); not yet exposed as a UI hint.
+
+SECURITY VULNERABILITIES:
+- IDOR (CRITICAL) — fixed via `get_user_job_or_403` across 9 endpoints (cv_optimizer × 3, jobs × 5, benchmarks × 1).
+- Default JWT secret accepted in production (CRITICAL) — fixed via Pydantic validator that refuses startup.
+- Hardcoded test Adzuna keys in docker-compose.yml (HIGH, exposed publicly on GitHub) — moved to env-var interpolation; live keys in `.env` only. **User must still rotate the leaked keys at developer.adzuna.com — that is unavoidable since the keys are already in public git history.**
+- File-type spoofing (HIGH) — magic-byte + DOCX-archive structural validation now rejects extension-spoofed payloads.
+- Read-modify-write race on `mark applied` (HIGH) — replaced with atomic UPDATE.
+- Job dedup race window (HIGH) — Postgres advisory lock keyed on deterministic SHA-256.
+- Cron/manual scan overlap (MEDIUM) — APScheduler `max_instances=1` + advisory lock.
+- Prompt-injection via JD/CV (CRITICAL on user trust, MEDIUM on system) — basic mitigation in place; full structured-prompt refactor deferred.
+- LLM API quota exhaustion via per-user spam (CRITICAL on cost) — per-user rate limits on all LLM endpoints.
+- Brute-force on /login, account-enumeration on /register (HIGH) — slowapi rate limits.
+- UTF-8 password truncation that produced colliding hashes (HIGH) — replaced with explicit byte-length validation at registration boundary.
+- 30-peer GDPR threshold + benchmark_opt_in filtering — verified safe (peer_data.py) and locked in by tests.
+
+PERFORMANCE OPTIMIZATIONS:
+- IDOR helper uses one JOIN query for the happy path (was the previous code's only query); only on miss does it run a second query. Net: same round-trip cost on success, +1 query on unauthorised attempts (rare).
+- Atomic UPDATE replaces SELECT + Python state mutation + UPDATE on every "mark applied" → 1 query instead of 2.
+- Postgres advisory locks (cheap, txn-scoped, no row contention) instead of pessimistic table locks for dedup.
+- Per-user LLM rate limits prevent hot-spot API call cycles that would amortise cache misses across the cluster.
+
+MAINTAINABILITY IMPROVEMENTS:
+- Single source of truth for rate limiting (app/utils/rate_limit.py) + AgentError exception hierarchy makes future agents trivial to wire (decorate + raise).
+- `with_retry` is a 50-line stand-alone helper — easy to test, no `tenacity` dependency.
+- `_prompt_safety` is a single module that all agents import; tightening sanitisation rules in one place propagates everywhere.
+- Vitest harness now wired up; future frontend tests have a place to land.
+- `OptimizedCV` Pydantic schema replaces ad-hoc dict checking; future LLM contract changes update one schema, not three call sites.
+- ESLint `react-hooks/exhaustive-deps: warn` would have caught the CVUpload bug before it shipped — now it will catch the next one.
+
+--- TEST COVERAGE ---
+
+TEST FILES ADDED/MODIFIED:
+  - backend/tests/test_file_processing.py (NEW): magic-byte happy/spoofed paths, ZIP-without-document.xml, empty-file, unsupported extension.
+  - backend/tests/test_resume_service.py (NEW): under-quota success, at-quota 413, well-over-quota 413.
+  - backend/tests/test_peer_data.py (NEW): SanitizedProfile shape invariants, opt-out exclusion, 30-peer threshold raise.
+  - backend/tests/test_cv_profiler.py (UPDATED): old `Exception("AI returned invalid JSON format")` assertion replaced with `CVProfilerError, match="malformed CV data"`.
+  - backend/tests/test_cv_optimizer.py (UPDATED): "Empty response from OpenAI API" → "Empty response from LLM"; new TestFabricationDetector class (3 tests: Kubernetes flagged, Python-only no flags, empty list).
+  - backend/tests/test_interview_coach.py (UPDATED): mocks now include required Pydantic fields (difficulty/guidance); result-key assertion uses subset (`<=`) so new `jd_truncated` keys don't break it.
+  - backend/tests/test_job_service.py (UPDATED): TestUpdateJobStatus rewritten for the two-call atomic UPDATE + re-SELECT pattern.
+  - backend/tests/test_job_scanner.py (UPDATED): content-hash duplicate test now uses `scalars()` iterator and sets company/title for the normalised comparison.
+  - frontend/src/api/client.test.js (NEW): 2xx parse + 401 token-clear / event-dispatch.
+
+SCENARIOS COVERED:
+  Happy path — IDOR helper authorised user gets (job, user_job); /health returns 200 + db ok; /optimize, /cover-letter, /interview-prep all run within rate limits; valid PDF/DOCX upload under quota succeeds; SanitizedProfile shape exactly {seniority_level, niche, years_experience, skills}; SHA-256 lock keys deterministic across processes.
+  Edge cases — bcrypt 72-byte boundary; whitespace-only password rejected at schema layer; .pdf with non-PDF magic bytes rejected; .docx with `PK\x03\x04` magic but missing `word/document.xml` rejected; resume #6 raises 413; concurrent "mark applied" → atomic update returns 0 rows + idempotent 200; JD over token budget surfaces `jd_truncated=true`; opted-out user excluded from peer pool; requesting user excluded from own peer pool; 29 peers raises InsufficientPeersError(peers_required=30).
+  Failure states — RateLimitError after 2 retries → LLMRateLimitError(429); APITimeoutError after 2 retries → LLMUnavailableError(503); AuthenticationError → LLMConfigurationError(500), no retries, logged CRITICAL; Pydantic ValidationError on optimised CV → CVOptimizerError(422); fabrication detector flags Kubernetes when original skills are Python+React.
+
+TEST STATUS:
+  Frontend (Vitest): 2/2 pass.
+  Backend (pytest, full suite via local Postgres): 341 passed,
+    33 skipped, 4 failed + 1 error — all pre-existing, NOT introduced by
+    this work. Confirmed by Batch 4 + Batch 5 agents via `git stash`
+    round-trips:
+      - test_cv_profiler_initialization / test_get_parsing_stats: assert
+        model == "gpt-4o-mini" but the agent has been on
+        gemini-2.0-flash since before this work (model-name drift).
+      - test_no_resume_returns_empty / test_low_score_skips_user_job:
+        assertions contradict the deliberate `min_match_score = 0`
+        constant in JobService.__init__.
+      - test_search_jobs_success: collection error (stdlib deprecation).
+  Net delta from this work: +14 new tests pass, 6 modified tests pass,
+    0 regressions introduced.
+
+POST-AUDIT TEST INFRA FIXES (this entry, in addition to the 8 batches):
+- backend/tests/conftest.py: added `_reset_rate_limiter` autouse fixture
+  calling `app.utils.rate_limit.limiter.reset()` before/after each test.
+  Required because the production rate-limit decorators introduced in
+  Batch 1 are real and accumulate across test invocations within a run
+  (the 5/min /register limit was tripping later tests). Without this
+  fixture, the auth-endpoint suite saw 6 false-positive 429 failures.
+- backend/app/agents/cv_optimizer.py: 3 real bugs fixed in the Batch 8
+  fabrication detector that the agent over-claimed as passing —
+  (a) tokenizer captured trailing `.,!?:;'"` so "Python." failed
+  equality with "Python"; now stripped before compare.
+  (b) `_looks_like_tech` only matched intra-word uppercase, missing
+  proper-noun tech names (Kubernetes, Docker, Terraform); now also
+  matches first-letter uppercase since stopwords filter common
+  sentence-initial English.
+  (c) `_FABRICATION_STOPWORDS` expanded by ~28 words (scalable,
+  services, deployed, workloads, resilience, performance, strong,
+  proven, junior, senior, lead, staff, principal, etc.) to keep
+  sentence-initial English from being flagged as tech.
+- backend/tests/test_cv_optimizer.py: removed bogus
+  `assert cv_optimizer.client is not None` (cv_optimizer is undefined
+  in that scope; copy-paste artefact) from
+  TestFabricationDetector.test_empty_optimized_returns_empty_list.
+==================================================
