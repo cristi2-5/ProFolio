@@ -5,12 +5,12 @@ Separates input (Create/Update) from output (Response) schemas
 to prevent leaking sensitive fields like password_hash.
 """
 
+import re
 import uuid
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
-import re
 
 
 class UserCreate(BaseModel):
@@ -30,19 +30,33 @@ class UserCreate(BaseModel):
     seniority_level: Optional[str] = Field(None, pattern="^(intern|junior|mid|senior)$")
     niche: Optional[str] = None
 
-    @field_validator('email')
+    @field_validator("email")
     @classmethod
     def validate_email(cls, v):
         """Basic email validation that's more permissive than EmailStr."""
         if not isinstance(v, str):
-            raise ValueError('Email must be a string')
+            raise ValueError("Email must be a string")
+
+        v = v.strip().lower()
 
         # Basic email pattern - allows .test, .local, etc for development
-        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         if not re.match(email_pattern, v):
-            raise ValueError('Invalid email format')
+            raise ValueError("Invalid email format")
 
-        return v.lower()
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v):
+        """Reject all-whitespace passwords and enforce bcrypt's 72-byte limit."""
+        if not isinstance(v, str):
+            raise ValueError("Password must be a string")
+        if not v.strip():
+            raise ValueError("Password must not be empty or whitespace only")
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password too long: max 72 bytes when UTF-8 encoded")
+        return v
 
 
 class UserUpdate(BaseModel):
@@ -98,19 +112,31 @@ class LoginRequest(BaseModel):
     email: str = Field(..., description="User's registered email")
     password: str
 
-    @field_validator('email')
+    @field_validator("email")
     @classmethod
     def validate_login_email(cls, v):
         """Basic email validation for login."""
         if not isinstance(v, str):
-            raise ValueError('Email must be a string')
+            raise ValueError("Email must be a string")
+
+        v = v.strip().lower()
 
         # Basic email pattern - allows .test, .local, etc for development
-        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         if not re.match(email_pattern, v):
-            raise ValueError('Invalid email format')
+            raise ValueError("Invalid email format")
 
-        return v.lower()
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_login_password(cls, v):
+        """Reject all-whitespace passwords."""
+        if not isinstance(v, str):
+            raise ValueError("Password must be a string")
+        if not v.strip():
+            raise ValueError("Password must not be empty or whitespace only")
+        return v
 
 
 class JobPreferenceCreate(BaseModel):
