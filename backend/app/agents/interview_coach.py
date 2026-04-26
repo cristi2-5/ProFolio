@@ -24,10 +24,19 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
+from pydantic import ValidationError
 
+from app.agents._prompt_safety import sanitize_user_text, wrap_user_content
 from app.agents.prompts import interview_coach as prompts
 from app.config import get_settings
+from app.schemas.interview_coach import (
+    BehavioralQuestion,
+    TechnicalQuestion,
+    TechnologyConcept,
+)
+from app.utils.exceptions import InterviewCoachError
+from app.utils.llm_retry import with_retry
 from app.utils.prompt_cache import build_cache_key, get_prompt_cache
 from app.utils.tech_extractor import ExtractedTech, extract_technologies
 from app.utils.token_guard import (
@@ -120,9 +129,7 @@ class InterviewCoachAgent:
             ValueError: If any of the required inputs are empty.
         """
         if not job_description or not job_title or not company_name:
-            raise ValueError(
-                "Job description, title, and company name are required"
-            )
+            raise ValueError("Job description, title, and company name are required")
 
         logger.info(
             "Generating interview prep for '%s' at '%s'", job_title, company_name
@@ -133,6 +140,10 @@ class InterviewCoachAgent:
         extracted = extract_technologies(
             job_description, max_results=cheatsheet_tech_count
         )
+
+        # Compute truncation up-front so we can surface it to the caller.
+        truncation = truncate_for_budget(job_description, token_budget=_JD_TOKEN_BUDGET)
+        truncation_chars_dropped = max(len(job_description) - len(truncation.text), 0)
 
         # All three generators are independent — fan out so the user
         # waits for max(t1, t2, t3) instead of t1+t2+t3.
@@ -167,6 +178,8 @@ class InterviewCoachAgent:
                 {"name": t.name, "category": t.category, "mentions": t.mentions}
                 for t in extracted
             ],
+            "jd_truncated": truncation.was_truncated,
+            "jd_truncation_chars_dropped": truncation_chars_dropped,
         }
 
     # ------------------------------------------------------------------
@@ -184,9 +197,11 @@ class InterviewCoachAgent:
         question_count: int = DEFAULT_TECHNICAL_COUNT,
     ) -> List[Dict[str, Any]]:
         """Generate technical interview questions for the JD stack."""
-        techs = required_techs if required_techs is not None else [
-            t.name for t in extract_technologies(job_description)
-        ]
+        techs = (
+            required_techs
+            if required_techs is not None
+            else [t.name for t in extract_technologies(job_description)]
+        )
 
         system_prompt = prompts.technical_questions_system_prompt(question_count)
         user_prompt = prompts.technical_questions_user_prompt(
@@ -210,7 +225,11 @@ class InterviewCoachAgent:
             response_format={"type": "json_object"},
             mock_response=mock,
         )
-        return _coerce_list(data, "technical_questions")
+        return _validate_items(
+            _coerce_list(data, "technical_questions"),
+            TechnicalQuestion,
+            "technical_questions",
+        )
 
     # ------------------------------------------------------------------
     # US 4.1 — Behavioral questions
@@ -237,7 +256,8 @@ class InterviewCoachAgent:
 
         mock = {
             "behavioral_questions": [
-                _mock_behavioral_question(i, company_name) for i in range(question_count)
+                _mock_behavioral_question(i, company_name)
+                for i in range(question_count)
             ]
         }
         data = await self._make_api_call(
@@ -247,7 +267,11 @@ class InterviewCoachAgent:
             response_format={"type": "json_object"},
             mock_response=mock,
         )
-        return _coerce_list(data, "behavioral_questions")
+        return _validate_items(
+            _coerce_list(data, "behavioral_questions"),
+            BehavioralQuestion,
+            "behavioral_questions",
+        )
 
     # ------------------------------------------------------------------
     # US 4.2 — Technology cheat sheet
@@ -292,7 +316,11 @@ class InterviewCoachAgent:
             response_format={"type": "json_object"},
             mock_response=mock,
         )
-        return _coerce_list(data, "technology_cheat_sheet")
+        return _validate_items(
+            _coerce_list(data, "technology_cheat_sheet"),
+            TechnologyConcept,
+            "technology_cheat_sheet",
+        )
 
     # ------------------------------------------------------------------
     # Internals
@@ -323,9 +351,7 @@ class InterviewCoachAgent:
             )
 
         cache = get_prompt_cache()
-        response_format_key = (
-            response_format.get("type") if response_format else None
-        )
+        response_format_key = response_format.get("type") if response_format else None
         cache_key = build_cache_key(
             model=self.model,
             system_prompt=system_prompt,
@@ -351,13 +377,31 @@ class InterviewCoachAgent:
         if response_format:
             kwargs["response_format"] = response_format
 
-        response = await self.client.chat.completions.create(**kwargs)
+        async def _call() -> Any:
+            return await self.client.chat.completions.create(**kwargs)
+
+        try:
+            response = await with_retry(_call)
+        except BadRequestError as exc:
+            logger.error("OpenAI rejected interview-coach request: %s", exc)
+            raise InterviewCoachError("LLM rejected the request") from exc
+
         content = response.choices[0].message.content
         if not content:
-            raise Exception("Empty response from OpenAI API")
+            raise InterviewCoachError("Empty response from LLM")
 
         if response_format and response_format.get("type") == "json_object":
-            parsed = json.loads(content)
+            try:
+                parsed = json.loads(content)
+            except json.JSONDecodeError as e:
+                logger.error(
+                    "Interview-coach LLM returned non-JSON: %s | raw=%r",
+                    e,
+                    content[:500],
+                )
+                raise InterviewCoachError(
+                    "LLM returned malformed interview prep"
+                ) from e
             await cache.set(cache_key, parsed)
             return parsed
 
@@ -372,9 +416,9 @@ class InterviewCoachAgent:
     def _trim_jd(job_description: str) -> str:
         """Trim an over-budget JD with a head+tail strategy.
 
-        Logs a WARNING when truncation happens so operators can spot
-        users regularly submitting oversized JDs (a signal to either
-        tune the budget or flag potential abuse).
+        Also sanitizes the trimmed text and wraps it in BEGIN/END
+        delimiters so the LLM can't be talked out of treating it as
+        untrusted input. Logs a WARNING when truncation happens.
         """
         result: TruncationResult = truncate_for_budget(
             job_description, token_budget=_JD_TOKEN_BUDGET
@@ -386,7 +430,7 @@ class InterviewCoachAgent:
                 result.estimated_tokens_out,
                 _JD_TOKEN_BUDGET,
             )
-        return result.text
+        return wrap_user_content("JOB DESCRIPTION", sanitize_user_text(result.text))
 
 
 # ----------------------------------------------------------------------
@@ -403,6 +447,30 @@ def _coerce_list(data: Any, key: str) -> List[Dict[str, Any]]:
         if isinstance(value, list):
             return value
     return []
+
+
+def _validate_items(
+    items: List[Dict[str, Any]], model: type, label: str
+) -> List[Dict[str, Any]]:
+    """Pydantic-validate each list item; raise InterviewCoachError on failure.
+
+    Returns the model_dump'd dicts so downstream JSON serialization is
+    unchanged from the previous (untyped) shape.
+    """
+    validated: List[Dict[str, Any]] = []
+    for index, item in enumerate(items):
+        try:
+            validated.append(model(**item).model_dump())
+        except (ValidationError, TypeError) as exc:
+            logger.error(
+                "Interview-coach %s item %d failed schema validation: %s | raw=%r",
+                label,
+                index,
+                exc,
+                str(item)[:500],
+            )
+            raise InterviewCoachError("LLM returned malformed interview prep") from exc
+    return validated
 
 
 def _mock_technical_question(index: int, techs: List[str]) -> Dict[str, Any]:
