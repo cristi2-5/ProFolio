@@ -49,6 +49,66 @@ describe('apiRequest', () => {
     );
   });
 
+  it('formats array detail (Pydantic validation) into a comma-joined message', async () => {
+    fetch.mockResolvedValueOnce(
+      makeResponse({
+        status: 422,
+        body: {
+          detail: [
+            { msg: 'field required', loc: ['body', 'a'] },
+            { msg: 'value is not a valid email', loc: ['body', 'email'] },
+          ],
+        },
+      })
+    );
+
+    await expect(apiRequest('/x', { method: 'POST', body: {} })).rejects.toThrow(
+      /field required.*value is not a valid email/
+    );
+  });
+
+  it('extracts message from object-shaped detail (no [object Object])', async () => {
+    fetch.mockResolvedValueOnce(
+      makeResponse({
+        status: 422,
+        body: {
+          detail: {
+            error: 'insufficient_peers',
+            message: 'Need 30 peers, found 12',
+            peers_found: 12,
+            peers_required: 30,
+          },
+        },
+      })
+    );
+
+    let captured;
+    try {
+      await apiRequest('/jobs/x/calculate-benchmark', { method: 'POST' });
+    } catch (e) {
+      captured = e;
+    }
+
+    expect(captured).toBeDefined();
+    expect(captured.message).toBe('Need 30 peers, found 12');
+    expect(captured.message).not.toBe('[object Object]');
+    // err.data must carry the raw structured detail so callers can introspect.
+    expect(captured.data).toEqual({
+      error: 'insufficient_peers',
+      message: 'Need 30 peers, found 12',
+      peers_found: 12,
+      peers_required: 30,
+    });
+  });
+
+  it('uses string detail as-is', async () => {
+    fetch.mockResolvedValueOnce(
+      makeResponse({ status: 400, body: { detail: 'Bad request' } })
+    );
+
+    await expect(apiRequest('/x')).rejects.toThrow('Bad request');
+  });
+
   it('clears the access token and dispatches auth:logout on 401', async () => {
     localStorage.setItem('access_token', 'stale-token');
     fetch.mockResolvedValueOnce(

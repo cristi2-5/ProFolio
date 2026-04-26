@@ -24,7 +24,6 @@ from app.agents.interview_coach import (
     InterviewCoachAgent,
 )
 
-
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
@@ -133,7 +132,7 @@ class TestTechnicalQuestions:
 
         call_kwargs = coach_with_client.client.chat.completions.create.call_args.kwargs
         assert call_kwargs["response_format"] == {"type": "json_object"}
-        assert call_kwargs["model"] == "gemini-2.0-flash"
+        assert call_kwargs["model"] == "gemini-2.5-flash"  # primary model in fallback chain
 
     @pytest.mark.asyncio
     async def test_includes_extracted_techs_in_prompt(self, coach_with_client) -> None:
@@ -146,10 +145,9 @@ class TestTechnicalQuestions:
             job_title="Backend Engineer",
         )
 
-        user_prompt = (
-            coach_with_client.client.chat.completions.create.call_args
-            .kwargs["messages"][1]["content"]
-        )
+        user_prompt = coach_with_client.client.chat.completions.create.call_args.kwargs[
+            "messages"
+        ][1]["content"]
         # Extractor should lift Python/FastAPI/PostgreSQL/Docker from the JD
         # and include them in the user prompt.
         assert "Python" in user_prompt
@@ -213,10 +211,9 @@ class TestBehavioralQuestions:
             job_title="Backend Engineer",
             company_name="AcmeCo",
         )
-        user_prompt = (
-            coach_with_client.client.chat.completions.create.call_args
-            .kwargs["messages"][1]["content"]
-        )
+        user_prompt = coach_with_client.client.chat.completions.create.call_args.kwargs[
+            "messages"
+        ][1]["content"]
         assert "AcmeCo" in user_prompt
 
     @pytest.mark.asyncio
@@ -269,10 +266,9 @@ class TestTechnologyCheatSheet:
         )
         assert result == payload
 
-        user_prompt = (
-            coach_with_client.client.chat.completions.create.call_args
-            .kwargs["messages"][1]["content"]
-        )
+        user_prompt = coach_with_client.client.chat.completions.create.call_args.kwargs[
+            "messages"
+        ][1]["content"]
         # The extractor-derived tech list should land in the prompt.
         assert "Python" in user_prompt
         assert "FastAPI" in user_prompt
@@ -310,9 +306,39 @@ class TestGenerateInterviewPrepMaterials:
     @pytest.mark.asyncio
     async def test_bundle_has_all_sections(self, coach_with_client) -> None:
         coach_with_client.client.chat.completions.create.side_effect = [
-            _mock_openai_response({"technical_questions": [{"question": "q1"}]}),
-            _mock_openai_response({"behavioral_questions": [{"question": "b1"}]}),
-            _mock_openai_response({"technology_cheat_sheet": [{"concept": "Python"}]}),
+            _mock_openai_response(
+                {
+                    "technical_questions": [
+                        {
+                            "question": "q1",
+                            "difficulty": "medium",
+                            "topics": ["Python"],
+                            "guidance": "Cover the core tradeoffs.",
+                        }
+                    ]
+                }
+            ),
+            _mock_openai_response(
+                {
+                    "behavioral_questions": [
+                        {
+                            "question": "b1",
+                            "scenario": "ownership",
+                            "star_guidance": "Use STAR.",
+                        }
+                    ]
+                }
+            ),
+            _mock_openai_response(
+                {
+                    "technology_cheat_sheet": [
+                        {
+                            "concept": "Python",
+                            "definition": "Python is a high-level language used here.",
+                        }
+                    ]
+                }
+            ),
         ]
 
         result = await coach_with_client.generate_interview_prep_materials(
@@ -321,12 +347,14 @@ class TestGenerateInterviewPrepMaterials:
             company_name="TechCorp",
         )
 
-        assert set(result.keys()) == {
+        assert {
             "technical_questions",
             "behavioral_questions",
             "technology_cheat_sheet",
             "extracted_technologies",
-        }
+            "jd_truncated",
+            "jd_truncation_chars_dropped",
+        } <= set(result.keys())
         assert coach_with_client.client.chat.completions.create.call_count == 3
 
     @pytest.mark.asyncio
@@ -344,17 +372,17 @@ class TestGenerateInterviewPrepMaterials:
         )
 
         # The technical prompt text should reference the default count (3).
-        tech_prompt = (
-            coach_with_client.client.chat.completions.create.call_args_list[0]
-            .kwargs["messages"][1]["content"]
-        )
+        tech_prompt = coach_with_client.client.chat.completions.create.call_args_list[
+            0
+        ].kwargs["messages"][1]["content"]
         assert f"Generate {DEFAULT_TECHNICAL_COUNT} technical questions" in tech_prompt
 
-        behav_prompt = (
-            coach_with_client.client.chat.completions.create.call_args_list[1]
-            .kwargs["messages"][1]["content"]
+        behav_prompt = coach_with_client.client.chat.completions.create.call_args_list[
+            1
+        ].kwargs["messages"][1]["content"]
+        assert (
+            f"Generate {DEFAULT_BEHAVIORAL_COUNT} behavioral questions" in behav_prompt
         )
-        assert f"Generate {DEFAULT_BEHAVIORAL_COUNT} behavioral questions" in behav_prompt
 
     @pytest.mark.asyncio
     async def test_dev_mode_returns_full_bundle_without_api(

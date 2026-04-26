@@ -63,6 +63,8 @@ function CVUpload({ onUploadComplete }) {
    * Upload file to backend.
    */
   const uploadFile = async (file) => {
+    if (uploading || parsing) return;
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -142,12 +144,16 @@ function CVUpload({ onUploadComplete }) {
   /**
    * Fetch user's resumes.
    */
-  const fetchResumes = async () => {
+  const fetchResumes = async (signal) => {
     try {
-      const data = await get('/resumes/');
+      const data = await get('/resumes/', { signal });
+      if (signal?.aborted) return;
       setResumes(Array.isArray(data) ? data : data.resumes || []);
     } catch (err) {
-      console.error('Failed to fetch resumes:', err);
+      if (err.name === 'AbortError') return;
+      if (import.meta.env.DEV) {
+        console.error('Failed to fetch resumes:', err);
+      }
     }
   };
 
@@ -212,7 +218,9 @@ function CVUpload({ onUploadComplete }) {
    * Load existing resumes on mount.
    */
   useEffect(() => {
-    fetchResumes();
+    const ctrl = new AbortController();
+    fetchResumes(ctrl.signal);
+    return () => ctrl.abort();
   }, []);
 
   return (
@@ -241,16 +249,24 @@ function CVUpload({ onUploadComplete }) {
           padding: 'var(--space-8)',
           textAlign: 'center',
           marginBottom: 'var(--space-6)',
-          cursor: uploading ? 'not-allowed' : 'pointer',
-          opacity: uploading ? 0.7 : 1,
+          cursor: uploading || parsing ? 'not-allowed' : 'pointer',
+          opacity: uploading || parsing ? 0.7 : 1,
           transition: 'all var(--transition-base)',
         }}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
-        onDrop={handleDrop}
+        onDrop={(e) => {
+          if (uploading || parsing) {
+            e.preventDefault();
+            return;
+          }
+          handleDrop(e);
+        }}
         onClick={() =>
-          !uploading && document.getElementById('file-input').click()
+          !uploading &&
+          !parsing &&
+          document.getElementById('file-input').click()
         }
       >
         <input
@@ -259,7 +275,7 @@ function CVUpload({ onUploadComplete }) {
           accept=".pdf,.docx"
           onChange={handleInputChange}
           style={{ display: 'none' }}
-          disabled={uploading}
+          disabled={uploading || parsing}
         />
 
         {uploading ? (
@@ -669,7 +685,9 @@ function CVUpload({ onUploadComplete }) {
                           await post(`/resumes/${resume.id}/activate`);
                           fetchResumes();
                         } catch (err) {
-                          console.error(err);
+                          if (import.meta.env.DEV) {
+                            console.error(err);
+                          }
                         }
                       }}
                     >

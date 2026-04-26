@@ -31,7 +31,6 @@ from app.utils.file_processing import (
     validate_cv_file,
 )
 
-
 # ----------------------------------------------------------------------
 # Fixture builders (pure functions on a tmp_path)
 # ----------------------------------------------------------------------

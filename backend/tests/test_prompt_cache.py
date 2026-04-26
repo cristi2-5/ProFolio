@@ -53,9 +53,7 @@ class TestBuildCacheKey:
         )
 
     def test_namespace_is_included(self) -> None:
-        key = build_cache_key(
-            model="x", system_prompt="s", user_prompt="u"
-        )
+        key = build_cache_key(model="x", system_prompt="s", user_prompt="u")
         assert key.startswith("promptcache:")
 
     def test_different_prompts_yield_different_keys(self) -> None:
@@ -67,17 +65,13 @@ class TestBuildCacheKey:
 class TestInMemoryBackendRoundTrip:
     @pytest.mark.asyncio
     async def test_set_then_get(self) -> None:
-        cache = PromptCache(
-            backend=_InMemoryBackend(), ttl_seconds=60, enabled=True
-        )
+        cache = PromptCache(backend=_InMemoryBackend(), ttl_seconds=60, enabled=True)
         await cache.set("k1", {"hello": "world"})
         assert await cache.get("k1") == {"hello": "world"}
 
     @pytest.mark.asyncio
     async def test_missing_key_returns_none(self) -> None:
-        cache = PromptCache(
-            backend=_InMemoryBackend(), ttl_seconds=60, enabled=True
-        )
+        cache = PromptCache(backend=_InMemoryBackend(), ttl_seconds=60, enabled=True)
         assert await cache.get("nothing") is None
 
     @pytest.mark.asyncio
@@ -127,9 +121,7 @@ class TestInMemoryBackendRoundTrip:
 class TestDisabledCache:
     @pytest.mark.asyncio
     async def test_disabled_cache_never_stores(self) -> None:
-        cache = PromptCache(
-            backend=_InMemoryBackend(), ttl_seconds=60, enabled=False
-        )
+        cache = PromptCache(backend=_InMemoryBackend(), ttl_seconds=60, enabled=False)
         await cache.set("k1", 1)
         assert await cache.get("k1") is None
 
@@ -152,9 +144,7 @@ class TestMalformedData:
 
     @pytest.mark.asyncio
     async def test_unserializable_value_set_is_skipped(self) -> None:
-        cache = PromptCache(
-            backend=_InMemoryBackend(), ttl_seconds=60, enabled=True
-        )
+        cache = PromptCache(backend=_InMemoryBackend(), ttl_seconds=60, enabled=True)
 
         class Unserialisable:
             pass

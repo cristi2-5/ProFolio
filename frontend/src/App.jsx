@@ -15,20 +15,13 @@ import JobDetail from './pages/JobDetail';
 import Benchmarks from './pages/Benchmarks';
 import Interview from './pages/Interview';
 import Login from './pages/Login';
-import JobPreferences from './components/JobPreferences';
+import Settings from './pages/Settings';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
+import CookiePolicy from './pages/CookiePolicy';
+import NotFound from './pages/NotFound';
 import './App.css';
 
-/**
- * Root application component with client-side routing and authentication.
- *
- * Routes:
- *   /login      → Authentication page (public)
- *   /dashboard  → Main dashboard (protected)
- *   /           → Redirects to /dashboard
- *   *           → 404 redirect to dashboard
- *
- * @returns {JSX.Element} The routed application wrapped with AuthProvider.
- */
 function App() {
   return (
     <AuthProvider>
@@ -91,13 +84,13 @@ function App() {
               path="/settings"
               element={
                 <ProtectedRoute>
-                  <div className="animate-fade-in card" style={{ maxWidth: '800px', margin: '0 auto' }}>
-                    <h2 style={{ marginBottom: 'var(--space-6)' }}>Account Settings</h2>
-                    <JobPreferences />
-                  </div>
+                  <Settings />
                 </ProtectedRoute>
               }
             />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/cookies" element={<CookiePolicy />} />
             <Route
               path="/"
               element={
@@ -106,14 +99,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="*"
-              element={
-                <ProtectedRoute>
-                  <Navigate to="/dashboard" replace />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -19,7 +19,6 @@ from app.models.resume import ParsedResume
 from app.models.user import User
 from app.services.interview_coach_service import InterviewCoachService
 
-
 # ----------------------------------------------------------------------
 # Fixtures
 # ----------------------------------------------------------------------
@@ -81,7 +80,9 @@ def bundle() -> dict:
         "technical_questions": [{"question": "q1"}],
         "behavioral_questions": [{"question": "b1"}],
         "technology_cheat_sheet": [{"concept": "Python"}],
-        "extracted_technologies": [{"name": "Python", "category": "languages", "mentions": 1}],
+        "extracted_technologies": [
+            {"name": "Python", "category": "languages", "mentions": 1}
+        ],
     }
 
 
@@ -144,7 +145,9 @@ class TestGenerate:
             include_user_background=False,
         )
 
-        call_kwargs = service.interview_coach.generate_interview_prep_materials.await_args.kwargs
+        call_kwargs = (
+            service.interview_coach.generate_interview_prep_materials.await_args.kwargs
+        )
         assert call_kwargs["user_background"] is None
 
     @pytest.mark.asyncio
@@ -188,7 +191,9 @@ class TestGenerate:
             technical_count=5,
             behavioral_count=3,
         )
-        kwargs = service.interview_coach.generate_interview_prep_materials.await_args.kwargs
+        kwargs = (
+            service.interview_coach.generate_interview_prep_materials.await_args.kwargs
+        )
         assert kwargs["technical_count"] == 5
         assert kwargs["behavioral_count"] == 3
 
@@ -269,9 +274,7 @@ class TestUpdate:
 
 class TestListUserPreps:
     @pytest.mark.asyncio
-    async def test_summarises_prep_flags(
-        self, service, sample_user, bundle
-    ) -> None:
+    async def test_summarises_prep_flags(self, service, sample_user, bundle) -> None:
         job = Mock(spec=ScrapedJob)
         job.id = uuid.uuid4()
         job.job_title = "Backend Engineer"

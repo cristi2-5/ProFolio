@@ -18,11 +18,11 @@ from app.database import async_session_factory
 # Configure logging for cron environment
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('/var/log/autoapply/job_scanner.log', mode='a'),
-    ]
+        logging.FileHandler("/var/log/autoapply/job_scanner.log", mode="a"),
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ async def run_daily_job_scan() -> dict:
             "end_time": end_time.isoformat(),
             "duration_seconds": duration,
             "total_jobs_discovered": total_jobs,
-            "message": f"Daily scan completed: {total_jobs} new jobs discovered"
+            "message": f"Daily scan completed: {total_jobs} new jobs discovered",
         }
 
         logger.info(
@@ -78,7 +78,7 @@ async def run_daily_job_scan() -> dict:
             "status": "failed",
             "start_time": start_time.isoformat(),
             "error": str(e),
-            "message": error_msg
+            "message": error_msg,
         }
 
 
@@ -137,13 +137,10 @@ def main():
     parser.add_argument(
         "--user",
         type=str,
-        help="Scan jobs for specific user UUID (for testing/debugging)"
+        help="Scan jobs for specific user UUID (for testing/debugging)",
     )
     parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Enable verbose logging"
+        "--verbose", "-v", action="store_true", help="Enable verbose logging"
     )
 
     args = parser.parse_args()
@@ -165,7 +162,9 @@ def main():
 
         # Set exit code based on success
         if result["status"] == "success":
-            jobs_count = result.get("total_jobs_discovered", result.get("jobs_discovered", 0))
+            jobs_count = result.get(
+                "total_jobs_discovered", result.get("jobs_discovered", 0)
+            )
             if jobs_count > 0:
                 sys.exit(0)  # Success with jobs found
             else:

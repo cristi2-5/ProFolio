@@ -34,6 +34,7 @@ function Benchmarks() {
   const [recommendations, setRecommendations] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState(null);
+  const [insufficientPeers, setInsufficientPeers] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
 
   // Opt-in status lives in AuthContext (refreshed by login/register/updateUser).
@@ -48,6 +49,7 @@ function Benchmarks() {
     try {
       setLoading(true);
       setError(null);
+      setInsufficientPeers(false);
 
       const optInData = await get('/auth/benchmark-opt-in', { signal });
       updateUser({ benchmark_opt_in: optInData.benchmark_opt_in });
@@ -59,22 +61,42 @@ function Benchmarks() {
       }
 
       if (optInData.benchmark_opt_in) {
-        const [benchmarkData, recommendationData] = await Promise.all([
-          get('/benchmarks', { signal }),
-          get('/benchmarks/recommendations', { signal }).catch((err) => {
-            if (err.name === 'AbortError') throw err;
-            return null;
-          }),
-        ]);
+        let benchmarkData = { benchmarks: [] };
+        let benchmarkInsufficient = false;
+        try {
+          benchmarkData = await get('/benchmarks/', { signal });
+        } catch (err) {
+          if (err.name === 'AbortError') throw err;
+          if (err.status === 422) {
+            benchmarkInsufficient = true;
+            benchmarkData = { benchmarks: [] };
+          } else {
+            throw err;
+          }
+        }
+
+        const recommendationData = await get('/benchmarks/recommendations', {
+          signal,
+        }).catch((err) => {
+          if (err.name === 'AbortError') throw err;
+          return null;
+        });
+
         setBenchmarks(benchmarkData.benchmarks || []);
         setRecommendations(recommendationData);
+        setInsufficientPeers(
+          benchmarkInsufficient ||
+            Boolean(recommendationData?.insufficient_peers)
+        );
       } else {
         setBenchmarks([]);
         setRecommendations(null);
       }
     } catch (err) {
       if (err.name === 'AbortError') return;
-      console.error('Failed to fetch benchmarks:', err);
+      if (import.meta.env.DEV) {
+        console.error('Failed to fetch benchmarks:', err);
+      }
       setError(err.message || 'Failed to load benchmark data');
     } finally {
       if (!signal?.aborted) setLoading(false);
@@ -85,6 +107,7 @@ function Benchmarks() {
    * Update benchmark opt-in status.
    */
   const updateOptInStatus = async (nextStatus) => {
+    if (updating) return;
     try {
       setUpdating(true);
       setError(null);
@@ -211,6 +234,28 @@ function Benchmarks() {
           See how you compare to other professionals in your field
         </p>
       </div>
+
+      {/* Insufficient peers info banner — friendlier than an error */}
+      {insufficientPeers && optInStatus && (
+        <div
+          style={{
+            background: 'var(--color-info-bg)',
+            border: '1px solid var(--color-info)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-4)',
+            marginBottom: 'var(--space-6)',
+            color: 'var(--color-info)',
+          }}
+        >
+          <p style={{ fontWeight: 'var(--font-weight-medium)' }}>
+            ℹ️ Benchmark not available yet
+          </p>
+          <p style={{ marginTop: 'var(--space-1)' }}>
+            We need at least 30 peers in your seniority/niche group before we
+            can generate a comparison. Check back later as more users join.
+          </p>
+        </div>
+      )}
 
       {/* Error Display */}
       {error && (
@@ -371,13 +416,15 @@ function Benchmarks() {
           </p>
           <button
             onClick={() => updateOptInStatus(true)}
+            disabled={updating}
             className="btn btn-primary"
             style={{
               fontSize: 'var(--font-size-lg)',
               padding: 'var(--space-4) var(--space-6)',
+              opacity: updating ? 0.7 : 1,
             }}
           >
-            Enable Benchmarking
+            {updating ? 'Updating...' : 'Enable Benchmarking'}
           </button>
         </div>
       ) : benchmarks.length === 0 ? (

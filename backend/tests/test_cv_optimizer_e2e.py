@@ -12,17 +12,18 @@ End-to-end tests covering the full Phase 4 stack:
 
 import io
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 from openai import AsyncOpenAI
 
 from app.agents.cv_optimizer import CVOptimizerAgent
 from app.utils.pdf_export import CVPDFExporter, PDFExportError
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sample_cv_data():
@@ -64,7 +65,14 @@ def optimized_cv_with_changes(sample_cv_data):
             "Senior Python/FastAPI engineer cu expertise in microservicii, "
             "cloud-native deployments si CI/CD pipelines."
         ),
-        "skills": ["Python", "FastAPI", "PostgreSQL", "Docker", "REST APIs", "Kubernetes"],
+        "skills": [
+            "Python",
+            "FastAPI",
+            "PostgreSQL",
+            "Docker",
+            "REST APIs",
+            "Kubernetes",
+        ],
         "optimized_keywords": ["microservicii", "CI/CD", "cloud-native", "Kubernetes"],
         "changes_summary": [
             "Actualizat summary pentru a include 'cloud-native' si 'CI/CD' din JD",
@@ -133,6 +141,7 @@ def cv_optimizer_agent():
 # Group 1: NO_FABRICATION — prompt engineering (Phase 4 US 3.1)
 # ---------------------------------------------------------------------------
 
+
 class TestNoFabricationPrompts:
     """Verify that the new NO_FABRICATION rules are present in all prompts."""
 
@@ -144,52 +153,63 @@ class TestNoFabricationPrompts:
     def test_cv_system_prompt_forbids_inventing_experience(self, cv_optimizer_agent):
         """System prompt must explicitly forbid inventing experience."""
         prompt = cv_optimizer_agent._build_cv_optimization_system_prompt()
-        assert "MUST NOT invent" in prompt or "NOT invent" in prompt, (
-            "System prompt does not explicitly forbid inventing experience"
-        )
+        assert (
+            "MUST NOT invent" in prompt or "NOT invent" in prompt
+        ), "System prompt does not explicitly forbid inventing experience"
 
     def test_cv_system_prompt_requires_changes_summary(self, cv_optimizer_agent):
         """System prompt must require changes_summary field in JSON output."""
         prompt = cv_optimizer_agent._build_cv_optimization_system_prompt()
-        assert "changes_summary" in prompt, (
-            "System prompt does not require changes_summary field"
-        )
+        assert (
+            "changes_summary" in prompt
+        ), "System prompt does not require changes_summary field"
 
-    def test_cv_user_prompt_labels_cv_as_source_of_truth(self, cv_optimizer_agent, sample_cv_data, sample_job_description):
+    def test_cv_user_prompt_labels_cv_as_source_of_truth(
+        self, cv_optimizer_agent, sample_cv_data, sample_job_description
+    ):
         """User prompt must indicate the CV is the ONLY source of truth."""
         prompt = cv_optimizer_agent._build_cv_optimization_user_prompt(
-            sample_cv_data, sample_job_description, "Senior Python Developer", "CloudFirst"
+            sample_cv_data,
+            sample_job_description,
+            "Senior Python Developer",
+            "CloudFirst",
         )
-        assert "ONLY source of truth" in prompt or "source of truth" in prompt.lower(), (
-            "User prompt does not label CV as single source of truth"
-        )
+        assert (
+            "ONLY source of truth" in prompt or "source of truth" in prompt.lower()
+        ), "User prompt does not label CV as single source of truth"
 
     def test_cover_letter_system_prompt_has_no_fabrication(self, cv_optimizer_agent):
         """Cover letter system prompt must contain NO_FABRICATION rules."""
         prompt = cv_optimizer_agent._build_cover_letter_system_prompt()
-        assert "NO_FABRICATION" in prompt, (
-            "Cover letter system prompt missing NO_FABRICATION block"
-        )
+        assert (
+            "NO_FABRICATION" in prompt
+        ), "Cover letter system prompt missing NO_FABRICATION block"
 
-    def test_cover_letter_system_prompt_forbids_inventing_achievements(self, cv_optimizer_agent):
+    def test_cover_letter_system_prompt_forbids_inventing_achievements(
+        self, cv_optimizer_agent
+    ):
         """Cover letter system prompt must explicitly forbid inventing achievements."""
         prompt = cv_optimizer_agent._build_cover_letter_system_prompt()
-        assert "NOT invent" in prompt or "do NOT invent" in prompt.lower(), (
-            "Cover letter system prompt does not forbid inventing achievements"
-        )
+        assert (
+            "NOT invent" in prompt or "do NOT invent" in prompt.lower()
+        ), "Cover letter system prompt does not forbid inventing achievements"
 
 
 # ---------------------------------------------------------------------------
 # Group 2: changes_summary field (Phase 4 US 3.1)
 # ---------------------------------------------------------------------------
 
+
 class TestChangesSummaryField:
     """Verify changes_summary is preserved and propagated through the stack."""
 
     @pytest.mark.asyncio
     async def test_optimize_cv_returns_changes_summary(
-        self, cv_optimizer_agent, sample_cv_data, sample_job_description,
-        mock_openai_optimized_response
+        self,
+        cv_optimizer_agent,
+        sample_cv_data,
+        sample_job_description,
+        mock_openai_optimized_response,
     ):
         """optimize_cv_for_job must return a dict containing changes_summary."""
         cv_optimizer_agent.client.chat.completions.create.return_value = (
@@ -202,20 +222,23 @@ class TestChangesSummaryField:
             company_name="CloudFirst SRL",
         )
         assert isinstance(result, dict), "Result must be a dict"
-        assert "changes_summary" in result, (
-            "Optimized CV response missing changes_summary field"
-        )
-        assert isinstance(result["changes_summary"], list), (
-            "changes_summary must be a list"
-        )
-        assert len(result["changes_summary"]) > 0, (
-            "changes_summary must have at least one entry"
-        )
+        assert (
+            "changes_summary" in result
+        ), "Optimized CV response missing changes_summary field"
+        assert isinstance(
+            result["changes_summary"], list
+        ), "changes_summary must be a list"
+        assert (
+            len(result["changes_summary"]) > 0
+        ), "changes_summary must have at least one entry"
 
     @pytest.mark.asyncio
     async def test_optimize_cv_returns_optimized_keywords(
-        self, cv_optimizer_agent, sample_cv_data, sample_job_description,
-        mock_openai_optimized_response
+        self,
+        cv_optimizer_agent,
+        sample_cv_data,
+        sample_job_description,
+        mock_openai_optimized_response,
     ):
         """optimize_cv_for_job should return optimized_keywords from JD."""
         cv_optimizer_agent.client.chat.completions.create.return_value = (
@@ -235,38 +258,50 @@ class TestChangesSummaryField:
 # Group 3: user_motivation threading (Phase 4 US 3.2)
 # ---------------------------------------------------------------------------
 
+
 class TestUserMotivationThreading:
     """Verify user_motivation is correctly injected into cover letter prompts."""
 
-    def test_user_motivation_appears_in_prompt_when_provided(self, cv_optimizer_agent, sample_cv_data, sample_job_description):
+    def test_user_motivation_appears_in_prompt_when_provided(
+        self, cv_optimizer_agent, sample_cv_data, sample_job_description
+    ):
         """When user_motivation is given, it must appear in the user prompt."""
         motivation = "Sunt pasionat de cloud-native si vreau sa contribui la proiectele CloudFirst."
         prompt = cv_optimizer_agent._build_cover_letter_user_prompt(
-            sample_cv_data, sample_job_description,
-            "Senior Python Developer", "CloudFirst SRL",
+            sample_cv_data,
+            sample_job_description,
+            "Senior Python Developer",
+            "CloudFirst SRL",
             "Ana Popescu",
             user_motivation=motivation,
         )
-        assert motivation in prompt, (
-            "user_motivation not found in cover letter user prompt"
-        )
+        assert (
+            motivation in prompt
+        ), "user_motivation not found in cover letter user prompt"
 
-    def test_user_motivation_absent_when_not_provided(self, cv_optimizer_agent, sample_cv_data, sample_job_description):
+    def test_user_motivation_absent_when_not_provided(
+        self, cv_optimizer_agent, sample_cv_data, sample_job_description
+    ):
         """When user_motivation is None, the PERSONAL MOTIVATION section must not appear."""
         prompt = cv_optimizer_agent._build_cover_letter_user_prompt(
-            sample_cv_data, sample_job_description,
-            "Senior Python Developer", "CloudFirst SRL",
+            sample_cv_data,
+            sample_job_description,
+            "Senior Python Developer",
+            "CloudFirst SRL",
             "Ana Popescu",
             user_motivation=None,
         )
-        assert "PERSONAL MOTIVATION" not in prompt, (
-            "PERSONAL MOTIVATION section appeared in prompt even with None motivation"
-        )
+        assert (
+            "PERSONAL MOTIVATION" not in prompt
+        ), "PERSONAL MOTIVATION section appeared in prompt even with None motivation"
 
     @pytest.mark.asyncio
     async def test_generate_cover_letter_with_motivation(
-        self, cv_optimizer_agent, sample_cv_data, sample_job_description,
-        mock_openai_cover_letter_response
+        self,
+        cv_optimizer_agent,
+        sample_cv_data,
+        sample_job_description,
+        mock_openai_cover_letter_response,
     ):
         """generate_cover_letter with user_motivation calls API and returns text."""
         cv_optimizer_agent.client.chat.completions.create.return_value = (
@@ -293,6 +328,7 @@ class TestUserMotivationThreading:
 # Group 4: PDF Export — CV (Phase 4 US 3.3)
 # ---------------------------------------------------------------------------
 
+
 class TestCVPDFExport:
     """Validate CV PDF export produces valid, non-empty bytes."""
 
@@ -309,7 +345,9 @@ class TestCVPDFExport:
         assert isinstance(pdf_data, bytes), "PDF output must be bytes"
         assert len(pdf_data) > 0, "PDF output is empty"
 
-    def test_export_cv_with_job_target_header(self, exporter, optimized_cv_with_changes):
+    def test_export_cv_with_job_target_header(
+        self, exporter, optimized_cv_with_changes
+    ):
         """export_cv_to_pdf with job_title+company_name must produce valid PDF."""
         pdf_data = exporter.export_cv_to_pdf(
             optimized_cv=optimized_cv_with_changes,
@@ -320,7 +358,9 @@ class TestCVPDFExport:
         assert isinstance(pdf_data, bytes)
         assert len(pdf_data) > 1000, "PDF with job header seems too small"
 
-    def test_export_cv_pdf_starts_with_pdf_header(self, exporter, optimized_cv_with_changes):
+    def test_export_cv_pdf_starts_with_pdf_header(
+        self, exporter, optimized_cv_with_changes
+    ):
         """PDF bytes must start with the PDF magic bytes %PDF."""
         pdf_data = exporter.export_cv_to_pdf(
             optimized_cv=optimized_cv_with_changes,
@@ -328,7 +368,9 @@ class TestCVPDFExport:
             job_title="Python Dev",
             company_name="TestCorp",
         )
-        assert pdf_data[:4] == b"%PDF", "Output is not a valid PDF (missing %PDF header)"
+        assert (
+            pdf_data[:4] == b"%PDF"
+        ), "Output is not a valid PDF (missing %PDF header)"
 
     def test_export_cv_with_empty_optimized_cv(self, exporter):
         """export_cv_to_pdf with empty CV dict must still produce valid PDF."""
@@ -338,7 +380,9 @@ class TestCVPDFExport:
         )
         assert len(pdf_data) > 0
 
-    def test_export_cv_with_optimized_keywords_section(self, exporter, optimized_cv_with_changes):
+    def test_export_cv_with_optimized_keywords_section(
+        self, exporter, optimized_cv_with_changes
+    ):
         """PDF must include ATS keywords section when optimized_keywords is provided."""
         # This test validates the _add_cv_optimized_keywords method executes without error
         pdf_data = exporter.export_cv_to_pdf(
@@ -354,6 +398,7 @@ class TestCVPDFExport:
 # ---------------------------------------------------------------------------
 # Group 5: PDF Export — Cover Letter (Phase 4 US 3.3)
 # ---------------------------------------------------------------------------
+
 
 class TestCoverLetterPDFExport:
     """Validate cover letter PDF export produces valid, non-empty bytes."""
@@ -411,7 +456,9 @@ class TestCoverLetterPDFExport:
 
     def test_export_cover_letter_single_block_fallback(self, exporter):
         """Single-line cover letter text (no double newlines) must also produce PDF."""
-        single_block = "Dear Hiring Manager, I am interested in this position. Sincerely, Ana."
+        single_block = (
+            "Dear Hiring Manager, I am interested in this position. Sincerely, Ana."
+        )
         pdf_data = exporter.export_cover_letter_to_pdf(
             cover_letter_text=single_block,
             user_name="Ana Popescu",
@@ -424,6 +471,7 @@ class TestCoverLetterPDFExport:
 # ---------------------------------------------------------------------------
 # Group 6: Full E2E flow — optimize → changes_summary → export PDF
 # ---------------------------------------------------------------------------
+
 
 class TestFullE2EFlow:
     """Integration flow: agent optimize → PDF export → validate bytes."""

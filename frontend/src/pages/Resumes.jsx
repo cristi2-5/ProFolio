@@ -32,16 +32,20 @@ function Resumes() {
   /**
    * Fetch user's resumes.
    */
-  const fetchResumes = async () => {
+  const fetchResumes = async (signal) => {
     try {
       setLoading(true);
-      const data = await get('/resumes/');
-      setResumes(data.resumes || []);
+      const data = await get('/resumes/', { signal });
+      if (signal?.aborted) return;
+      setResumes(Array.isArray(data) ? data : data.resumes || []);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       setError('Failed to load resumes');
-      console.error('Failed to fetch resumes:', err);
+      if (import.meta.env.DEV) {
+        console.error('Failed to fetch resumes:', err);
+      }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
@@ -49,7 +53,7 @@ function Resumes() {
    * Handle successful upload.
    */
   const handleUploadComplete = (newResume) => {
-    setResumes(prev => [newResume, ...prev]);
+    setResumes((prev) => [newResume, ...prev]);
   };
 
   /**
@@ -70,8 +74,8 @@ function Resumes() {
       });
 
       // Update local state
-      setResumes(prev =>
-        prev.map(resume =>
+      setResumes((prev) =>
+        prev.map((resume) =>
           resume.id === editingResume
             ? { ...resume, parsed_data: editData }
             : resume
@@ -82,7 +86,9 @@ function Resumes() {
       setEditData({});
     } catch (err) {
       setError('Failed to save changes');
-      console.error('Failed to save resume:', err);
+      if (import.meta.env.DEV) {
+        console.error('Failed to save resume:', err);
+      }
     }
   };
 
@@ -98,7 +104,7 @@ function Resumes() {
    * Update edit data.
    */
   const updateEditData = (path, value) => {
-    setEditData(prev => {
+    setEditData((prev) => {
       const newData = { ...prev };
       const keys = path.split('.');
       let current = newData;
@@ -119,17 +125,21 @@ function Resumes() {
    * Load resumes on mount.
    */
   useEffect(() => {
-    fetchResumes();
+    const ctrl = new AbortController();
+    fetchResumes(ctrl.signal);
+    return () => ctrl.abort();
   }, []);
 
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '50vh',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '50vh',
+        }}
+      >
         <div
           style={{
             width: '40px',
@@ -145,17 +155,30 @@ function Resumes() {
   }
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: 'var(--space-6)' }}>
+    <div
+      style={{
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: 'var(--space-6)',
+      }}
+    >
       {/* Header */}
       <div style={{ marginBottom: 'var(--space-8)' }}>
-        <h1 style={{
-          fontSize: 'var(--font-size-3xl)',
-          fontWeight: 'var(--font-weight-bold)',
-          marginBottom: 'var(--space-2)',
-        }}>
+        <h1
+          style={{
+            fontSize: 'var(--font-size-3xl)',
+            fontWeight: 'var(--font-weight-bold)',
+            marginBottom: 'var(--space-2)',
+          }}
+        >
           My Resumes
         </h1>
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-lg)' }}>
+        <p
+          style={{
+            color: 'var(--color-text-secondary)',
+            fontSize: 'var(--font-size-lg)',
+          }}
+        >
           Upload and manage your resumes for AI-powered job matching
         </p>
       </div>
@@ -198,61 +221,94 @@ function Resumes() {
         {/* Profile Completion */}
         {resumes.length > 0 && (
           <div className="card">
-            <h2 style={{
-              fontSize: 'var(--font-size-xl)',
-              fontWeight: 'var(--font-weight-bold)',
-              marginBottom: 'var(--space-4)',
-            }}>
+            <h2
+              style={{
+                fontSize: 'var(--font-size-xl)',
+                fontWeight: 'var(--font-weight-bold)',
+                marginBottom: 'var(--space-4)',
+              }}
+            >
               Profile Completion
             </h2>
 
             <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  background: resumes.length > 0 ? 'var(--color-success)' : 'var(--color-border)',
+              <div
+                style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontSize: 'var(--font-size-sm)',
-                }}>
+                  gap: 'var(--space-3)',
+                }}
+              >
+                <div
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background:
+                      resumes.length > 0
+                        ? 'var(--color-success)'
+                        : 'var(--color-border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: 'var(--font-size-sm)',
+                  }}
+                >
                   ✓
                 </div>
                 <span>Resume uploaded and parsed</span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  background: user?.seniority_level ? 'var(--color-success)' : 'var(--color-border)',
+              <div
+                style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontSize: 'var(--font-size-sm)',
-                }}>
+                  gap: 'var(--space-3)',
+                }}
+              >
+                <div
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: user?.seniority_level
+                      ? 'var(--color-success)'
+                      : 'var(--color-border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: 'var(--font-size-sm)',
+                  }}
+                >
                   {user?.seniority_level ? '✓' : '○'}
                 </div>
-                <span>Experience level set ({user?.seniority_level || 'Not set'})</span>
+                <span>
+                  Experience level set ({user?.seniority_level || 'Not set'})
+                </span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  background: 'var(--color-border)',
+              <div
+                style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontSize: 'var(--font-size-sm)',
-                }}>
+                  gap: 'var(--space-3)',
+                }}
+              >
+                <div
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: 'var(--color-border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: 'var(--font-size-sm)',
+                  }}
+                >
                   ○
                 </div>
                 <span>Job preferences configured (Go to Dashboard)</span>
@@ -264,11 +320,13 @@ function Resumes() {
         {/* Resume Management */}
         {resumes.length > 0 && (
           <div className="card">
-            <h2 style={{
-              fontSize: 'var(--font-size-xl)',
-              fontWeight: 'var(--font-weight-bold)',
-              marginBottom: 'var(--space-4)',
-            }}>
+            <h2
+              style={{
+                fontSize: 'var(--font-size-xl)',
+                fontWeight: 'var(--font-weight-bold)',
+                marginBottom: 'var(--space-4)',
+              }}
+            >
               Manage Resumes
             </h2>
 
@@ -279,26 +337,47 @@ function Resumes() {
                   className="card"
                   style={{
                     background: 'var(--color-bg-secondary)',
-                    border: editingResume === resume.id ? '2px solid var(--color-accent)' : '1px solid var(--color-border)',
+                    border:
+                      editingResume === resume.id
+                        ? '2px solid var(--color-accent)'
+                        : '1px solid var(--color-border)',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-4)' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: 'var(--space-4)',
+                    }}
+                  >
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
-                        <h3 style={{
-                          fontSize: 'var(--font-size-lg)',
-                          fontWeight: 'var(--font-weight-medium)',
-                          margin: 0,
-                        }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 'var(--space-2)',
+                          marginBottom: 'var(--space-1)',
+                        }}
+                      >
+                        <h3
+                          style={{
+                            fontSize: 'var(--font-size-lg)',
+                            fontWeight: 'var(--font-weight-medium)',
+                            margin: 0,
+                          }}
+                        >
                           {resume.filename}
                         </h3>
                         {resume.is_active && (
                           <span
                             title="This is the resume used for matching and AI agents"
                             style={{
-                              background: 'oklch(from var(--color-success) l c h / 0.15)',
+                              background:
+                                'oklch(from var(--color-success) l c h / 0.15)',
                               color: 'var(--color-success)',
-                              border: '1px solid oklch(from var(--color-success) l c h / 0.4)',
+                              border:
+                                '1px solid oklch(from var(--color-success) l c h / 0.4)',
                               borderRadius: 'var(--radius-full)',
                               fontSize: 'var(--font-size-xs)',
                               padding: '2px var(--space-2)',
@@ -309,8 +388,14 @@ function Resumes() {
                           </span>
                         )}
                       </div>
-                      <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                        Uploaded {new Date(resume.created_at).toLocaleDateString()}
+                      <p
+                        style={{
+                          color: 'var(--color-text-secondary)',
+                          fontSize: 'var(--font-size-sm)',
+                        }}
+                      >
+                        Uploaded{' '}
+                        {new Date(resume.created_at).toLocaleDateString()}
                       </p>
                     </div>
 
@@ -320,14 +405,20 @@ function Resumes() {
                           <button
                             onClick={saveEdit}
                             className="btn btn-primary"
-                            style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 'var(--font-size-sm)' }}
+                            style={{
+                              padding: 'var(--space-2) var(--space-3)',
+                              fontSize: 'var(--font-size-sm)',
+                            }}
                           >
                             Save
                           </button>
                           <button
                             onClick={cancelEdit}
                             className="btn btn-secondary"
-                            style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 'var(--font-size-sm)' }}
+                            style={{
+                              padding: 'var(--space-2) var(--space-3)',
+                              fontSize: 'var(--font-size-sm)',
+                            }}
                           >
                             Cancel
                           </button>
@@ -336,7 +427,10 @@ function Resumes() {
                         <button
                           onClick={() => startEdit(resume)}
                           className="btn btn-secondary"
-                          style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 'var(--font-size-sm)' }}
+                          style={{
+                            padding: 'var(--space-2) var(--space-3)',
+                            fontSize: 'var(--font-size-sm)',
+                          }}
                           disabled={!resume.parsed_data}
                         >
                           Edit
@@ -350,19 +444,31 @@ function Resumes() {
                     <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
                       {/* Skills Section */}
                       <div>
-                        <h4 style={{
-                          fontSize: 'var(--font-size-md)',
-                          fontWeight: 'var(--font-weight-medium)',
-                          marginBottom: 'var(--space-2)',
-                          color: 'var(--color-accent)',
-                        }}>
+                        <h4
+                          style={{
+                            fontSize: 'var(--font-size-md)',
+                            fontWeight: 'var(--font-weight-medium)',
+                            marginBottom: 'var(--space-2)',
+                            color: 'var(--color-accent)',
+                          }}
+                        >
                           Skills
                         </h4>
 
                         {editingResume === resume.id ? (
                           <textarea
-                            value={editData.skills ? editData.skills.join(', ') : ''}
-                            onChange={(e) => updateEditData('skills', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                            value={
+                              editData.skills ? editData.skills.join(', ') : ''
+                            }
+                            onChange={(e) =>
+                              updateEditData(
+                                'skills',
+                                e.target.value
+                                  .split(',')
+                                  .map((s) => s.trim())
+                                  .filter(Boolean)
+                              )
+                            }
                             placeholder="Enter skills separated by commas"
                             style={{
                               width: '100%',
@@ -377,40 +483,52 @@ function Resumes() {
                             }}
                           />
                         ) : (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-                            {(resume.parsed_data.skills || []).map((skill, index) => (
-                              <span
-                                key={index}
-                                style={{
-                                  background: 'var(--color-accent)',
-                                  color: 'white',
-                                  padding: 'var(--space-1) var(--space-2)',
-                                  borderRadius: 'var(--radius-sm)',
-                                  fontSize: 'var(--font-size-sm)',
-                                }}
-                              >
-                                {skill}
-                              </span>
-                            ))}
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: 'var(--space-2)',
+                            }}
+                          >
+                            {(resume.parsed_data.skills || []).map(
+                              (skill, index) => (
+                                <span
+                                  key={index}
+                                  style={{
+                                    background: 'var(--color-accent)',
+                                    color: 'white',
+                                    padding: 'var(--space-1) var(--space-2)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    fontSize: 'var(--font-size-sm)',
+                                  }}
+                                >
+                                  {skill}
+                                </span>
+                              )
+                            )}
                           </div>
                         )}
                       </div>
 
                       {/* Summary Section */}
                       <div>
-                        <h4 style={{
-                          fontSize: 'var(--font-size-md)',
-                          fontWeight: 'var(--font-weight-medium)',
-                          marginBottom: 'var(--space-2)',
-                          color: 'var(--color-accent)',
-                        }}>
+                        <h4
+                          style={{
+                            fontSize: 'var(--font-size-md)',
+                            fontWeight: 'var(--font-weight-medium)',
+                            marginBottom: 'var(--space-2)',
+                            color: 'var(--color-accent)',
+                          }}
+                        >
                           Summary
                         </h4>
 
                         {editingResume === resume.id ? (
                           <textarea
                             value={editData.summary || ''}
-                            onChange={(e) => updateEditData('summary', e.target.value)}
+                            onChange={(e) =>
+                              updateEditData('summary', e.target.value)
+                            }
                             placeholder="Professional summary"
                             style={{
                               width: '100%',
@@ -425,8 +543,14 @@ function Resumes() {
                             }}
                           />
                         ) : (
-                          <p style={{ fontSize: 'var(--font-size-sm)', lineHeight: '1.5' }}>
-                            {resume.parsed_data.summary || 'No summary available'}
+                          <p
+                            style={{
+                              fontSize: 'var(--font-size-sm)',
+                              lineHeight: '1.5',
+                            }}
+                          >
+                            {resume.parsed_data.summary ||
+                              'No summary available'}
                           </p>
                         )}
                       </div>
@@ -434,15 +558,20 @@ function Resumes() {
                   )}
 
                   {!resume.parsed_data && (
-                    <div style={{
-                      padding: 'var(--space-4)',
-                      background: 'var(--color-warning-bg)',
-                      border: '1px solid var(--color-warning)',
-                      borderRadius: 'var(--radius-md)',
-                      color: 'var(--color-warning)',
-                      textAlign: 'center',
-                    }}>
-                      <p>Resume is still being processed. Please check back in a few moments.</p>
+                    <div
+                      style={{
+                        padding: 'var(--space-4)',
+                        background: 'var(--color-warning-bg)',
+                        border: '1px solid var(--color-warning)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--color-warning)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <p>
+                        Resume is still being processed. Please check back in a
+                        few moments.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -453,17 +582,30 @@ function Resumes() {
 
         {/* Empty State */}
         {resumes.length === 0 && (
-          <div className="card" style={{ textAlign: 'center', padding: 'var(--space-10)' }}>
-            <div style={{ fontSize: '4rem', marginBottom: 'var(--space-4)' }}>📄</div>
-            <h3 style={{
-              fontSize: 'var(--font-size-xl)',
-              fontWeight: 'var(--font-weight-medium)',
-              marginBottom: 'var(--space-2)',
-            }}>
+          <div
+            className="card"
+            style={{ textAlign: 'center', padding: 'var(--space-10)' }}
+          >
+            <div style={{ fontSize: '4rem', marginBottom: 'var(--space-4)' }}>
+              📄
+            </div>
+            <h3
+              style={{
+                fontSize: 'var(--font-size-xl)',
+                fontWeight: 'var(--font-weight-medium)',
+                marginBottom: 'var(--space-2)',
+              }}
+            >
               No resumes uploaded yet
             </h3>
-            <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)' }}>
-              Upload your first resume to get started with AI-powered job matching
+            <p
+              style={{
+                color: 'var(--color-text-secondary)',
+                marginBottom: 'var(--space-4)',
+              }}
+            >
+              Upload your first resume to get started with AI-powered job
+              matching
             </p>
           </div>
         )}

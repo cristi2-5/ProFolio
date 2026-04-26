@@ -39,8 +39,9 @@ class TestMigrationStructure:
             "user_jobs",
             "benchmark_scores",
         }
-        assert expected_tables.issubset(tables), \
-            f"Missing tables: {expected_tables - tables}"
+        assert expected_tables.issubset(
+            tables
+        ), f"Missing tables: {expected_tables - tables}"
 
     @pytest.mark.asyncio
     async def test_users_table_indexes(self, test_session: AsyncSession):
@@ -54,8 +55,9 @@ class TestMigrationStructure:
         indexes = await conn.run_sync(get_indexes)
         index_names = {idx["name"] for idx in indexes}
 
-        assert "ix_users_email" in index_names, \
-            "Missing email index for fast login lookups"
+        assert (
+            "ix_users_email" in index_names
+        ), "Missing email index for fast login lookups"
 
     @pytest.mark.asyncio
     async def test_parsed_resumes_gin_index(self, test_session: AsyncSession):
@@ -68,7 +70,6 @@ class TestMigrationStructure:
 
         indexes = await conn.run_sync(get_indexes)
         index_names = {idx["name"] for idx in indexes}
-
 
 
 class TestConstraintEnforcement:
@@ -97,8 +98,10 @@ class TestConstraintEnforcement:
         with pytest.raises(IntegrityError) as exc_info:
             await test_session.flush()
 
-        assert "unique constraint" in str(exc_info.value).lower() or \
-               "duplicate key" in str(exc_info.value).lower()
+        assert (
+            "unique constraint" in str(exc_info.value).lower()
+            or "duplicate key" in str(exc_info.value).lower()
+        )
 
     @pytest.mark.asyncio
     async def test_user_seniority_level_check_constraint(

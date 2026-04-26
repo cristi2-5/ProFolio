@@ -33,7 +33,13 @@ const STATUS_TOAST_COPY = {
   hidden: '🙈 Hidden from list',
 };
 
-function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatusChange }) {
+function JobCard({
+  job,
+  compact = false,
+  showAppliedAt = false,
+  onClick,
+  onStatusChange,
+}) {
   const [status, setStatus] = useState(job.status || 'new');
   const [updating, setUpdating] = useState(false);
   const [justApplied, setJustApplied] = useState(false);
@@ -48,7 +54,9 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
       await patch(`/jobs/${job.id}/status`, { status: newStatus });
       setStatus(newStatus);
 
-      setToast(STATUS_TOAST_COPY[newStatus] || `✓ Status updated to ${newStatus}`);
+      setToast(
+        STATUS_TOAST_COPY[newStatus] || `✓ Status updated to ${newStatus}`
+      );
       setTimeout(() => setToast(null), 1800);
 
       // Flash animation when marking as applied
@@ -61,7 +69,9 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
         onStatusChange(job.id, newStatus);
       }
     } catch (err) {
-      console.error('Failed to update job status:', err);
+      if (import.meta.env.DEV) {
+        console.error('Failed to update job status:', err);
+      }
       setToast('⚠️ Could not update status');
       setTimeout(() => setToast(null), 2200);
     } finally {
@@ -83,10 +93,26 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
    */
   const getStatusInfo = (jobStatus) => {
     const statusMap = {
-      new: { label: 'New', color: 'var(--color-info)', bg: 'var(--color-info-bg)' },
-      saved: { label: 'Saved', color: 'var(--color-accent)', bg: 'rgba(99, 102, 241, 0.1)' },
-      applied: { label: 'Applied', color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
-      hidden: { label: 'Hidden', color: 'var(--color-text-muted)', bg: 'rgba(128, 128, 128, 0.1)' },
+      new: {
+        label: 'New',
+        color: 'var(--color-info)',
+        bg: 'var(--color-info-bg)',
+      },
+      saved: {
+        label: 'Saved',
+        color: 'var(--color-accent)',
+        bg: 'rgba(99, 102, 241, 0.1)',
+      },
+      applied: {
+        label: 'Applied',
+        color: 'var(--color-success)',
+        bg: 'var(--color-success-bg)',
+      },
+      hidden: {
+        label: 'Hidden',
+        color: 'var(--color-text-muted)',
+        bg: 'rgba(128, 128, 128, 0.1)',
+      },
     };
     return statusMap[jobStatus] || statusMap.new;
   };
@@ -117,8 +143,11 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
   const formatAppliedAt = () => {
     if (!job.applied_at) return null;
     return new Date(job.applied_at).toLocaleString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
@@ -164,76 +193,94 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
       )}
 
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 'var(--space-3)',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          marginBottom: 'var(--space-3)',
+        }}
+      >
         <div style={{ flex: 1 }}>
-          <h3 style={{
-            fontSize: compact ? 'var(--font-size-md)' : 'var(--font-size-lg)',
-            fontWeight: 'var(--font-weight-semibold)',
-            marginBottom: 'var(--space-1)',
-            color: 'var(--color-text-primary)',
-          }}>
+          <h3
+            style={{
+              fontSize: compact ? 'var(--font-size-md)' : 'var(--font-size-lg)',
+              fontWeight: 'var(--font-weight-semibold)',
+              marginBottom: 'var(--space-1)',
+              color: 'var(--color-text-primary)',
+            }}
+          >
             {job.job_title}
           </h3>
-          <p style={{
-            fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-secondary)',
-            marginBottom: 'var(--space-1)',
-          }}>
+          <p
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-secondary)',
+              marginBottom: 'var(--space-1)',
+            }}
+          >
             {job.company_name}
           </p>
           {job.location && (
-            <p style={{
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-muted)',
-            }}>
+            <p
+              style={{
+                fontSize: 'var(--font-size-xs)',
+                color: 'var(--color-text-muted)',
+              }}
+            >
               📍 {job.location}
             </p>
           )}
         </div>
 
         {/* Match Score */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 'var(--space-1)',
-          marginLeft: 'var(--space-4)',
-        }}>
-          <div style={{
-            width: compact ? '48px' : '60px',
-            height: compact ? '48px' : '60px',
-            borderRadius: '50%',
-            background: `conic-gradient(${getScoreColor(job.match_score)} ${job.match_score * 3.6}deg, var(--color-border) 0deg)`,
+        <div
+          style={{
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative',
-          }}>
-            <div style={{
-              width: compact ? '36px' : '46px',
-              height: compact ? '36px' : '46px',
+            gap: 'var(--space-1)',
+            marginLeft: 'var(--space-4)',
+          }}
+        >
+          <div
+            style={{
+              width: compact ? '48px' : '60px',
+              height: compact ? '48px' : '60px',
               borderRadius: '50%',
-              background: 'var(--color-bg-primary)',
+              background: `conic-gradient(${getScoreColor(job.match_score)} ${job.match_score * 3.6}deg, var(--color-border) 0deg)`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: compact ? 'var(--font-size-xs)' : 'var(--font-size-sm)',
-              fontWeight: 'var(--font-weight-bold)',
-              color: getScoreColor(job.match_score),
-            }}>
+              position: 'relative',
+            }}
+          >
+            <div
+              style={{
+                width: compact ? '36px' : '46px',
+                height: compact ? '36px' : '46px',
+                borderRadius: '50%',
+                background: 'var(--color-bg-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: compact
+                  ? 'var(--font-size-xs)'
+                  : 'var(--font-size-sm)',
+                fontWeight: 'var(--font-weight-bold)',
+                color: getScoreColor(job.match_score),
+              }}
+            >
               {Math.round(job.match_score)}%
             </div>
           </div>
-          <span style={{
-            fontSize: 'var(--font-size-xs)',
-            color: 'var(--color-text-muted)',
-            textAlign: 'center',
-          }}>
+          <span
+            style={{
+              fontSize: 'var(--font-size-xs)',
+              color: 'var(--color-text-muted)',
+              textAlign: 'center',
+            }}
+          >
             Match
           </span>
         </div>
@@ -241,43 +288,63 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
 
       {/* Job Details */}
       {!compact && (
-        <div style={{
-          display: 'grid',
-          gap: 'var(--space-2)',
-          marginBottom: 'var(--space-4)',
-        }}>
+        <div
+          style={{
+            display: 'grid',
+            gap: 'var(--space-2)',
+            marginBottom: 'var(--space-4)',
+          }}
+        >
           {salary && (
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-primary)', fontWeight: 'var(--font-weight-medium)' }}>
+            <div
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--color-text-primary)',
+                fontWeight: 'var(--font-weight-medium)',
+              }}
+            >
               💰 {salary}
             </div>
           )}
 
           {job.job_type && (
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            <div
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
               ⏰ {job.job_type.replace('_', '-')}
             </div>
           )}
 
           {/* applied_at display — shown in Application History tab */}
           {showAppliedAt && appliedAtDisplay && (
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 'var(--space-1)',
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-success)',
-              fontWeight: 'var(--font-weight-medium)',
-              background: 'var(--color-success-bg)',
-              padding: 'var(--space-1) var(--space-2)',
-              borderRadius: 'var(--radius-sm)',
-              width: 'fit-content',
-            }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 'var(--space-1)',
+                fontSize: 'var(--font-size-xs)',
+                color: 'var(--color-success)',
+                fontWeight: 'var(--font-weight-medium)',
+                background: 'var(--color-success-bg)',
+                padding: 'var(--space-1) var(--space-2)',
+                borderRadius: 'var(--radius-sm)',
+                width: 'fit-content',
+              }}
+            >
               ✅ Applied {appliedAtDisplay}
             </div>
           )}
 
           {job.created_at && (
-            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+            <div
+              style={{
+                fontSize: 'var(--font-size-xs)',
+                color: 'var(--color-text-muted)',
+              }}
+            >
               🕒 Found {new Date(job.created_at).toLocaleDateString()}
             </div>
           )}
@@ -285,21 +352,25 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
       )}
 
       {/* Status and Actions */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: 'var(--space-2)',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 'var(--space-2)',
+        }}
+      >
         {/* Status Badge */}
-        <span style={{
-          background: statusInfo.bg,
-          color: statusInfo.color,
-          padding: 'var(--space-1) var(--space-2)',
-          borderRadius: 'var(--radius-sm)',
-          fontSize: 'var(--font-size-xs)',
-          fontWeight: 'var(--font-weight-medium)',
-        }}>
+        <span
+          style={{
+            background: statusInfo.bg,
+            color: statusInfo.color,
+            padding: 'var(--space-1) var(--space-2)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 'var(--font-size-xs)',
+            fontWeight: 'var(--font-weight-medium)',
+          }}
+        >
           {statusInfo.label}
         </span>
 
@@ -314,7 +385,9 @@ function JobCard({ job, compact = false, showAppliedAt = false, onClick, onStatu
               }}
               disabled={updating}
               style={{
-                background: justApplied ? 'var(--color-success)' : 'var(--color-success)',
+                background: justApplied
+                  ? 'var(--color-success)'
+                  : 'var(--color-success)',
                 color: 'white',
                 border: 'none',
                 padding: 'var(--space-1) var(--space-2)',

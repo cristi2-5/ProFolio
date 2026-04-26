@@ -72,14 +72,22 @@ export async function apiRequest(endpoint, options = {}) {
         errorMessage = error.detail
           .map((err) => err.msg || err.message || 'Validation error')
           .join(', ');
+      } else if (error.detail && typeof error.detail === 'object') {
+        // Object detail (e.g. {error: 'insufficient_peers', message: '...', peers_found: 28})
+        errorMessage =
+          error.detail.message ||
+          error.detail.error ||
+          JSON.stringify(error.detail);
       } else {
-        // Single error message
+        // Single string error message
         errorMessage = error.detail;
       }
     }
 
     const errObj = new Error(errorMessage);
     errObj.status = response.status;
+    // Attach the raw parsed detail so callers can introspect (e.g. peers_found).
+    errObj.data = error.detail;
     throw errObj;
   }
 

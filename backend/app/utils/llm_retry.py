@@ -17,6 +17,7 @@ from openai import (
     APITimeoutError,
     AuthenticationError,
     BadRequestError,
+    NotFoundError,
     RateLimitError,
 )
 
@@ -31,6 +32,18 @@ logger = logging.getLogger(__name__)
 # Exponential backoff schedule (seconds) — paired with max_retries=2,
 # we attempt: t=0, t+1s, t+4s.
 _BACKOFF_SCHEDULE = (1.0, 4.0)
+
+# Model fallback chain — tried in order on RateLimitError or NotFoundError.
+# Primary:  gemini-2.5-flash       (best quality, fresh free-tier quota)
+# Fallback: gemini-2.0-flash       (stable, separate quota bucket)
+# Final:    gemini-1.5-flash       (older but still active, separate quota again)
+# Each entry has its own daily quota on the free tier, so chaining across
+# versions extends the effective request budget.
+GEMINI_FLASH_MODELS: tuple[str, ...] = (
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+)
 
 
 async def with_retry(
@@ -98,3 +111,46 @@ async def with_retry(
 
     # Defensive — loop always either returns or raises.
     raise LLMUnavailableError() from last_exc
+
+
+async def with_model_fallback(
+    coro_factory: Callable[[str], Awaitable[Any]],
+    models: tuple[str, ...] = GEMINI_FLASH_MODELS,
+) -> tuple[Any, str]:
+    """Call ``coro_factory(model)`` trying each model in ``models`` in order.
+
+    On ``RateLimitError`` (or ``LLMRateLimitError`` bubbled from ``with_retry``),
+    logs a warning and moves to the next model without waiting. All other errors
+    propagate immediately from whichever model raised them.
+
+    Args:
+        coro_factory: Async callable that accepts a model name string and
+            returns a coroutine. Called fresh for each attempt.
+        models: Ordered tuple of model names to try.
+
+    Returns:
+        Tuple of (result, model_name_used).
+
+    Raises:
+        LLMRateLimitError: If every model in the chain is rate-limited.
+        Any other exception raised by ``coro_factory``.
+    """
+    last_exc: Exception | None = None
+    for model in models:
+        try:
+            result = await with_retry(lambda m=model: coro_factory(m))
+            return result, model
+        except LLMRateLimitError as exc:
+            last_exc = exc
+            logger.warning("Model %s rate-limited; trying next in chain", model)
+        except RateLimitError as exc:
+            last_exc = exc
+            logger.warning("Model %s rate-limited (raw); trying next in chain", model)
+        except NotFoundError as exc:
+            last_exc = exc
+            logger.warning("Model %s not found; trying next in chain", model)
+
+    logger.error("All models in fallback chain exhausted: %s", models)
+    raise LLMRateLimitError(
+        f"All models exhausted ({', '.join(models)}). Try again later."
+    ) from last_exc

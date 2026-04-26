@@ -79,9 +79,7 @@ class InterviewCoachService:
             await db.commit()
             await db.refresh(user_job)
 
-            logger.info(
-                "Interview prep generated for user=%s job=%s", user.id, job.id
-            )
+            logger.info("Interview prep generated for user=%s job=%s", user.id, job.id)
             return materials
 
         except Exception:

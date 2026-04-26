@@ -6,8 +6,10 @@
  * rendering child routes.
  */
 
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import CookieBanner from './CookieBanner';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
@@ -18,29 +20,41 @@ const navItems = [
   { path: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
-/**
- * Application layout shell.
- *
- * Provides:
- * - Fixed sidebar with logo and navigation links.
- * - Logged-in user identity + logout button anchored at the bottom.
- * - Main content area that renders the current route's component.
- *
- * @returns {JSX.Element} The layout wrapper with sidebar and outlet.
- */
 function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const closeMobileNav = () => setMobileOpen(false);
 
   const handleLogout = () => {
+    closeMobileNav();
     logout();
     navigate('/login', { replace: true });
   };
 
   return (
     <div className="app-layout">
+      <button
+        type="button"
+        className="mobile-nav-toggle"
+        aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
+        aria-expanded={mobileOpen}
+        onClick={() => setMobileOpen((prev) => !prev)}
+      >
+        {mobileOpen ? '✕' : '☰'}
+      </button>
+
+      {mobileOpen && (
+        <div
+          className="sidebar-backdrop"
+          role="presentation"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
       <aside
-        className="sidebar"
+        className={`sidebar${mobileOpen ? ' open' : ''}`}
         role="navigation"
         aria-label="Main navigation"
         style={{ display: 'flex', flexDirection: 'column' }}
@@ -56,6 +70,7 @@ function Layout() {
             <NavLink
               key={item.path}
               to={item.path}
+              onClick={closeMobileNav}
               className={({ isActive }) =>
                 `nav-item ${isActive ? 'active' : ''}`
               }
@@ -76,18 +91,6 @@ function Layout() {
               gap: 'var(--space-2)',
             }}
           >
-            <div
-              title={user.email}
-              style={{
-                fontSize: 'var(--font-size-xs)',
-                color: 'var(--color-text-muted)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {user.full_name || user.email}
-            </div>
             <button
               type="button"
               onClick={handleLogout}
@@ -103,9 +106,31 @@ function Layout() {
           </div>
         )}
       </aside>
-      <main className="main-content">
-        <Outlet />
+      <main
+        className="main-content"
+        style={{ display: 'flex', flexDirection: 'column' }}
+      >
+        <div style={{ flex: 1 }}>
+          <Outlet />
+        </div>
+        <footer
+          style={{
+            marginTop: 'var(--space-8)',
+            padding: 'var(--space-4) 0',
+            borderTop: '1px solid var(--color-border)',
+            display: 'flex',
+            gap: 'var(--space-4)',
+            justifyContent: 'center',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-muted)',
+          }}
+        >
+          <Link to="/privacy">Privacy</Link>
+          <Link to="/terms">Terms</Link>
+          <Link to="/cookies">Cookies</Link>
+        </footer>
       </main>
+      <CookieBanner />
     </div>
   );
 }

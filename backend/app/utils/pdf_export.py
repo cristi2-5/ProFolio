@@ -12,16 +12,16 @@ from typing import Any, Dict, Optional
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
-    SimpleDocTemplate,
+    KeepTogether,
+    PageBreak,
     Paragraph,
+    SimpleDocTemplate,
     Spacer,
     Table,
     TableStyle,
-    PageBreak,
-    KeepTogether,
 )
 from reportlab.platypus.flowables import HRFlowable
 
@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 class PDFExportError(Exception):
     """Custom exception for PDF export errors."""
+
     pass
 
 
@@ -61,72 +62,86 @@ class CVPDFExporter:
         self.styles = getSampleStyleSheet()
 
         # Custom styles for CV sections
-        self.styles.add(ParagraphStyle(
-            name='CVTitle',
-            parent=self.styles['Heading1'],
-            fontSize=18,
-            textColor=colors.HexColor('#2c3e50'),
-            spaceAfter=6,
-            alignment=1,  # Center alignment
-        ))
+        self.styles.add(
+            ParagraphStyle(
+                name="CVTitle",
+                parent=self.styles["Heading1"],
+                fontSize=18,
+                textColor=colors.HexColor("#2c3e50"),
+                spaceAfter=6,
+                alignment=1,  # Center alignment
+            )
+        )
 
-        self.styles.add(ParagraphStyle(
-            name='SectionHeader',
-            parent=self.styles['Heading2'],
-            fontSize=14,
-            textColor=colors.HexColor('#34495e'),
-            spaceBefore=12,
-            spaceAfter=6,
-            borderWidth=0,
-            borderColor=colors.HexColor('#bdc3c7'),
-            borderPadding=0,
-        ))
+        self.styles.add(
+            ParagraphStyle(
+                name="SectionHeader",
+                parent=self.styles["Heading2"],
+                fontSize=14,
+                textColor=colors.HexColor("#34495e"),
+                spaceBefore=12,
+                spaceAfter=6,
+                borderWidth=0,
+                borderColor=colors.HexColor("#bdc3c7"),
+                borderPadding=0,
+            )
+        )
 
-        self.styles.add(ParagraphStyle(
-            name='ContactInfo',
-            parent=self.styles['Normal'],
-            fontSize=10,
-            textColor=colors.HexColor('#7f8c8d'),
-            alignment=1,  # Center alignment
-            spaceAfter=12,
-        ))
+        self.styles.add(
+            ParagraphStyle(
+                name="ContactInfo",
+                parent=self.styles["Normal"],
+                fontSize=10,
+                textColor=colors.HexColor("#7f8c8d"),
+                alignment=1,  # Center alignment
+                spaceAfter=12,
+            )
+        )
 
-        self.styles.add(ParagraphStyle(
-            name='JobTitle',
-            parent=self.styles['Normal'],
-            fontSize=12,
-            textColor=colors.HexColor('#2c3e50'),
-            spaceBefore=6,
-            spaceAfter=3,
-            leftIndent=0,
-        ))
+        self.styles.add(
+            ParagraphStyle(
+                name="JobTitle",
+                parent=self.styles["Normal"],
+                fontSize=12,
+                textColor=colors.HexColor("#2c3e50"),
+                spaceBefore=6,
+                spaceAfter=3,
+                leftIndent=0,
+            )
+        )
 
-        self.styles.add(ParagraphStyle(
-            name='CompanyName',
-            parent=self.styles['Normal'],
-            fontSize=11,
-            textColor=colors.HexColor('#34495e'),
-            spaceAfter=3,
-            leftIndent=0,
-        ))
+        self.styles.add(
+            ParagraphStyle(
+                name="CompanyName",
+                parent=self.styles["Normal"],
+                fontSize=11,
+                textColor=colors.HexColor("#34495e"),
+                spaceAfter=3,
+                leftIndent=0,
+            )
+        )
 
-        self.styles.add(ParagraphStyle(
-            name='ExperienceDetails',
-            parent=self.styles['Normal'],
-            fontSize=10,
-            textColor=colors.HexColor('#2c3e50'),
-            spaceAfter=6,
-            leftIndent=20,
-            bulletIndent=10,
-        ))
+        self.styles.add(
+            ParagraphStyle(
+                name="ExperienceDetails",
+                parent=self.styles["Normal"],
+                fontSize=10,
+                textColor=colors.HexColor("#2c3e50"),
+                spaceAfter=6,
+                leftIndent=20,
+                bulletIndent=10,
+            )
+        )
 
-        self.styles.add(ParagraphStyle(
-            name='Skills',
-            parent=self.styles['Normal'],
-            fontSize=10,
-            textColor=colors.HexColor('#2c3e50'),
-            spaceAfter=3,
-        ))
+        self.styles.add(
+            ParagraphStyle(
+                name="Skills",
+                parent=self.styles["Normal"],
+                fontSize=10,
+                textColor=colors.HexColor("#2c3e50"),
+                spaceAfter=3,
+            )
+        )
 
     def export_cv_to_pdf(
         self,
@@ -262,7 +277,9 @@ class CVPDFExporter:
             pdf_data = buffer.getvalue()
             buffer.close()
 
-            logger.info(f"Cover letter PDF generated successfully: {len(pdf_data)} bytes")
+            logger.info(
+                f"Cover letter PDF generated successfully: {len(pdf_data)} bytes"
+            )
             return pdf_data
 
         except Exception as e:
@@ -272,7 +289,7 @@ class CVPDFExporter:
     def _add_cv_header(self, story: list, cv_data: Dict[str, Any], user_name: str):
         """Add CV header with name and contact information."""
         # User name as title
-        story.append(Paragraph(user_name, self.styles['CVTitle']))
+        story.append(Paragraph(user_name, self.styles["CVTitle"]))
 
         # Contact information
         personal_info = cv_data.get("personal_info", {})
@@ -289,7 +306,7 @@ class CVPDFExporter:
 
         if contact_parts:
             contact_text = " • ".join(contact_parts)
-            story.append(Paragraph(contact_text, self.styles['ContactInfo']))
+            story.append(Paragraph(contact_text, self.styles["ContactInfo"]))
 
         story.append(Spacer(1, 0.2 * inch))
 
@@ -308,20 +325,24 @@ class CVPDFExporter:
             return
 
         target_style = ParagraphStyle(
-            name='JobTargetHeader',
-            parent=self.styles['Normal'],
+            name="JobTargetHeader",
+            parent=self.styles["Normal"],
             fontSize=10,
-            textColor=colors.HexColor('#2980b9'),
+            textColor=colors.HexColor("#2980b9"),
             alignment=1,  # Center
             spaceAfter=8,
-            fontName='Helvetica-Oblique',
+            fontName="Helvetica-Oblique",
         )
         target_text = f"✦ ATS-Optimized for: {job_title} at {company_name} ✦"
         story.append(Paragraph(target_text, target_style))
-        story.append(HRFlowable(
-            width="100%", thickness=1.5,
-            color=colors.HexColor('#2980b9'), spaceAfter=8,
-        ))
+        story.append(
+            HRFlowable(
+                width="100%",
+                thickness=1.5,
+                color=colors.HexColor("#2980b9"),
+                spaceAfter=8,
+            )
+        )
         story.append(Spacer(1, 0.05 * inch))
 
     def _add_cv_optimized_keywords(self, story: list, cv_data: Dict[str, Any]):
@@ -335,27 +356,32 @@ class CVPDFExporter:
             return
 
         story.append(Spacer(1, 0.1 * inch))
-        story.append(Paragraph("ATS KEYWORDS INTEGRATED", self.styles['SectionHeader']))
-        story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#bdc3c7')))
+        story.append(Paragraph("ATS KEYWORDS INTEGRATED", self.styles["SectionHeader"]))
+        story.append(
+            HRFlowable(width="100%", thickness=1, color=colors.HexColor("#bdc3c7"))
+        )
         story.append(Spacer(1, 0.1 * inch))
 
         kw_text = " • ".join(str(k) for k in keywords)
         kw_style = ParagraphStyle(
-            name='KeywordsStyle',
-            parent=self.styles['Normal'],
+            name="KeywordsStyle",
+            parent=self.styles["Normal"],
             fontSize=9,
-            textColor=colors.HexColor('#27ae60'),
+            textColor=colors.HexColor("#27ae60"),
             spaceAfter=6,
         )
         story.append(Paragraph(kw_text, kw_style))
-
 
     def _add_cv_summary(self, story: list, cv_data: Dict[str, Any]):
         """Add professional summary section."""
         summary = cv_data.get("summary", "")
         if summary:
-            story.append(Paragraph("PROFESSIONAL SUMMARY", self.styles['SectionHeader']))
-            story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#bdc3c7')))
+            story.append(
+                Paragraph("PROFESSIONAL SUMMARY", self.styles["SectionHeader"])
+            )
+            story.append(
+                HRFlowable(width="100%", thickness=1, color=colors.HexColor("#bdc3c7"))
+            )
             story.append(Spacer(1, 0.1 * inch))
 
             # Handle both string and list formats
@@ -364,15 +390,17 @@ class CVPDFExporter:
             elif isinstance(summary, str):
                 summary = summary.strip()
 
-            story.append(Paragraph(summary, self.styles['Normal']))
+            story.append(Paragraph(summary, self.styles["Normal"]))
             story.append(Spacer(1, 0.2 * inch))
 
     def _add_cv_experience(self, story: list, cv_data: Dict[str, Any]):
         """Add work experience section with formatting."""
         experience = cv_data.get("experience", [])
         if experience:
-            story.append(Paragraph("WORK EXPERIENCE", self.styles['SectionHeader']))
-            story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#bdc3c7')))
+            story.append(Paragraph("WORK EXPERIENCE", self.styles["SectionHeader"]))
+            story.append(
+                HRFlowable(width="100%", thickness=1, color=colors.HexColor("#bdc3c7"))
+            )
             story.append(Spacer(1, 0.1 * inch))
 
             for exp in experience:
@@ -385,21 +413,27 @@ class CVPDFExporter:
                     else:
                         title_line = title
 
-                    story.append(Paragraph(title_line, self.styles['JobTitle']))
+                    story.append(Paragraph(title_line, self.styles["JobTitle"]))
 
                     # Company name
                     company = exp.get("company", "")
                     if company:
-                        story.append(Paragraph(company, self.styles['CompanyName']))
+                        story.append(Paragraph(company, self.styles["CompanyName"]))
 
                     # Job description/responsibilities
                     description = exp.get("description", "")
                     if description:
                         if isinstance(description, list):
                             for item in description:
-                                story.append(Paragraph(f"• {item}", self.styles['ExperienceDetails']))
+                                story.append(
+                                    Paragraph(
+                                        f"• {item}", self.styles["ExperienceDetails"]
+                                    )
+                                )
                         else:
-                            story.append(Paragraph(description, self.styles['ExperienceDetails']))
+                            story.append(
+                                Paragraph(description, self.styles["ExperienceDetails"])
+                            )
 
                     story.append(Spacer(1, 0.15 * inch))
 
@@ -409,8 +443,12 @@ class CVPDFExporter:
         technologies = cv_data.get("technologies", [])
 
         if skills or technologies:
-            story.append(Paragraph("SKILLS & TECHNOLOGIES", self.styles['SectionHeader']))
-            story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#bdc3c7')))
+            story.append(
+                Paragraph("SKILLS & TECHNOLOGIES", self.styles["SectionHeader"])
+            )
+            story.append(
+                HRFlowable(width="100%", thickness=1, color=colors.HexColor("#bdc3c7"))
+            )
             story.append(Spacer(1, 0.1 * inch))
 
             # Combine skills and technologies
@@ -418,20 +456,24 @@ class CVPDFExporter:
             if skills:
                 all_skills.extend(skills if isinstance(skills, list) else [skills])
             if technologies:
-                all_skills.extend(technologies if isinstance(technologies, list) else [technologies])
+                all_skills.extend(
+                    technologies if isinstance(technologies, list) else [technologies]
+                )
 
             if all_skills:
                 # Group skills in a readable format
                 skills_text = " • ".join(all_skills)
-                story.append(Paragraph(skills_text, self.styles['Skills']))
+                story.append(Paragraph(skills_text, self.styles["Skills"]))
                 story.append(Spacer(1, 0.15 * inch))
 
     def _add_cv_education(self, story: list, cv_data: Dict[str, Any]):
         """Add education section."""
         education = cv_data.get("education", [])
         if education:
-            story.append(Paragraph("EDUCATION", self.styles['SectionHeader']))
-            story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#bdc3c7')))
+            story.append(Paragraph("EDUCATION", self.styles["SectionHeader"]))
+            story.append(
+                HRFlowable(width="100%", thickness=1, color=colors.HexColor("#bdc3c7"))
+            )
             story.append(Spacer(1, 0.1 * inch))
 
             for edu in education:
@@ -444,24 +486,26 @@ class CVPDFExporter:
                         edu_line = f"{degree} - {institution}"
                         if year:
                             edu_line += f" ({year})"
-                        story.append(Paragraph(edu_line, self.styles['Normal']))
+                        story.append(Paragraph(edu_line, self.styles["Normal"]))
 
                 story.append(Spacer(1, 0.1 * inch))
 
     def _add_cover_letter_header(self, story: list, user_name: str):
         """Add cover letter header with user name."""
-        story.append(Paragraph(user_name, self.styles['CVTitle']))
+        story.append(Paragraph(user_name, self.styles["CVTitle"]))
         story.append(Spacer(1, 0.3 * inch))
 
     def _add_cover_letter_date(self, story: list):
         """Add current date to cover letter."""
         current_date = datetime.now().strftime("%B %d, %Y")
-        story.append(Paragraph(current_date, self.styles['Normal']))
+        story.append(Paragraph(current_date, self.styles["Normal"]))
         story.append(Spacer(1, 0.3 * inch))
 
-    def _add_cover_letter_recipient(self, story: list, company_name: str, job_title: str):
+    def _add_cover_letter_recipient(
+        self, story: list, company_name: str, job_title: str
+    ):
         """Add recipient information to cover letter."""
-        story.append(Paragraph("Dear Hiring Manager,", self.styles['Normal']))
+        story.append(Paragraph("Dear Hiring Manager,", self.styles["Normal"]))
         story.append(Spacer(1, 0.2 * inch))
 
     def _add_cover_letter_body(self, story: list, cover_letter_text: str):
@@ -469,7 +513,7 @@ class CVPDFExporter:
         # Split on double newline (real \n\n), also handle single newlines as paragraph breaks
         paragraphs = [
             p.strip()
-            for p in cover_letter_text.replace('\r\n', '\n').split('\n\n')
+            for p in cover_letter_text.replace("\r\n", "\n").split("\n\n")
             if p.strip()
         ]
 
@@ -477,20 +521,20 @@ class CVPDFExporter:
         if len(paragraphs) == 1:
             paragraphs = [
                 p.strip()
-                for p in cover_letter_text.replace('\r\n', '\n').split('\n')
+                for p in cover_letter_text.replace("\r\n", "\n").split("\n")
                 if p.strip()
             ]
 
         for paragraph in paragraphs:
-            story.append(Paragraph(paragraph, self.styles['Normal']))
+            story.append(Paragraph(paragraph, self.styles["Normal"]))
             story.append(Spacer(1, 0.15 * inch))
 
     def _add_cover_letter_footer(self, story: list, user_name: str):
         """Add cover letter closing and signature."""
         story.append(Spacer(1, 0.2 * inch))
-        story.append(Paragraph("Sincerely,", self.styles['Normal']))
+        story.append(Paragraph("Sincerely,", self.styles["Normal"]))
         story.append(Spacer(1, 0.3 * inch))
-        story.append(Paragraph(user_name, self.styles['Normal']))
+        story.append(Paragraph(user_name, self.styles["Normal"]))
 
 
 # Global exporter instance

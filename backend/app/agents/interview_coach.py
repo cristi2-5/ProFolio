@@ -36,7 +36,7 @@ from app.schemas.interview_coach import (
     TechnologyConcept,
 )
 from app.utils.exceptions import InterviewCoachError
-from app.utils.llm_retry import with_retry
+from app.utils.llm_retry import GEMINI_FLASH_MODELS, with_model_fallback
 from app.utils.prompt_cache import build_cache_key, get_prompt_cache
 from app.utils.tech_extractor import ExtractedTech, extract_technologies
 from app.utils.token_guard import (
@@ -90,7 +90,7 @@ class InterviewCoachAgent:
                 )
             )
 
-        self.model = "gemini-2.0-flash"
+        self.models = GEMINI_FLASH_MODELS  # fallback chain: 3.0 → 2.5 → 2.0
         self.temperature = 0.4
 
     # ------------------------------------------------------------------
@@ -221,7 +221,7 @@ class InterviewCoachAgent:
         data = await self._make_api_call(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            max_tokens=2000,
+            max_tokens=4000,
             response_format={"type": "json_object"},
             mock_response=mock,
         )
@@ -263,7 +263,7 @@ class InterviewCoachAgent:
         data = await self._make_api_call(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            max_tokens=2000,
+            max_tokens=4000,
             response_format={"type": "json_object"},
             mock_response=mock,
         )
@@ -312,7 +312,7 @@ class InterviewCoachAgent:
         data = await self._make_api_call(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            max_tokens=2500,
+            max_tokens=4500,
             response_format={"type": "json_object"},
             mock_response=mock,
         )
@@ -352,8 +352,9 @@ class InterviewCoachAgent:
 
         cache = get_prompt_cache()
         response_format_key = response_format.get("type") if response_format else None
+        # Cache key uses the primary model so cache hits are consistent
         cache_key = build_cache_key(
-            model=self.model,
+            model=self.models[0],
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             response_format=response_format_key,
@@ -365,8 +366,7 @@ class InterviewCoachAgent:
             logger.debug("Prompt cache hit: %s", cache_key)
             return cached
 
-        kwargs: Dict[str, Any] = {
-            "model": self.model,
+        base_kwargs: Dict[str, Any] = {
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -375,13 +375,15 @@ class InterviewCoachAgent:
             "temperature": self.temperature,
         }
         if response_format:
-            kwargs["response_format"] = response_format
+            base_kwargs["response_format"] = response_format
 
-        async def _call() -> Any:
-            return await self.client.chat.completions.create(**kwargs)
+        async def _call(model: str) -> Any:
+            return await self.client.chat.completions.create(model=model, **base_kwargs)
 
         try:
-            response = await with_retry(_call)
+            response, used_model = await with_model_fallback(_call, self.models)
+            if used_model != self.models[0]:
+                logger.info("Interview coach used fallback model: %s", used_model)
         except BadRequestError as exc:
             logger.error("OpenAI rejected interview-coach request: %s", exc)
             raise InterviewCoachError("LLM rejected the request") from exc
@@ -391,17 +393,13 @@ class InterviewCoachAgent:
             raise InterviewCoachError("Empty response from LLM")
 
         if response_format and response_format.get("type") == "json_object":
-            try:
-                parsed = json.loads(content)
-            except json.JSONDecodeError as e:
+            parsed = _parse_llm_json(content)
+            if parsed is None:
                 logger.error(
-                    "Interview-coach LLM returned non-JSON: %s | raw=%r",
-                    e,
-                    content[:500],
+                    "Interview-coach LLM returned non-JSON after all repair attempts: raw=%r",
+                    content[:800],
                 )
-                raise InterviewCoachError(
-                    "LLM returned malformed interview prep"
-                ) from e
+                raise InterviewCoachError("LLM returned malformed interview prep")
             await cache.set(cache_key, parsed)
             return parsed
 
@@ -438,6 +436,95 @@ class InterviewCoachAgent:
 # ----------------------------------------------------------------------
 
 
+def _parse_llm_json(content: str) -> Optional[Dict[str, Any]]:
+    """Best-effort JSON parser for LLM output. Returns None on total failure.
+
+    LLMs (especially smaller fallback models) emit "almost-JSON" with common
+    issues:
+      1. Markdown code fences (```json ... ```)
+      2. Trailing commas before } or ]
+      3. JS-style comments (// or /* */)
+      4. Truncated mid-string when max_tokens is hit
+      5. Surrounding prose before/after the actual JSON object
+
+    This function tries each repair strategy in order and returns the first
+    that produces a valid JSON object. Logs at WARNING when a repair was
+    needed (so we can spot model regressions) and at ERROR when nothing works.
+    """
+    import re
+
+    text = (content or "").strip()
+    if not text:
+        return None
+
+    # 1. Strip markdown code fences.
+    if text.startswith("```"):
+        lines = text.splitlines()
+        inner = [ln for ln in lines if not ln.startswith("```")]
+        text = "\n".join(inner).strip()
+
+    # 2. Try direct parse.
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 3. Extract first {...} block (handles surrounding prose).
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    candidate = match.group() if match else text
+
+    # 4. Repair pass: strip trailing commas + JS comments.
+    repaired = re.sub(r",(\s*[}\]])", r"\1", candidate)
+    repaired = re.sub(r"//[^\n]*", "", repaired)
+    repaired = re.sub(r"/\*.*?\*/", "", repaired, flags=re.DOTALL)
+    try:
+        result = json.loads(repaired)
+        logger.warning("LLM JSON required repair (trailing commas / comments)")
+        return result
+    except json.JSONDecodeError:
+        pass
+
+    # 5. Truncation recovery: walk back from the end, looking for the last
+    #    balanced closing brace. This handles the case where the LLM ran out
+    #    of tokens mid-output.
+    depth = 0
+    in_string = False
+    escape = False
+    last_close_idx = -1
+    for i, ch in enumerate(repaired):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                last_close_idx = i
+
+    if last_close_idx > 0:
+        try:
+            result = json.loads(repaired[: last_close_idx + 1])
+            logger.warning(
+                "LLM JSON required truncation recovery (used first %d chars)",
+                last_close_idx + 1,
+            )
+            return result
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
+
 def _coerce_list(data: Any, key: str) -> List[Dict[str, Any]]:
     """Accept either a raw list or a ``{key: [...]}`` envelope."""
     if isinstance(data, list):
@@ -452,24 +539,39 @@ def _coerce_list(data: Any, key: str) -> List[Dict[str, Any]]:
 def _validate_items(
     items: List[Dict[str, Any]], model: type, label: str
 ) -> List[Dict[str, Any]]:
-    """Pydantic-validate each list item; raise InterviewCoachError on failure.
+    """Pydantic-validate each list item; drop malformed items.
 
     Returns the model_dump'd dicts so downstream JSON serialization is
-    unchanged from the previous (untyped) shape.
+    unchanged from the previous (untyped) shape. With ``extra="ignore"``
+    + defaulted fields on the schemas, validation rarely fails — but if a
+    single item still fails, we drop it rather than aborting the whole
+    bundle. Only if EVERY item fails do we raise InterviewCoachError.
     """
     validated: List[Dict[str, Any]] = []
+    failures = 0
     for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            logger.warning(
+                "Interview-coach %s item %d is not a dict (got %s); skipping",
+                label, index, type(item).__name__,
+            )
+            failures += 1
+            continue
         try:
             validated.append(model(**item).model_dump())
         except (ValidationError, TypeError) as exc:
-            logger.error(
-                "Interview-coach %s item %d failed schema validation: %s | raw=%r",
-                label,
-                index,
-                exc,
-                str(item)[:500],
+            logger.warning(
+                "Interview-coach %s item %d failed schema validation; skipping: %s | raw=%r",
+                label, index, exc, str(item)[:300],
             )
-            raise InterviewCoachError("LLM returned malformed interview prep") from exc
+            failures += 1
+
+    if items and not validated:
+        logger.error(
+            "Interview-coach %s: all %d items failed validation",
+            label, failures,
+        )
+        raise InterviewCoachError("LLM returned malformed interview prep")
     return validated
 
 

@@ -7,6 +7,7 @@ Tests:
 """
 
 import pytest
+
 from app.config import get_settings
 
 

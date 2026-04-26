@@ -8,18 +8,29 @@ OAuth (Google, LinkedIn) endpoints will be added in Phase 2.
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.schemas.benchmark import BenchmarkOptInRequest, BenchmarkOptInResponse
-from app.schemas.user import LoginRequest, Token, UserCreate, UserResponse
+from app.schemas.user import (
+    AccountDeleteRequest,
+    LoginRequest,
+    Token,
+    UserCreate,
+    UserResponse,
+    UserUpdate,
+)
 from app.services.auth_service import AuthService
 from app.utils.exceptions import DuplicateError, UnauthorizedError, raise_http_exception
 from app.utils.rate_limit import limiter
-from app.utils.security import sanitize_email, validate_password_strength
+from app.utils.security import (
+    sanitize_email,
+    validate_password_strength,
+    verify_password,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -162,6 +173,47 @@ async def get_current_user_profile(
 
 
 @router.patch(
+    "/me",
+    response_model=UserResponse,
+    summary="Update authenticated user's profile",
+)
+@limiter.limit("10/minute")
+async def update_me(
+    request: Request,
+    payload: UserUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserResponse:
+    """Update profile fields for the authenticated user.
+
+    Email changes do NOT trigger verification — verification flow is
+    deferred for local development (see log.txt §7 / docs/LOCAL_DEV.md).
+
+    Args:
+        payload: Partial update — only provided fields are applied.
+        current_user: Authenticated user (injected).
+        db: Database session (injected).
+
+    Returns:
+        UserResponse: The updated profile.
+
+    Raises:
+        HTTPException 409: If email change collides with another user.
+        HTTPException 422: If mid/senior level resolves with no niche.
+    """
+    try:
+        updated = await AuthService.update_user(db, current_user, payload)
+    except DuplicateError as exc:
+        raise_http_exception(exc)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
+    return UserResponse.model_validate(updated)
+
+
+@router.patch(
     "/benchmark-opt-in",
     response_model=BenchmarkOptInResponse,
     summary="Update benchmark participation preferences",
@@ -239,3 +291,25 @@ async def get_benchmark_opt_in_status(
             "You can opt out at any time. No personal information is shared."
         ),
     )
+
+
+@router.delete(
+    "/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Permanently delete the authenticated user's account",
+)
+@limiter.limit("3/hour")
+async def delete_account(
+    request: Request,
+    payload: AccountDeleteRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    if not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Password incorrect",
+        )
+    await db.delete(current_user)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

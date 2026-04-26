@@ -6,8 +6,9 @@ formatting, error handling, and document structure validation.
 """
 
 import io
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import patch, Mock
 
 from app.utils.pdf_export import CVPDFExporter, PDFExportError
 
@@ -29,7 +30,7 @@ class TestCVPDFExporter:
                 "email": "john@example.com",
                 "phone": "+1-555-0123",
                 "location": "New York, NY",
-                "linkedin": "linkedin.com/in/johndoe"
+                "linkedin": "linkedin.com/in/johndoe",
             },
             "summary": "Senior Frontend Developer with 5+ years of experience building scalable React applications and modern JavaScript frameworks.",
             "experience": [
@@ -37,14 +38,18 @@ class TestCVPDFExporter:
                     "role": "Senior Developer",
                     "company": "TechCorp Inc",
                     "duration": "2020-2023",
-                    "description": "Led development of responsive web applications using React, TypeScript, and Node.js. Implemented automated testing and optimized application performance for 50% faster load times."
+                    "description": "Led development of responsive web applications using React, TypeScript, and Node.js. Implemented automated testing and optimized application performance for 50% faster load times.",
                 },
                 {
                     "role": "Frontend Developer",
                     "company": "StartupXYZ",
                     "duration": "2018-2020",
-                    "description": ["Developed user interfaces using React and Redux", "Collaborated with design team on UX improvements", "Implemented responsive design principles"]
-                }
+                    "description": [
+                        "Developed user interfaces using React and Redux",
+                        "Collaborated with design team on UX improvements",
+                        "Implemented responsive design principles",
+                    ],
+                },
             ],
             "skills": ["React", "TypeScript", "JavaScript", "Node.js", "Python"],
             "technologies": ["AWS", "Docker", "Git", "MongoDB", "Jest"],
@@ -52,9 +57,9 @@ class TestCVPDFExporter:
                 {
                     "degree": "Bachelor of Science in Computer Science",
                     "institution": "University of Technology",
-                    "year": "2018"
+                    "year": "2018",
                 }
-            ]
+            ],
         }
 
     @pytest.fixture
@@ -101,8 +106,7 @@ John Doe"""
     def test_export_cv_to_pdf_success(self, pdf_exporter, sample_optimized_cv):
         """Test successful CV PDF generation."""
         pdf_data = pdf_exporter.export_cv_to_pdf(
-            optimized_cv=sample_optimized_cv,
-            user_name="John Doe"
+            optimized_cv=sample_optimized_cv, user_name="John Doe"
         )
 
         # Verify PDF was generated
@@ -110,13 +114,15 @@ John Doe"""
         assert len(pdf_data) > 1000  # Reasonable size for PDF
         assert pdf_data.startswith(b"%PDF")  # PDF magic number
 
-    def test_export_cover_letter_to_pdf_success(self, pdf_exporter, sample_cover_letter):
+    def test_export_cover_letter_to_pdf_success(
+        self, pdf_exporter, sample_cover_letter
+    ):
         """Test successful cover letter PDF generation."""
         pdf_data = pdf_exporter.export_cover_letter_to_pdf(
             cover_letter_text=sample_cover_letter,
             user_name="John Doe",
             job_title="Senior Frontend Developer",
-            company_name="InnovateTech"
+            company_name="InnovateTech",
         )
 
         # Verify PDF was generated
@@ -126,15 +132,10 @@ John Doe"""
 
     def test_export_cv_minimal_data(self, pdf_exporter):
         """Test CV PDF generation with minimal data."""
-        minimal_cv = {
-            "summary": "Brief summary",
-            "experience": [],
-            "skills": []
-        }
+        minimal_cv = {"summary": "Brief summary", "experience": [], "skills": []}
 
         pdf_data = pdf_exporter.export_cv_to_pdf(
-            optimized_cv=minimal_cv,
-            user_name="Test User"
+            optimized_cv=minimal_cv, user_name="Test User"
         )
 
         assert isinstance(pdf_data, bytes)
@@ -148,15 +149,14 @@ John Doe"""
                     "role": "Developer",
                     "company": "Test Corp",
                     "duration": "2020-2023",
-                    "description": "Single string description of work responsibilities and achievements."
+                    "description": "Single string description of work responsibilities and achievements.",
                 }
             ],
-            "skills": ["Python", "JavaScript"]
+            "skills": ["Python", "JavaScript"],
         }
 
         pdf_data = pdf_exporter.export_cv_to_pdf(
-            optimized_cv=cv_data,
-            user_name="Test User"
+            optimized_cv=cv_data, user_name="Test User"
         )
 
         assert isinstance(pdf_data, bytes)
@@ -172,29 +172,29 @@ John Doe"""
                     "description": [
                         "First responsibility",
                         "Second achievement",
-                        "Third project outcome"
-                    ]
+                        "Third project outcome",
+                    ],
                 }
             ]
         }
 
         pdf_data = pdf_exporter.export_cv_to_pdf(
-            optimized_cv=cv_data,
-            user_name="Test User"
+            optimized_cv=cv_data, user_name="Test User"
         )
 
         assert isinstance(pdf_data, bytes)
 
     @patch("app.utils.pdf_export.SimpleDocTemplate")
-    def test_export_cv_pdf_error_handling(self, mock_doc_class, pdf_exporter, sample_optimized_cv):
+    def test_export_cv_pdf_error_handling(
+        self, mock_doc_class, pdf_exporter, sample_optimized_cv
+    ):
         """Test error handling in CV PDF generation."""
         # Mock SimpleDocTemplate to raise exception
         mock_doc_class.side_effect = Exception("PDF generation error")
 
         with pytest.raises(PDFExportError, match="PDF generation failed"):
             pdf_exporter.export_cv_to_pdf(
-                optimized_cv=sample_optimized_cv,
-                user_name="Test User"
+                optimized_cv=sample_optimized_cv, user_name="Test User"
             )
 
     @patch("app.utils.pdf_export.SimpleDocTemplate")
@@ -207,7 +207,7 @@ John Doe"""
                 cover_letter_text="Test letter content",
                 user_name="Test User",
                 job_title="Developer",
-                company_name="Test Corp"
+                company_name="Test Corp",
             )
 
     def test_add_cv_header(self, pdf_exporter, sample_optimized_cv):
@@ -278,7 +278,7 @@ John Doe"""
         """Test skills section with separate technologies."""
         cv_data = {
             "skills": ["Python", "JavaScript"],
-            "technologies": ["AWS", "Docker"]
+            "technologies": ["AWS", "Docker"],
         }
         story = []
 
@@ -330,7 +330,9 @@ John Doe"""
 
     def test_cover_letter_paragraph_splitting(self, pdf_exporter):
         """Test cover letter body paragraph splitting."""
-        letter_text = "First paragraph content.\n\nSecond paragraph content.\n\nThird paragraph."
+        letter_text = (
+            "First paragraph content.\n\nSecond paragraph content.\n\nThird paragraph."
+        )
         story = []
 
         pdf_exporter._add_cover_letter_body(story, letter_text)
@@ -342,7 +344,7 @@ John Doe"""
         pdf_data = pdf_exporter.export_cv_to_pdf(
             optimized_cv=sample_optimized_cv,
             user_name="John Doe",
-            filename="test_resume.pdf"
+            filename="test_resume.pdf",
         )
 
         assert isinstance(pdf_data, bytes)
@@ -360,12 +362,11 @@ John Doe"""
         cv_data = {
             "personal_info": {"full_name": "José García"},
             "summary": "Desarrollador con experiência en múltiples tecnologías",
-            "skills": ["Python", "JavaScript", "São Paulo"]
+            "skills": ["Python", "JavaScript", "São Paulo"],
         }
 
         pdf_data = pdf_exporter.export_cv_to_pdf(
-            optimized_cv=cv_data,
-            user_name="José García"
+            optimized_cv=cv_data, user_name="José García"
         )
 
         assert isinstance(pdf_data, bytes)
@@ -379,16 +380,15 @@ John Doe"""
                 {
                     "role": f"Position {i}",
                     "company": f"Company {i}",
-                    "description": "Long description " * 20
+                    "description": "Long description " * 20,
                 }
                 for i in range(10)
             ],
-            "skills": [f"Skill{i}" for i in range(50)]
+            "skills": [f"Skill{i}" for i in range(50)],
         }
 
         pdf_data = pdf_exporter.export_cv_to_pdf(
-            optimized_cv=large_cv,
-            user_name="Test User"
+            optimized_cv=large_cv, user_name="Test User"
         )
 
         assert isinstance(pdf_data, bytes)
@@ -401,12 +401,11 @@ John Doe"""
             "experience": [],
             "skills": "",
             "technologies": None,
-            "education": []
+            "education": [],
         }
 
         pdf_data = pdf_exporter.export_cv_to_pdf(
-            optimized_cv=cv_data,
-            user_name="Test User"
+            optimized_cv=cv_data, user_name="Test User"
         )
 
         assert isinstance(pdf_data, bytes)

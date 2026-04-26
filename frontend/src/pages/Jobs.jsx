@@ -82,7 +82,9 @@ function Jobs() {
         setTotalJobs(data.total_count ?? 0);
       } catch (err) {
         if (err.name === 'AbortError') return;
-        console.error('Failed to fetch jobs:', err);
+        if (import.meta.env.DEV) {
+          console.error('Failed to fetch jobs:', err);
+        }
         setError(err.message || 'Failed to load jobs');
       } finally {
         if (!signal?.aborted) setLoading(false);
@@ -107,6 +109,7 @@ function Jobs() {
    * Trigger a real manual job scan.
    */
   const triggerJobScan = async () => {
+    if (scanning) return;
     try {
       setScanning(true);
       setScanMessage(null);
@@ -518,15 +521,32 @@ function Jobs() {
               ? 'When you click "Applied" on a job, it will appear here with the date you applied.'
               : searchQuery || activeTab !== 'all'
                 ? 'Try adjusting your search or filter criteria.'
-                : 'Upload your resume and set preferences, then click "Scan for New Jobs".'}
+                : "No jobs found yet. Click 'Scan jobs' to fetch opportunities from Adzuna."}
           </p>
           {!isHistoryTab && !searchQuery && activeTab === 'all' && (
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="btn btn-primary"
+            <div
+              style={{
+                display: 'flex',
+                gap: 'var(--space-3)',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+              }}
             >
-              Go to Dashboard
-            </button>
+              <button
+                onClick={triggerJobScan}
+                disabled={scanning}
+                className="btn btn-primary"
+                style={{ opacity: scanning ? 0.7 : 1 }}
+              >
+                {scanning ? 'Scanning…' : '🔍 Scan jobs'}
+              </button>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="btn btn-secondary"
+              >
+                Go to Dashboard
+              </button>
+            </div>
           )}
         </div>
       ) : isHistoryTab ? (

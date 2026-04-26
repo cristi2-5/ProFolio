@@ -42,7 +42,7 @@ def create_description_hash(description: Optional[str]) -> str:
     # 4. Remove common job board artifacts
     normalized = content.lower()
     normalized = re.sub(r"<[^>]+>", " ", normalized)  # Remove HTML tags
-    normalized = re.sub(r"\s+", " ", normalized)      # Normalize whitespace
+    normalized = re.sub(r"\s+", " ", normalized)  # Normalize whitespace
     normalized = normalized.strip()
 
     # Create SHA-256 hash

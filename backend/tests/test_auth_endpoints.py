@@ -5,8 +5,8 @@ Tests user registration and login endpoints with comprehensive
 validation scenarios, error handling, and JWT token verification.
 """
 
-from datetime import datetime, timezone
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -34,17 +34,14 @@ def valid_registration_data() -> dict:
         "password": "StrongPassCode123!",
         "full_name": "John Doe",
         "seniority_level": "mid",
-        "niche": "Backend Engineering"
+        "niche": "Backend Engineering",
     }
 
 
 @pytest.fixture
 def minimal_registration_data() -> dict:
     """Minimal valid registration (required fields only)."""
-    return {
-        "email": "minimal@example.com",
-        "password": "PassCode123!"
-    }
+    return {"email": "minimal@example.com", "password": "PassCode123!"}
 
 
 @pytest.fixture
@@ -58,7 +55,7 @@ async def existing_user(test_session: AsyncSession) -> User:
         full_name="Existing User",
         seniority_level="senior",
         niche="Full Stack Development",
-        benchmark_opt_in=False
+        benchmark_opt_in=False,
     )
     test_session.add(user)
     await test_session.flush()
@@ -109,7 +106,9 @@ class TestUserRegistration:
         self, client, test_session: AsyncSession, minimal_registration_data: dict
     ):
         """Registration with minimal data should succeed."""
-        response = await client.post("/api/auth/register", json=minimal_registration_data)
+        response = await client.post(
+            "/api/auth/register", json=minimal_registration_data
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -144,21 +143,21 @@ class TestUserRegistration:
         assert response.status_code in [400, 401, 422]  # Pydantic validation error
 
     @pytest.mark.asyncio
-    async def test_register_weak_password(
-        self, client, valid_registration_data: dict
-    ):
+    async def test_register_weak_password(self, client, valid_registration_data: dict):
         """Weak password should return 400 with specific errors."""
         test_cases = [
             ("nouppercase123!", "uppercase letter"),
             ("NOLOWERCASE123!", "lowercase letter"),
             ("NoNumberOrSpecial", "number or special character"),
-            ("PassCode123123123", "weak patterns")  # Repeated "123" pattern
+            ("PassCode123123123", "weak patterns"),  # Repeated "123" pattern
         ]
 
         for password, expected_error in test_cases:
             valid_registration_data["password"] = password
             print(f"TESTING PASSWORD: {password}")
-            response = await client.post("/api/auth/register", json=valid_registration_data)
+            response = await client.post(
+                "/api/auth/register", json=valid_registration_data
+            )
             print(f"RESPONSE JSON: {response.json()}")
 
             assert response.status_code == 400
@@ -202,7 +201,9 @@ class TestUserRegistration:
             valid_registration_data["niche"] = None
             valid_registration_data["email"] = f"{seniority}@example.com"
 
-            response = await client.post("/api/auth/register", json=valid_registration_data)
+            response = await client.post(
+                "/api/auth/register", json=valid_registration_data
+            )
             assert response.status_code == 201
 
     @pytest.mark.asyncio
@@ -227,14 +228,9 @@ class TestUserLogin:
     """Test /api/auth/login endpoint."""
 
     @pytest.mark.asyncio
-    async def test_login_valid_credentials(
-        self, client, existing_user: User
-    ):
+    async def test_login_valid_credentials(self, client, existing_user: User):
         """Valid credentials should return JWT token."""
-        login_data = {
-            "email": existing_user.email,
-            "password": "ExistingPassCode123!"
-        }
+        login_data = {"email": existing_user.email, "password": "ExistingPassCode123!"}
 
         response = await client.post("/api/auth/login", json=login_data)
 
@@ -247,19 +243,16 @@ class TestUserLogin:
 
         # Verify JWT token is valid and contains user ID
         token = data["access_token"]
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.algorithm]
+        )
         assert payload["sub"] == str(existing_user.id)
         assert "exp" in payload
 
     @pytest.mark.asyncio
-    async def test_login_wrong_password(
-        self, client, existing_user: User
-    ):
+    async def test_login_wrong_password(self, client, existing_user: User):
         """Wrong password should return 401."""
-        login_data = {
-            "email": existing_user.email,
-            "password": "WrongPassCode123!"
-        }
+        login_data = {"email": existing_user.email, "password": "WrongPassCode123!"}
 
         response = await client.post("/api/auth/login", json=login_data)
 
@@ -267,13 +260,11 @@ class TestUserLogin:
         assert "Invalid email or password" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_login_nonexistent_email(
-        self, client
-    ):
+    async def test_login_nonexistent_email(self, client):
         """Nonexistent email should return 401."""
         login_data = {
             "email": "nonexistent@example.com",
-            "password": "SomePassCode123!"
+            "password": "SomePassCode123!",
         }
 
         response = await client.post("/api/auth/login", json=login_data)
@@ -282,27 +273,20 @@ class TestUserLogin:
         assert "Invalid email or password" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_login_invalid_email_format(
-        self, client
-    ):
+    async def test_login_invalid_email_format(self, client):
         """Invalid email format should return 400."""
-        login_data = {
-            "email": "not-an-email",
-            "password": "SomePassCode123!"
-        }
+        login_data = {"email": "not-an-email", "password": "SomePassCode123!"}
 
         response = await client.post("/api/auth/login", json=login_data)
 
         assert response.status_code in [400, 401, 422]  # Pydantic validation error
 
     @pytest.mark.asyncio
-    async def test_login_email_case_insensitive(
-        self, client, existing_user: User
-    ):
+    async def test_login_email_case_insensitive(self, client, existing_user: User):
         """Login should work with case-insensitive email."""
         login_data = {
             "email": existing_user.email.upper(),
-            "password": "ExistingPassCode123!"
+            "password": "ExistingPassCode123!",
         }
 
         response = await client.post("/api/auth/login", json=login_data)
@@ -311,14 +295,12 @@ class TestUserLogin:
         assert "access_token" in response.json()
 
     @pytest.mark.asyncio
-    async def test_login_empty_fields(
-        self, client
-    ):
+    async def test_login_empty_fields(self, client):
         """Empty email/password should return validation errors."""
         test_cases = [
             {"email": "", "password": "PassCode123!"},
             {"email": "test@example.com", "password": ""},
-            {"email": "", "password": ""}
+            {"email": "", "password": ""},
         ]
 
         for login_data in test_cases:
@@ -335,19 +317,19 @@ class TestAuthFlow:
     """Test complete registration → login → authenticated request flow."""
 
     @pytest.mark.asyncio
-    async def test_complete_auth_flow(
-        self, client, valid_registration_data: dict
-    ):
+    async def test_complete_auth_flow(self, client, valid_registration_data: dict):
         """Test register → login → authenticated API call flow."""
         # Step 1: Register new user
-        register_response = await client.post("/api/auth/register", json=valid_registration_data)
+        register_response = await client.post(
+            "/api/auth/register", json=valid_registration_data
+        )
         assert register_response.status_code == 201
         user_data = register_response.json()
 
         # Step 2: Login with the same credentials
         login_data = {
             "email": valid_registration_data["email"],
-            "password": valid_registration_data["password"]
+            "password": valid_registration_data["password"],
         }
         login_response = await client.post("/api/auth/login", json=login_data)
         assert login_response.status_code == 200
@@ -356,10 +338,179 @@ class TestAuthFlow:
         access_token = token_data["access_token"]
 
         # Step 3: Verify JWT token contains correct user ID
-        payload = jwt.decode(access_token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            access_token, settings.secret_key, algorithms=[settings.algorithm]
+        )
         assert payload["sub"] == user_data["id"]
 
         # Note: Protected endpoint test would go here when middleware is integrated
         # headers = {"Authorization": f"Bearer {access_token}"}
         # protected_response = test_client.get("/api/protected", headers=headers)
         # assert protected_response.status_code == 200
+
+
+# =====================================================================
+# PATCH /me Endpoint Tests
+# =====================================================================
+
+
+async def _login_token(client, email: str, password: str) -> str:
+    """Helper: log in and return the JWT for use in Authorization headers."""
+    response = await client.post(
+        "/api/auth/login", json={"email": email, "password": password}
+    )
+    assert response.status_code == 200, response.json()
+    return response.json()["access_token"]
+
+
+class TestUpdateMe:
+    """Test /api/auth/me PATCH endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_update_full_name_happy_path(
+        self, client, valid_registration_data: dict
+    ):
+        """PATCH /me with new full_name should return 200 and updated body."""
+        await client.post("/api/auth/register", json=valid_registration_data)
+        token = await _login_token(
+            client,
+            valid_registration_data["email"],
+            valid_registration_data["password"],
+        )
+
+        response = await client.patch(
+            "/api/auth/me",
+            json={"full_name": "New Name"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200, response.json()
+        data = response.json()
+        assert data["full_name"] == "New Name"
+        # Other fields untouched
+        assert data["email"] == valid_registration_data["email"].lower()
+        assert data["seniority_level"] == valid_registration_data["seniority_level"]
+
+    @pytest.mark.asyncio
+    async def test_update_partial_only_changes_provided_fields(
+        self, client, valid_registration_data: dict
+    ):
+        """PATCH /me with only niche should leave other fields unchanged."""
+        await client.post("/api/auth/register", json=valid_registration_data)
+        token = await _login_token(
+            client,
+            valid_registration_data["email"],
+            valid_registration_data["password"],
+        )
+
+        response = await client.patch(
+            "/api/auth/me",
+            json={"niche": "backend"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200, response.json()
+        data = response.json()
+        assert data["niche"] == "backend"
+        assert data["full_name"] == valid_registration_data["full_name"]
+        assert data["seniority_level"] == valid_registration_data["seniority_level"]
+        assert data["email"] == valid_registration_data["email"].lower()
+
+    @pytest.mark.asyncio
+    async def test_update_email_changes_email(
+        self, client, valid_registration_data: dict
+    ):
+        """PATCH /me with a new email should update the email."""
+        await client.post("/api/auth/register", json=valid_registration_data)
+        token = await _login_token(
+            client,
+            valid_registration_data["email"],
+            valid_registration_data["password"],
+        )
+
+        response = await client.patch(
+            "/api/auth/me",
+            json={"email": "newemail@test.com"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200, response.json()
+        assert response.json()["email"] == "newemail@test.com"
+
+    @pytest.mark.asyncio
+    async def test_update_email_collision_returns_409(
+        self, client, valid_registration_data: dict
+    ):
+        """Changing email to an address already in use should 409."""
+        # Register user A (the one we'll update)
+        await client.post("/api/auth/register", json=valid_registration_data)
+        # Register user B with a different email
+        other = {
+            "email": "other@example.com",
+            "password": "OtherPassCode123!",
+            "full_name": "Other User",
+        }
+        await client.post("/api/auth/register", json=other)
+
+        token = await _login_token(
+            client,
+            valid_registration_data["email"],
+            valid_registration_data["password"],
+        )
+
+        response = await client.patch(
+            "/api/auth/me",
+            json={"email": other["email"]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 409, response.json()
+        assert "already exists" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_update_invalid_seniority_level_returns_422(
+        self, client, valid_registration_data: dict
+    ):
+        """PATCH /me with seniority_level outside the allowed pattern → 422."""
+        await client.post("/api/auth/register", json=valid_registration_data)
+        token = await _login_token(
+            client,
+            valid_registration_data["email"],
+            valid_registration_data["password"],
+        )
+
+        response = await client.patch(
+            "/api/auth/me",
+            json={"seniority_level": "wizard"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 422, response.json()
+
+    @pytest.mark.asyncio
+    async def test_update_mid_clearing_niche_returns_422(
+        self, client, valid_registration_data: dict
+    ):
+        """For mid users, clearing niche to null should be rejected with 422."""
+        # valid_registration_data is mid + has a niche
+        await client.post("/api/auth/register", json=valid_registration_data)
+        token = await _login_token(
+            client,
+            valid_registration_data["email"],
+            valid_registration_data["password"],
+        )
+
+        response = await client.patch(
+            "/api/auth/me",
+            json={"niche": None},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 422, response.json()
+        assert "niche" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_update_unauthenticated_returns_403(self, client):
+        """PATCH /me with no token should return 403."""
+        response = await client.patch("/api/auth/me", json={"full_name": "X"})
+        assert response.status_code == 403

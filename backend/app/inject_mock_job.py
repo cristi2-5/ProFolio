@@ -1,17 +1,20 @@
 import asyncio
 import sys
+
+from sqlalchemy import select
+
 from app.database import async_session_factory
-from app.models.user import User
 from app.models.job import ScrapedJob, UserJob
 from app.models.resume import ParsedResume
-from sqlalchemy import select
+from app.models.user import User
+
 
 async def main():
     async with async_session_factory() as db:
         # Get the first registered user
         stmt = select(User).limit(1)
         user = (await db.execute(stmt)).scalar_one_or_none()
-        
+
         if not user:
             print("No users found in database.")
             return
@@ -27,14 +30,16 @@ async def main():
                 original_filename="sample_cv.pdf",
                 file_url="local://sample_cv.pdf",
                 parsed_data={"skills": ["Python", "React", "Docker"]},
-                is_active=True
+                is_active=True,
             )
             db.add(resume)
             await db.flush()
 
         # 2. Inject a Mock Job
         # Check if dummy job exists
-        stmt = select(ScrapedJob).where(ScrapedJob.external_url == "https://test.adzuna.example/job/1")
+        stmt = select(ScrapedJob).where(
+            ScrapedJob.external_url == "https://test.adzuna.example/job/1"
+        )
         job = (await db.execute(stmt)).scalar_one_or_none()
         if not job:
             job = ScrapedJob(
@@ -44,13 +49,15 @@ async def main():
                 location="Bucharest / Remote",
                 external_url="https://test.adzuna.example/job/1",
                 description="Cautam un developer python cu experienta pe FastAPI, React si Docker. Va lucra la un nou produs de integrare AI.",
-                source_platform="adzuna"
+                source_platform="adzuna",
             )
             db.add(job)
             await db.flush()
 
         # 3. Link Job to User
-        stmt = select(UserJob).where(UserJob.user_id == user.id, UserJob.job_id == job.id)
+        stmt = select(UserJob).where(
+            UserJob.user_id == user.id, UserJob.job_id == job.id
+        )
         user_job = (await db.execute(stmt)).scalar_one_or_none()
         if not user_job:
             user_job = UserJob(
@@ -60,9 +67,10 @@ async def main():
                 match_score=85,
             )
             db.add(user_job)
-            
+
         await db.commit()
         print("Successfully injected test Job for UI verification!")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

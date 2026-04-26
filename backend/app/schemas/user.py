@@ -65,10 +65,28 @@ class UserUpdate(BaseModel):
     All fields optional — only provided fields are updated.
     """
 
-    full_name: Optional[str] = None
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    email: Optional[str] = Field(default=None, min_length=3, max_length=255)
     seniority_level: Optional[str] = Field(None, pattern="^(intern|junior|mid|senior)$")
-    niche: Optional[str] = None
+    niche: Optional[str] = Field(default=None, max_length=100)
     benchmark_opt_in: Optional[bool] = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_update_email(cls, v):
+        """Validate and normalize email when provided on update."""
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError("Email must be a string")
+
+        v = v.strip().lower()
+
+        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        if not re.match(email_pattern, v):
+            raise ValueError("Invalid email format")
+
+        return v
 
 
 class UserResponse(BaseModel):
@@ -150,14 +168,14 @@ class JobPreferenceCreate(BaseModel):
 
     desired_title: str = Field(..., min_length=2, max_length=255)
     location_type: str = Field(..., pattern="^(remote|hybrid|onsite)$")
-    keywords: list[str] = Field(..., min_length=3, max_length=5)
+    keywords: list[str] = Field(..., min_length=1, max_length=10)
 
     @field_validator("keywords")
     @classmethod
     def validate_keywords(cls, v):
         """Validate keywords are non-empty and reasonable length."""
         if not v:
-            raise ValueError("At least 3 keywords required")
+            raise ValueError("At least 1 keyword required")
         for keyword in v:
             if not keyword.strip():
                 raise ValueError("Keywords cannot be empty")
@@ -186,3 +204,9 @@ class JobPreferenceResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AccountDeleteRequest(BaseModel):
+    """Body for DELETE /api/auth/me — requires password re-auth."""
+
+    password: str = Field(..., min_length=1)

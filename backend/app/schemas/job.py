@@ -107,4 +107,3 @@ class UserJobStatusUpdate(BaseModel):
     """
 
     status: str = Field(..., pattern="^(new|applied|saved|hidden|duplicate)$")
-

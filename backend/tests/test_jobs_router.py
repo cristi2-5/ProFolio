@@ -8,6 +8,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from app.models.job import ScrapedJob, UserJob
 from app.models.user import User
 
@@ -58,14 +59,17 @@ class TestJobsRouter:
     @pytest.mark.asyncio
     async def test_get_job_by_id_success(self, client, mock_user, mock_user_job):
         """GET /api/jobs/{id} returns 200 and flattened job data."""
-        from app.main import app
         from app.dependencies.auth import get_current_user
-        
+        from app.main import app
+
         # Override the get_current_user dependency
         app.dependency_overrides[get_current_user] = lambda: mock_user
-        
+
         try:
-            with patch("app.routers.jobs.job_service.get_user_job_by_id", return_value=mock_user_job):
+            with patch(
+                "app.routers.jobs.job_service.get_user_job_by_id",
+                return_value=mock_user_job,
+            ):
                 response = await client.get(f"/api/jobs/{mock_user_job.id}")
 
                 assert response.status_code == 200
@@ -80,13 +84,15 @@ class TestJobsRouter:
     @pytest.mark.asyncio
     async def test_get_job_by_id_not_found(self, client, mock_user):
         """GET /api/jobs/{id} returns 404 if job doesn't exist or not owned by user."""
-        from app.main import app
         from app.dependencies.auth import get_current_user
-        
+        from app.main import app
+
         app.dependency_overrides[get_current_user] = lambda: mock_user
-        
+
         try:
-            with patch("app.routers.jobs.job_service.get_user_job_by_id", return_value=None):
+            with patch(
+                "app.routers.jobs.job_service.get_user_job_by_id", return_value=None
+            ):
                 fake_id = str(uuid.uuid4())
                 response = await client.get(f"/api/jobs/{fake_id}")
 
@@ -98,13 +104,16 @@ class TestJobsRouter:
     @pytest.mark.asyncio
     async def test_list_jobs_success(self, client, mock_user, mock_user_job):
         """GET /api/jobs/ returns a list of jobs."""
-        from app.main import app
         from app.dependencies.auth import get_current_user
-        
+        from app.main import app
+
         app.dependency_overrides[get_current_user] = lambda: mock_user
-        
+
         try:
-            with patch("app.routers.jobs.job_service.list_user_jobs", return_value=([mock_user_job], 1)):
+            with patch(
+                "app.routers.jobs.job_service.list_user_jobs",
+                return_value=([mock_user_job], 1),
+            ):
                 response = await client.get("/api/jobs/")
 
                 assert response.status_code == 200

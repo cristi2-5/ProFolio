@@ -6,8 +6,9 @@ PDF export, and error handling scenarios.
 """
 
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 from openai import AsyncOpenAI
 
 from app.agents.cv_optimizer import CVOptimizerAgent
@@ -23,14 +24,14 @@ class TestCVOptimizerAgent:
             mock_settings.openai_api_key = "sk-placeholder-key"
             agent = CVOptimizerAgent()
             assert agent.is_development is False
-            
+
             # Setup nested AsyncMock for OpenAI client
             mock_client = MagicMock(spec=AsyncOpenAI)
             mock_client.chat = MagicMock()
             mock_client.chat.completions = MagicMock()
             mock_client.chat.completions.create = AsyncMock()
             agent.client = mock_client
-            
+
             return agent
 
     @pytest.fixture
@@ -41,7 +42,7 @@ class TestCVOptimizerAgent:
                 "full_name": "John Doe",
                 "email": "john@example.com",
                 "phone": "+1-555-0123",
-                "location": "New York, NY"
+                "location": "New York, NY",
             },
             "summary": "Experienced software developer with 5+ years in web development",
             "experience": [
@@ -49,14 +50,14 @@ class TestCVOptimizerAgent:
                     "role": "Senior Developer",
                     "company": "TechCorp Inc",
                     "duration": "2020-2023",
-                    "description": "Led development of web applications using React and Node.js"
+                    "description": "Led development of web applications using React and Node.js",
                 },
                 {
                     "role": "Junior Developer",
                     "company": "StartupXYZ",
                     "duration": "2018-2020",
-                    "description": "Developed frontend components and REST APIs"
-                }
+                    "description": "Developed frontend components and REST APIs",
+                },
             ],
             "skills": ["JavaScript", "React", "Node.js", "Python", "SQL"],
             "technologies": ["AWS", "Docker", "Git", "MongoDB"],
@@ -64,9 +65,9 @@ class TestCVOptimizerAgent:
                 {
                     "degree": "Bachelor of Science in Computer Science",
                     "institution": "University of Technology",
-                    "year": "2018"
+                    "year": "2018",
                 }
-            ]
+            ],
         }
 
     @pytest.fixture
@@ -99,7 +100,7 @@ class TestCVOptimizerAgent:
                 "full_name": "John Doe",
                 "email": "john@example.com",
                 "phone": "+1-555-0123",
-                "location": "New York, NY"
+                "location": "New York, NY",
             },
             "summary": "Senior Frontend Developer with 5+ years of experience building scalable React applications and modern JavaScript frameworks. Proven expertise in AWS cloud services and CI/CD pipeline implementation.",
             "experience": [
@@ -107,11 +108,19 @@ class TestCVOptimizerAgent:
                     "role": "Senior Developer",
                     "company": "TechCorp Inc",
                     "duration": "2020-2023",
-                    "description": "Led development of responsive web applications using React, TypeScript, and Node.js. Implemented automated testing and optimized application performance for 50% faster load times."
+                    "description": "Led development of responsive web applications using React, TypeScript, and Node.js. Implemented automated testing and optimized application performance for 50% faster load times.",
                 }
             ],
-            "skills": ["React", "TypeScript", "JavaScript", "AWS", "CI/CD", "Node.js", "Python"],
-            "technologies": ["AWS", "Docker", "Git", "MongoDB", "Jest", "Webpack"]
+            "skills": [
+                "React",
+                "TypeScript",
+                "JavaScript",
+                "AWS",
+                "CI/CD",
+                "Node.js",
+                "Python",
+            ],
+            "technologies": ["AWS", "Docker", "Git", "MongoDB", "Jest", "Webpack"],
         }
 
         mock_response = Mock()
@@ -142,25 +151,31 @@ John Doe"""
 
     @pytest.mark.asyncio
     async def test_optimize_cv_success(
-        self, cv_optimizer, sample_cv_data, sample_job_description, mock_openai_cv_response
+        self,
+        cv_optimizer,
+        sample_cv_data,
+        sample_job_description,
+        mock_openai_cv_response,
     ):
         """Test successful CV optimization."""
         # Setup mock
-        cv_optimizer.client.chat.completions.create.return_value = mock_openai_cv_response
+        cv_optimizer.client.chat.completions.create.return_value = (
+            mock_openai_cv_response
+        )
 
         # Execute optimization
         result = await cv_optimizer.optimize_cv_for_job(
             parsed_cv=sample_cv_data,
             job_description=sample_job_description,
             job_title="Senior Frontend Developer",
-            company_name="InnovateTech"
+            company_name="InnovateTech",
         )
 
         # Verify API call
         cv_optimizer.client.chat.completions.create.assert_called_once()
         call_args = cv_optimizer.client.chat.completions.create.call_args
 
-        assert call_args.kwargs["model"] == "gemini-2.0-flash"
+        assert call_args.kwargs["model"] == "gemini-2.5-flash"  # primary model in fallback chain
         assert call_args.kwargs["response_format"] == {"type": "json_object"}
         assert len(call_args.kwargs["messages"]) == 2
         assert call_args.kwargs["messages"][0]["role"] == "system"
@@ -176,11 +191,17 @@ John Doe"""
 
     @pytest.mark.asyncio
     async def test_generate_cover_letter_success(
-        self, cv_optimizer, sample_cv_data, sample_job_description, mock_openai_cover_letter_response
+        self,
+        cv_optimizer,
+        sample_cv_data,
+        sample_job_description,
+        mock_openai_cover_letter_response,
     ):
         """Test successful cover letter generation."""
         # Setup mock
-        cv_optimizer.client.chat.completions.create.return_value = mock_openai_cover_letter_response
+        cv_optimizer.client.chat.completions.create.return_value = (
+            mock_openai_cover_letter_response
+        )
 
         # Execute generation
         result = await cv_optimizer.generate_cover_letter(
@@ -188,14 +209,14 @@ John Doe"""
             job_description=sample_job_description,
             job_title="Senior Frontend Developer",
             company_name="InnovateTech",
-            user_name="John Doe"
+            user_name="John Doe",
         )
 
         # Verify API call
         cv_optimizer.client.chat.completions.create.assert_called_once()
         call_args = cv_optimizer.client.chat.completions.create.call_args
 
-        assert call_args.kwargs["model"] == "gemini-2.0-flash"
+        assert call_args.kwargs["model"] == "gemini-2.5-flash"  # primary model in fallback chain
         assert call_args.kwargs["max_tokens"] == 1500
         assert call_args.kwargs["temperature"] == 0.4
 
@@ -214,7 +235,7 @@ John Doe"""
                 parsed_cv=None,
                 job_description="Test job",
                 job_title="Developer",
-                company_name="Test Corp"
+                company_name="Test Corp",
             )
 
         with pytest.raises(ValueError, match="Invalid CV data"):
@@ -222,18 +243,20 @@ John Doe"""
                 parsed_cv={},
                 job_description="Test job",
                 job_title="Developer",
-                company_name="Test Corp"
+                company_name="Test Corp",
             )
 
     @pytest.mark.asyncio
-    async def test_generate_cover_letter_invalid_input(self, cv_optimizer, sample_cv_data):
+    async def test_generate_cover_letter_invalid_input(
+        self, cv_optimizer, sample_cv_data
+    ):
         """Test cover letter generation with invalid input."""
         with pytest.raises(ValueError, match="CV data is required"):
             await cv_optimizer.generate_cover_letter(
                 parsed_cv=None,
                 job_description="Test job",
                 job_title="Developer",
-                company_name="Test Corp"
+                company_name="Test Corp",
             )
 
         with pytest.raises(ValueError, match="Job details"):
@@ -241,11 +264,13 @@ John Doe"""
                 parsed_cv=sample_cv_data,
                 job_description="",
                 job_title="Developer",
-                company_name="Test Corp"
+                company_name="Test Corp",
             )
 
     @pytest.mark.asyncio
-    async def test_openai_api_error(self, cv_optimizer, sample_cv_data, sample_job_description):
+    async def test_openai_api_error(
+        self, cv_optimizer, sample_cv_data, sample_job_description
+    ):
         """Test handling of OpenAI API errors."""
         # Setup mock to raise exception
         cv_optimizer.client.chat.completions.create.side_effect = Exception("API Error")
@@ -255,11 +280,13 @@ John Doe"""
                 parsed_cv=sample_cv_data,
                 job_description=sample_job_description,
                 job_title="Developer",
-                company_name="Test Corp"
+                company_name="Test Corp",
             )
 
     @pytest.mark.asyncio
-    async def test_empty_openai_response(self, cv_optimizer, sample_cv_data, sample_job_description):
+    async def test_empty_openai_response(
+        self, cv_optimizer, sample_cv_data, sample_job_description
+    ):
         """Test handling of empty OpenAI responses."""
         # Setup mock with empty response
         mock_response = Mock()
@@ -268,16 +295,18 @@ John Doe"""
 
         cv_optimizer.client.chat.completions.create.return_value = mock_response
 
-        with pytest.raises(Exception, match="Empty response from OpenAI API"):
+        with pytest.raises(Exception, match="Empty response from LLM"):
             await cv_optimizer.optimize_cv_for_job(
                 parsed_cv=sample_cv_data,
                 job_description=sample_job_description,
                 job_title="Developer",
-                company_name="Test Corp"
+                company_name="Test Corp",
             )
 
     @pytest.mark.asyncio
-    async def test_invalid_json_response(self, cv_optimizer, sample_cv_data, sample_job_description):
+    async def test_invalid_json_response(
+        self, cv_optimizer, sample_cv_data, sample_job_description
+    ):
         """Test handling of invalid JSON in OpenAI response."""
         # Setup mock with invalid JSON
         mock_response = Mock()
@@ -291,7 +320,7 @@ John Doe"""
                 parsed_cv=sample_cv_data,
                 job_description=sample_job_description,
                 job_title="Developer",
-                company_name="Test Corp"
+                company_name="Test Corp",
             )
 
     @pytest.mark.asyncio
@@ -302,11 +331,14 @@ John Doe"""
             "keywords_to_add": ["React", "TypeScript", "AWS"],
             "sections_to_enhance": {
                 "experience": "Add more technical details about React projects",
-                "skills": "Group skills by category (Frontend, Backend, Cloud)"
+                "skills": "Group skills by category (Frontend, Backend, Cloud)",
             },
             "formatting_tips": ["Use bullet points", "Quantify achievements"],
             "match_score": 75,
-            "priority_improvements": ["Add React experience", "Include TypeScript skills"]
+            "priority_improvements": [
+                "Add React experience",
+                "Include TypeScript skills",
+            ],
         }
 
         mock_response = Mock()
@@ -318,7 +350,7 @@ John Doe"""
         # Execute suggestions generation
         result = await cv_optimizer.get_optimization_suggestions(
             parsed_cv=sample_cv_data,
-            job_description="React developer position requiring TypeScript"
+            job_description="React developer position requiring TypeScript",
         )
 
         # Verify result structure
@@ -333,12 +365,14 @@ John Doe"""
         self, cv_optimizer, sample_job_description, mock_openai_cover_letter_response
     ):
         """Test cover letter generation with name extraction from CV."""
-        cv_optimizer.client.chat.completions.create.return_value = mock_openai_cover_letter_response
+        cv_optimizer.client.chat.completions.create.return_value = (
+            mock_openai_cover_letter_response
+        )
 
         cv_data = {
             "personal_info": {"full_name": "Jane Smith"},
             "experience": [],
-            "skills": []
+            "skills": [],
         }
 
         result = await cv_optimizer.generate_cover_letter(
@@ -346,7 +380,7 @@ John Doe"""
             job_description=sample_job_description,
             job_title="Developer",
             company_name="Test Corp",
-            user_name=None  # Should extract from CV
+            user_name=None,  # Should extract from CV
         )
 
         # Verify name was extracted and used in prompts
@@ -359,7 +393,9 @@ John Doe"""
         self, cv_optimizer, sample_job_description, mock_openai_cover_letter_response
     ):
         """Test cover letter generation with no name available."""
-        cv_optimizer.client.chat.completions.create.return_value = mock_openai_cover_letter_response
+        cv_optimizer.client.chat.completions.create.return_value = (
+            mock_openai_cover_letter_response
+        )
 
         cv_data = {"experience": [], "skills": []}  # No personal_info
 
@@ -368,7 +404,7 @@ John Doe"""
             job_description=sample_job_description,
             job_title="Developer",
             company_name="Test Corp",
-            user_name=None
+            user_name=None,
         )
 
         # Verify fallback name was used
@@ -381,7 +417,7 @@ John Doe"""
         valid_cv = {
             "summary": "Test summary",
             "experience": [{"role": "Developer"}],
-            "skills": ["Python", "JavaScript"]
+            "skills": ["Python", "JavaScript"],
         }
 
         # Should not raise exception
@@ -406,21 +442,16 @@ John Doe"""
         assert "professional" in cover_letter_prompt.lower()
         assert "company knowledge" in cover_letter_prompt.lower()
 
-    def test_build_user_prompts(self, cv_optimizer, sample_cv_data, sample_job_description):
+    def test_build_user_prompts(
+        self, cv_optimizer, sample_cv_data, sample_job_description
+    ):
         """Test user prompt generation."""
         cv_prompt = cv_optimizer._build_cv_optimization_user_prompt(
-            sample_cv_data,
-            sample_job_description,
-            "Developer",
-            "Test Corp"
+            sample_cv_data, sample_job_description, "Developer", "Test Corp"
         )
 
         cover_letter_prompt = cv_optimizer._build_cover_letter_user_prompt(
-            sample_cv_data,
-            sample_job_description,
-            "Developer",
-            "Test Corp",
-            "John Doe"
+            sample_cv_data, sample_job_description, "Developer", "Test Corp", "John Doe"
         )
 
         # Verify content is included
@@ -437,11 +468,12 @@ John Doe"""
         self, cv_optimizer, sample_cv_data, mock_openai_cv_response
     ):
         """Test legacy optimize_cv method for backward compatibility."""
-        cv_optimizer.client.chat.completions.create.return_value = mock_openai_cv_response
+        cv_optimizer.client.chat.completions.create.return_value = (
+            mock_openai_cv_response
+        )
 
         result = await cv_optimizer.optimize_cv(
-            parsed_cv=sample_cv_data,
-            job_description="Python developer position"
+            parsed_cv=sample_cv_data, job_description="Python developer position"
         )
 
         assert isinstance(result, dict)
@@ -456,8 +488,63 @@ John Doe"""
             assert agent.client is None
 
     def test_configuration_attributes(self, cv_optimizer):
-        """Test CV optimizer configuration attributes."""
-        assert cv_optimizer.model == "gemini-2.0-flash"
+        """Test CV optimizer configuration attributes.
+
+        The agent uses a model fallback chain (gemini-2.5-flash →
+        gemini-2.0-flash-exp → gemini-2.0-flash); the primary model is
+        ``models[0]``.
+        """
+        assert cv_optimizer.models[0] == "gemini-2.5-flash"
+        assert "gemini-2.0-flash" in cv_optimizer.models
         assert cv_optimizer.max_tokens == 3000
         assert cv_optimizer.temperature == 0.3
-        assert cv_optimizer.client is not None
+
+
+class TestFabricationDetector:
+    """``_detect_potential_fabrications`` — heuristic NO_FABRICATION audit.
+
+    The detector is purposefully simple: it flags tech-looking tokens in
+    the optimized output that aren't in the original skills list. We test
+    the three documented behaviours: positive flag, no-flag-when-clean,
+    and graceful empty input.
+    """
+
+    @pytest.fixture
+    def agent(self):
+        """Build an agent without poking the OpenAI client (not needed here)."""
+        with patch("app.agents.cv_optimizer.settings") as mock_settings:
+            mock_settings.openai_api_key = "sk-placeholder-key"
+            return CVOptimizerAgent()
+
+    def test_flags_tech_not_in_original(self, agent):
+        """Original has Python+React; optimized mentions Kubernetes → flagged."""
+        original = ["Python", "React"]
+        optimized = (
+            "Built scalable services in Python and React. "
+            "Deployed workloads on Kubernetes for resilience."
+        )
+        flagged = agent._detect_potential_fabrications(
+            original_skills=original, optimized_text=optimized
+        )
+        # Kubernetes (capitalised → looks like tech) must be flagged.
+        assert any(t.lower() == "kubernetes" for t in flagged)
+        # Original skills must NOT be flagged.
+        lowered = {t.lower() for t in flagged}
+        assert "python" not in lowered
+        assert "react" not in lowered
+
+    def test_no_flags_when_optimized_only_uses_originals(self, agent):
+        """Original has Python+React; optimized mentions only Python → no flags."""
+        original = ["Python", "React"]
+        optimized = "Built backend services in Python. Strong Python developer."
+        flagged = agent._detect_potential_fabrications(
+            original_skills=original, optimized_text=optimized
+        )
+        assert flagged == []
+
+    def test_empty_optimized_returns_empty_list(self, agent):
+        """Empty optimized text → empty list (no crash, no flags)."""
+        flagged = agent._detect_potential_fabrications(
+            original_skills=["Python"], optimized_text=""
+        )
+        assert flagged == []

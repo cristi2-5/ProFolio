@@ -126,24 +126,6 @@ class LLMConfigurationError(AgentError):
         super().__init__(message=message, status_code=500)
 
 
-class InsufficientPeersError(AutoApplyError):
-    """Raised when benchmark group has fewer than 30 peers (GDPR threshold).
-
-    Args:
-        group_size: The actual number of available peers.
-        required: The minimum required (default 30).
-    """
-
-    def __init__(self, group_size: int, required: int = 30) -> None:
-        super().__init__(
-            message=(
-                f"Insufficient peers for benchmarking: {group_size} available, "
-                f"{required} required. No comparative score will be generated."
-            ),
-            status_code=422,
-        )
-
-
 def raise_http_exception(error: AutoApplyError) -> None:
     """Convert an AutoApplyError to a FastAPI HTTPException.
 

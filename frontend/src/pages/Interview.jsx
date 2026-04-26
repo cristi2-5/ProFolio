@@ -47,7 +47,9 @@ function Interview() {
       setPreparations(response.preparations || []);
     } catch (err) {
       if (err.name === 'AbortError') return;
-      console.error('Failed to fetch interview preparations:', err);
+      if (import.meta.env.DEV) {
+        console.error('Failed to fetch interview preparations:', err);
+      }
       setError(err.message || 'Failed to load interview preparations');
     } finally {
       if (!signal?.aborted) setLoading(false);
@@ -228,7 +230,7 @@ function Interview() {
                   marginBottom: 'var(--space-2)',
                 }}
               >
-                No Interview Preparations Yet
+                No interview prep yet
               </h3>
               <p
                 style={{
@@ -236,14 +238,15 @@ function Interview() {
                   marginBottom: 'var(--space-4)',
                 }}
               >
-                Generate AI-powered interview materials for your job
-                applications to get personalized questions and cheat sheets.
+                Pick a job from your list and click "Generate prep" to start —
+                you'll get tailored technical questions, behavioral scenarios,
+                and a tech cheat sheet.
               </p>
               <button
                 onClick={() => navigate('/jobs')}
                 className="btn btn-primary"
               >
-                Browse Jobs
+                Go to Jobs
               </button>
             </div>
           ) : (

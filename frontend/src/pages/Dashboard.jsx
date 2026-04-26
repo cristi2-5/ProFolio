@@ -11,6 +11,9 @@ import { useAuth } from '../contexts/AuthContext';
 import JobPreferences from '../components/JobPreferences';
 import { get, post } from '../api/client';
 
+const ONBOARDING_DISMISSED_KEY = 'profolio.onboarding.dismissed';
+const ONBOARDING_FIRST_SCAN_KEY = 'profolio.onboarding.first_scan_done';
+
 /**
  * Dashboard page component with real backend integration.
  *
@@ -38,6 +41,12 @@ function Dashboard() {
   });
   const [showPreferences, setShowPreferences] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(
+    () => localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1'
+  );
+  const [firstScanDone, setFirstScanDone] = useState(
+    () => localStorage.getItem(ONBOARDING_FIRST_SCAN_KEY) === '1'
+  );
 
   /**
    * Fetch dashboard statistics.
@@ -97,13 +106,22 @@ function Dashboard() {
         preferencesSet,
       });
 
+      // If the backend already has jobs, treat the first scan as completed —
+      // covers users created on a prior device or before this flag existed.
+      if ((jobsData.total_count || 0) > 0) {
+        localStorage.setItem(ONBOARDING_FIRST_SCAN_KEY, '1');
+        setFirstScanDone(true);
+      }
+
       // Show preferences if not set and resume is uploaded
       if (resumeCount > 0 && !preferencesSet) {
         setShowPreferences(true);
       }
     } catch (err) {
       if (err.name === 'AbortError') return;
-      console.error('Failed to fetch dashboard stats:', err);
+      if (import.meta.env.DEV) {
+        console.error('Failed to fetch dashboard stats:', err);
+      }
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
@@ -113,6 +131,7 @@ function Dashboard() {
    * Trigger job scanning manually.
    */
   const triggerJobScan = async () => {
+    if (scanning) return;
     if (!stats.resumeUploaded || !stats.preferencesSet) {
       return;
     }
@@ -121,12 +140,17 @@ function Dashboard() {
       setScanning(true);
       await post('/jobs/scan');
 
+      localStorage.setItem(ONBOARDING_FIRST_SCAN_KEY, '1');
+      setFirstScanDone(true);
+
       // Refresh stats after scan
       setTimeout(() => {
         fetchStats();
       }, 2000);
     } catch (err) {
-      console.error('Failed to trigger job scan:', err);
+      if (import.meta.env.DEV) {
+        console.error('Failed to trigger job scan:', err);
+      }
     } finally {
       setScanning(false);
     }
@@ -223,87 +247,191 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Profile Completion Alert */}
-      {(!stats.resumeUploaded || !stats.preferencesSet) && (
-        <div
-          style={{
-            background: 'var(--color-info-bg)',
-            border: '1px solid var(--color-info)',
-            borderRadius: 'var(--radius-lg)',
-            padding: 'var(--space-4)',
-            marginBottom: 'var(--space-6)',
-            color: 'var(--color-info)',
-          }}
-        >
-          <h4
+      {/* Onboarding checklist — combined empty-state CTA for first-run users */}
+      {(() => {
+        const allDone =
+          stats.resumeUploaded && stats.preferencesSet && firstScanDone;
+        if (allDone || onboardingDismissed) return null;
+
+        const steps = [
+          {
+            key: 'resume',
+            done: stats.resumeUploaded,
+            label: 'Upload your CV',
+            description:
+              'Add a PDF or DOCX so our agents can match jobs and write tailored CVs.',
+            actionLabel: 'Go to Resumes',
+            onAction: () => navigate('/resumes'),
+          },
+          {
+            key: 'preferences',
+            done: stats.preferencesSet,
+            label: 'Set your job preferences (recommended)',
+            description:
+              'Tell us your target role, location, and skills for personalised matching. Optional — you can scan with our default "developer" query first.',
+            actionLabel: 'Set preferences',
+            onAction: () => setShowPreferences(true),
+            // No longer gated on resume — preferences are independent.
+            disabled: false,
+          },
+          {
+            key: 'scan',
+            done: firstScanDone,
+            label: "Run your first job scan",
+            description:
+              'We pull live openings from Adzuna and rank them against your CV. Works without a CV or preferences (match score will be 0).',
+            actionLabel: scanning ? 'Scanning…' : 'Scan jobs',
+            onAction: triggerJobScan,
+            // Only blocked while a scan is in flight.
+            disabled: scanning,
+          },
+        ];
+        const completed = steps.filter((s) => s.done).length;
+
+        return (
+          <div
             style={{
-              fontSize: 'var(--font-size-lg)',
-              fontWeight: 'var(--font-weight-medium)',
-              marginBottom: 'var(--space-2)',
+              background: 'var(--color-info-bg)',
+              border: '1px solid var(--color-info)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--space-4)',
+              marginBottom: 'var(--space-6)',
+              color: 'var(--color-text-primary)',
             }}
           >
-            Complete Your Profile
-          </h4>
-          <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
             <div
               style={{
                 display: 'flex',
+                justifyContent: 'space-between',
                 alignItems: 'center',
-                gap: 'var(--space-2)',
+                marginBottom: 'var(--space-3)',
+                gap: 'var(--space-3)',
               }}
             >
-              <span style={{ fontSize: 'var(--font-size-lg)' }}>
-                {stats.resumeUploaded ? '✅' : '⭕'}
-              </span>
-              <span>Upload and parse your resume</span>
-              {!stats.resumeUploaded && (
-                <button
-                  onClick={() => navigate('/resumes')}
-                  style={{
-                    marginLeft: 'auto',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--color-accent)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--font-size-sm)',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  Go to Resumes
-                </button>
-              )}
+              <h4
+                style={{
+                  fontSize: 'var(--font-size-lg)',
+                  fontWeight: 'var(--font-weight-medium)',
+                  color: 'var(--color-info)',
+                }}
+              >
+                Welcome — let's get you set up ({completed}/3)
+              </h4>
             </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)',
-              }}
-            >
-              <span style={{ fontSize: 'var(--font-size-lg)' }}>
-                {stats.preferencesSet ? '✅' : '⭕'}
-              </span>
-              <span>Set job search preferences</span>
-              {!stats.preferencesSet && (
-                <button
-                  onClick={() => setShowPreferences(true)}
+            <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+              {steps.map((step, idx) => (
+                <div
+                  key={step.key}
                   style={{
-                    marginLeft: 'auto',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--color-accent)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--font-size-sm)',
-                    textDecoration: 'underline',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 'var(--space-3)',
+                    padding: 'var(--space-3)',
+                    background: step.done
+                      ? 'var(--color-bg-secondary)'
+                      : 'var(--color-bg-primary)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border)',
+                    opacity: step.disabled && !step.done ? 0.7 : 1,
                   }}
                 >
-                  Set Now
-                </button>
-              )}
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      fontSize: 'var(--font-size-lg)',
+                      lineHeight: 1,
+                      marginTop: '2px',
+                    }}
+                  >
+                    {step.done ? '☑' : '☐'}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontWeight: 'var(--font-weight-medium)',
+                        marginBottom: 'var(--space-1)',
+                        textDecoration: step.done ? 'line-through' : 'none',
+                        color: step.done
+                          ? 'var(--color-text-muted)'
+                          : 'var(--color-text-primary)',
+                      }}
+                    >
+                      Step {idx + 1} — {step.label}
+                    </div>
+                    {!step.done && (
+                      <p
+                        style={{
+                          fontSize: 'var(--font-size-sm)',
+                          color: 'var(--color-text-secondary)',
+                          margin: 0,
+                        }}
+                      >
+                        {step.description}
+                      </p>
+                    )}
+                  </div>
+                  {!step.done && (
+                    <button
+                      type="button"
+                      onClick={step.onAction}
+                      disabled={step.disabled}
+                      className="btn btn-primary"
+                      style={{
+                        padding: 'var(--space-2) var(--space-3)',
+                        fontSize: 'var(--font-size-sm)',
+                        whiteSpace: 'nowrap',
+                        opacity: step.disabled ? 0.5 : 1,
+                      }}
+                    >
+                      {step.actionLabel}
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* "All set!" confirmation — dismissible once */}
+      {stats.resumeUploaded &&
+        stats.preferencesSet &&
+        firstScanDone &&
+        !onboardingDismissed && (
+          <div
+            style={{
+              background: 'var(--color-success-bg)',
+              border: '1px solid var(--color-success)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--space-3) var(--space-4)',
+              marginBottom: 'var(--space-6)',
+              color: 'var(--color-success)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 'var(--space-3)',
+            }}
+          >
+            <span>✅ All set! Your job hunting workflow is live.</span>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1');
+                setOnboardingDismissed(true);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                fontSize: 'var(--font-size-lg)',
+              }}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
       {/* Job Preferences Section */}
       {showPreferences && (

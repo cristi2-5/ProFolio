@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # ----------------------------------------------------------------------
 # Atoms
@@ -18,10 +18,12 @@ from pydantic import BaseModel, Field
 class TechnicalQuestion(BaseModel):
     """A single technical interview question with ideal-answer guidance."""
 
-    question: str
-    difficulty: str = Field(description="easy | medium | hard")
+    model_config = ConfigDict(extra="ignore")
+
+    question: str = Field(default="")
+    difficulty: str = Field(default="medium", description="easy | medium | hard")
     topics: List[str] = Field(default_factory=list)
-    guidance: str = Field(description="Short guide on what an ideal answer covers")
+    guidance: str = Field(default="", description="Short guide on what an ideal answer covers")
     sample_answer: Optional[str] = Field(
         default=None, description="Example of a strong answer (2-4 sentences)"
     )
@@ -30,9 +32,11 @@ class TechnicalQuestion(BaseModel):
 class BehavioralQuestion(BaseModel):
     """A behavioral question tied to a company-culture cue from the JD."""
 
-    question: str
-    scenario: str = Field(description="Which competency this question probes")
-    star_guidance: str = Field(description="How to structure the STAR answer")
+    model_config = ConfigDict(extra="ignore")
+
+    question: str = Field(default="")
+    scenario: str = Field(default="", description="Which competency this question probes")
+    star_guidance: str = Field(default="", description="How to structure the STAR answer")
     company_context: Optional[str] = Field(
         default=None,
         description="Which culture signal from the JD justifies this question",
@@ -42,8 +46,10 @@ class BehavioralQuestion(BaseModel):
 class TechnologyConcept(BaseModel):
     """One cheat-sheet entry: a technology with a concise definition."""
 
-    concept: str
-    definition: str = Field(description="One-paragraph definition (~2-4 sentences)")
+    model_config = ConfigDict(extra="ignore")
+
+    concept: str = Field(default="")
+    definition: str = Field(default="", description="One-paragraph definition (~2-4 sentences)")
     key_points: List[str] = Field(default_factory=list)
     practical_example: Optional[str] = None
 
@@ -51,9 +57,11 @@ class TechnologyConcept(BaseModel):
 class ExtractedTechnology(BaseModel):
     """Raw output of the deterministic tech extractor."""
 
-    name: str
-    category: str
-    mentions: int
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(default="")
+    category: str = Field(default="")
+    mentions: int = Field(default=0)
 
 
 # ----------------------------------------------------------------------

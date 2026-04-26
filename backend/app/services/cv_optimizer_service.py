@@ -16,7 +16,7 @@ from app.agents.cv_optimizer import CVOptimizerAgent
 from app.models.job import ScrapedJob, UserJob
 from app.models.resume import ParsedResume
 from app.models.user import User
-from app.utils.pdf_export import pdf_exporter, PDFExportError
+from app.utils.pdf_export import PDFExportError, pdf_exporter
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,9 @@ class CVOptimizerService:
             user_job = result.scalar_one_or_none()
 
             if not user_job:
-                raise ValueError(f"No UserJob record found for user {user.id} and job {job.id}")
+                raise ValueError(
+                    f"No UserJob record found for user {user.id} and job {job.id}"
+                )
 
             # Perform AI-powered CV optimization
             optimized_cv = await self.cv_optimizer.optimize_cv_for_job(
@@ -143,7 +145,9 @@ class CVOptimizerService:
             active_resume = result.scalar_one_or_none()
 
             if not active_resume:
-                raise ValueError(f"User {user.id} has no active resume for cover letter generation")
+                raise ValueError(
+                    f"User {user.id} has no active resume for cover letter generation"
+                )
 
             # Get UserJob record
             stmt = select(UserJob).where(
@@ -153,7 +157,9 @@ class CVOptimizerService:
             user_job = result.scalar_one_or_none()
 
             if not user_job:
-                raise ValueError(f"No UserJob record found for user {user.id} and job {job.id}")
+                raise ValueError(
+                    f"No UserJob record found for user {user.id} and job {job.id}"
+                )
 
             # Generate AI-powered cover letter with optional user motivation
             cover_letter = await self.cv_optimizer.generate_cover_letter(
@@ -205,9 +211,8 @@ class CVOptimizerService:
 
         try:
             # Get UserJob record with optimized CV
-            stmt = (
-                select(UserJob)
-                .where(UserJob.user_id == user.id, UserJob.job_id == job_id)
+            stmt = select(UserJob).where(
+                UserJob.user_id == user.id, UserJob.job_id == job_id
             )
             result = await db.execute(stmt)
             user_job = result.scalar_one_or_none()
@@ -281,7 +286,9 @@ class CVOptimizerService:
             safe_company = job.company_name.replace(" ", "_").replace("/", "_")
             filename = f"{safe_name}_cover_letter_{safe_company}.pdf"
 
-            logger.info(f"Cover letter PDF exported successfully: {len(pdf_data)} bytes")
+            logger.info(
+                f"Cover letter PDF exported successfully: {len(pdf_data)} bytes"
+            )
             return pdf_data, filename
 
         except Exception as e:
@@ -363,7 +370,8 @@ class CVOptimizerService:
                 select(UserJob)
                 .where(
                     UserJob.user_id == user.id,
-                    (UserJob.optimized_cv.isnot(None)) | (UserJob.cover_letter.isnot(None))
+                    (UserJob.optimized_cv.isnot(None))
+                    | (UserJob.cover_letter.isnot(None)),
                 )
                 .order_by(desc(UserJob.updated_at))
             )
@@ -388,7 +396,9 @@ class CVOptimizerService:
                     }
                     materials.append(material_info)
 
-            logger.info(f"Retrieved {len(materials)} optimized materials for user {user.id}")
+            logger.info(
+                f"Retrieved {len(materials)} optimized materials for user {user.id}"
+            )
             return materials
 
         except Exception as e:

@@ -76,9 +76,7 @@ class TestTruncateForBudget:
         # Marker-plus-characters; head should dominate when ratio=0.9.
         text = "H" * 5_000 + "T" * 5_000
         result_head = truncate_for_budget(text, token_budget=200, head_ratio=0.9)
-        head_portion, _, tail_portion = result_head.text.partition(
-            "content truncated"
-        )
+        head_portion, _, tail_portion = result_head.text.partition("content truncated")
         # Head chunk should be clearly longer than the tail when ratio=0.9.
         assert len(head_portion) > len(tail_portion) * 2
 
