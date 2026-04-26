@@ -63,4 +63,11 @@ alembic/versions/*.pyc
 # Logs
 # ========================
 *.log
+# log.txt is the §7 audit log per rules.md — keep tracked
 !log.txt
+
+# ========================
+# Ad-hoc / orphan test scripts at repo root
+# (Real tests live in backend/tests/ and frontend/src/**)
+# ========================
+/test_*.py
