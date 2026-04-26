@@ -8,18 +8,82 @@ Job API: Adzuna (selected for free tier, legal compliance, structured JSON).
 """
 
 import logging
+import re
 from typing import Any, Optional
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
 
-from app.clients.adzuna import get_adzuna_client, AdzunaAPIError
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.clients.adzuna import AdzunaAPIError, get_adzuna_client
 from app.models.job import ScrapedJob
 from app.models.user import JobPreference, User
 from app.services.job_service import JobService
 from app.utils.hashing import create_description_hash
 
 logger = logging.getLogger(__name__)
+
+
+# Strip common legal-entity suffixes so "Acme, Inc." and "Acme LLC" dedupe
+# to the same normalized form. Word-boundary anchored to avoid eating the
+# middle of unrelated tokens (e.g. "Incorporation" stays put — but
+# "incorporated" is whitelisted explicitly).
+_COMPANY_SUFFIX_PATTERN = re.compile(
+    r"\b(inc\.?|incorporated|llc|ltd\.?|limited|corp\.?|corporation|co\.?|company|gmbh|sa|ag|plc|pty\.?)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def normalize_company_name(name: Optional[str]) -> str:
+    """Normalize a company name for dedup matching.
+
+    Strips legal suffixes (Inc, LLC, Ltd, ...), lower-cases, removes
+    punctuation and collapses whitespace. The DB still stores the
+    original display value — this is purely for comparison.
+
+    Args:
+        name: Raw company name as it appears on the job posting.
+
+    Returns:
+        Normalized form suitable for equality comparison; empty string
+        if the input is falsy.
+    """
+    if not name:
+        return ""
+    name = name.strip().lower()
+    name = _COMPANY_SUFFIX_PATTERN.sub("", name)
+    # Strip punctuation (anything that isn't word/space) -> single space.
+    name = re.sub(r"[^\w\s]", " ", name)
+    name = re.sub(r"\s+", " ", name).strip()
+    return name
+
+
+def _fuzzy_lock_key(company_norm: str, title_norm: str) -> int:
+    """Stable 63-bit integer key for pg_advisory_xact_lock.
+
+    Keyed on (company_norm, title_norm) so two concurrent inserts of the
+    same role serialize through the lock and only one wins the dedup
+    check. Python's built-in ``hash()`` is randomized per-process, so we
+    use a deterministic SHA-256-derived integer instead.
+    """
+    import hashlib
+
+    digest = hashlib.sha256(f"{company_norm}|{title_norm}".encode("utf-8")).digest()
+    # Postgres advisory locks use signed bigints; mask to 63 bits to stay
+    # in the positive range.
+    return int.from_bytes(digest[:8], "big") & 0x7FFFFFFFFFFFFFFF
+
+
+def _is_postgres(db: AsyncSession) -> bool:
+    """Return True if the bound engine speaks PostgreSQL.
+
+    Advisory locks are a PG-only feature; tests that swap in SQLite
+    should silently skip the lock rather than fail.
+    """
+    try:
+        return db.bind.dialect.name == "postgresql"
+    except Exception:
+        return False
 
 
 class JobScannerAgent:
@@ -108,13 +172,15 @@ class JobScannerAgent:
                     scraped_job = await self._process_and_deduplicate_job(job_data, db)
                     if scraped_job:
                         scraped_jobs.append(scraped_job)
-                        new_jobs.append({
-                            "id": str(scraped_job.id),
-                            "company_name": scraped_job.company_name,
-                            "job_title": scraped_job.job_title,
-                            "location": scraped_job.location,
-                            "external_url": scraped_job.external_url,
-                        })
+                        new_jobs.append(
+                            {
+                                "id": str(scraped_job.id),
+                                "company_name": scraped_job.company_name,
+                                "job_title": scraped_job.job_title,
+                                "location": scraped_job.location,
+                                "external_url": scraped_job.external_url,
+                            }
+                        )
                     else:
                         existing = await self._find_existing_scraped_job(job_data, db)
                         if existing is not None:
@@ -130,13 +196,19 @@ class JobScannerAgent:
             all_jobs = scraped_jobs + unassociated_duplicates
             if all_jobs:
                 try:
-                    user_jobs = await self.job_service.match_jobs_to_user(user, all_jobs, db)
-                    logger.info(f"Created {len(user_jobs)} job matches for user {user_id}")
+                    user_jobs = await self.job_service.match_jobs_to_user(
+                        user, all_jobs, db
+                    )
+                    logger.info(
+                        f"Created {len(user_jobs)} job matches for user {user_id}"
+                    )
                 except Exception as e:
                     logger.error(f"Error matching jobs to user {user_id}: {e}")
 
             await db.commit()
-            logger.info(f"Scan complete for user {user_id}: {len(new_jobs)} new jobs saved")
+            logger.info(
+                f"Scan complete for user {user_id}: {len(new_jobs)} new jobs saved"
+            )
             return new_jobs
 
         except Exception as e:
@@ -160,7 +232,9 @@ class JobScannerAgent:
         """
         # Extract job fields from Adzuna response
         external_url = job_data.get("redirect_url")
-        company_name = job_data.get("company", {}).get("display_name", "Unknown Company")
+        company_name = job_data.get("company", {}).get(
+            "display_name", "Unknown Company"
+        )
         job_title = job_data.get("title", "Unknown Position")
         description = job_data.get("description", "")
         location_data = job_data.get("location", {})
@@ -169,7 +243,25 @@ class JobScannerAgent:
         # Create description hash for deduplication
         description_hash = create_description_hash(description)
 
-        # Check for existing duplicate by URL
+        # Normalized forms for fuzzy dedup matching. The DB still stores
+        # the original ``company_name`` for display; normalization is only
+        # used when comparing against existing rows.
+        norm_company = normalize_company_name(company_name)
+        norm_title = job_title.strip().lower() if job_title else ""
+
+        # Pessimistic lock for the fuzzy-match path. There's no DB-level
+        # unique index on (normalized_company, normalized_title), so two
+        # concurrent scrapers could otherwise both pass the SELECT and
+        # both INSERT. The advisory lock — released automatically at txn
+        # end — serializes them. Skip on SQLite (tests).
+        if _is_postgres(db):
+            lock_key = _fuzzy_lock_key(norm_company, norm_title)
+            await db.execute(
+                text("SELECT pg_advisory_xact_lock(:k)").bindparams(k=lock_key)
+            )
+
+        # Check for existing duplicate by URL (DB-level unique constraint
+        # exists on external_url, so this is the cheap fast path).
         if external_url:
             stmt = select(ScrapedJob).where(ScrapedJob.external_url == external_url)
             result = await db.execute(stmt)
@@ -177,16 +269,23 @@ class JobScannerAgent:
                 logger.debug(f"Duplicate job found by URL: {external_url}")
                 return None
 
-        # Check for cross-platform duplicate by content signature
+        # Check for cross-platform duplicate by content signature.
+        # We narrow on the indexed ``description_hash`` first, then filter
+        # in Python using normalized company/title — that way "Acme Inc"
+        # and "Acme, LLC" cross-platform repostings collapse together.
         stmt = select(ScrapedJob).where(
-            ScrapedJob.company_name == company_name,
-            ScrapedJob.job_title == job_title,
             ScrapedJob.description_hash == description_hash,
         )
         result = await db.execute(stmt)
-        if result.scalar_one_or_none():
-            logger.debug(f"Duplicate job found by content: {company_name} - {job_title}")
-            return None
+        for candidate in result.scalars():
+            if (
+                normalize_company_name(candidate.company_name) == norm_company
+                and (candidate.job_title or "").strip().lower() == norm_title
+            ):
+                logger.debug(
+                    f"Duplicate job found by content: {company_name} - {job_title}"
+                )
+                return None
 
         # Create new job record
         try:
@@ -208,7 +307,9 @@ class JobScannerAgent:
         except IntegrityError as e:
             # Handle race condition where another process created the same job
             await db.rollback()
-            logger.debug(f"Duplicate job detected during save: {company_name} - {job_title}")
+            logger.debug(
+                f"Duplicate job detected during save: {company_name} - {job_title}"
+            )
             return None
 
     async def _find_existing_scraped_job(
@@ -231,17 +332,25 @@ class JobScannerAgent:
             if existing:
                 return existing
 
-        company_name = job_data.get("company", {}).get("display_name", "Unknown Company")
+        company_name = job_data.get("company", {}).get(
+            "display_name", "Unknown Company"
+        )
         job_title = job_data.get("title", "Unknown Position")
         description_hash = create_description_hash(job_data.get("description", ""))
+        norm_company = normalize_company_name(company_name)
+        norm_title = job_title.strip().lower() if job_title else ""
         result = await db.execute(
             select(ScrapedJob).where(
-                ScrapedJob.company_name == company_name,
-                ScrapedJob.job_title == job_title,
                 ScrapedJob.description_hash == description_hash,
             )
         )
-        return result.scalar_one_or_none()
+        for candidate in result.scalars():
+            if (
+                normalize_company_name(candidate.company_name) == norm_company
+                and (candidate.job_title or "").strip().lower() == norm_title
+            ):
+                return candidate
+        return None
 
     def _build_search_query(self, preferences: JobPreference) -> str:
         """Build Adzuna search query from user preferences.

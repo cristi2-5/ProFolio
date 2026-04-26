@@ -7,8 +7,10 @@ Works with the Job Scanner agent for automated discovery.
 
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any, Optional, Tuple
-from sqlalchemy import and_, desc, asc, func, or_, select
+
+from sqlalchemy import and_, asc, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -67,7 +69,9 @@ class JobService:
         active_resume = result.scalar_one_or_none()
 
         if not active_resume:
-            logger.warning(f"User {user.id} has no active resume. Jobs will be added with 0 match score.")
+            logger.warning(
+                f"User {user.id} has no active resume. Jobs will be added with 0 match score."
+            )
 
         user_jobs = []
         for job in jobs:
@@ -153,7 +157,7 @@ class JobService:
         """
         if not resume:
             return 0
-            
+
         score = 0
         parsed_cv = resume.parsed_data or {}
 
@@ -199,10 +203,10 @@ class JobService:
 
         # Common tech skills patterns
         tech_patterns = [
-            r'\b(?:python|java|javascript|typescript|react|angular|vue|node\.?js)\b',
-            r'\b(?:sql|postgresql|mysql|mongodb|redis|docker|kubernetes)\b',
-            r'\b(?:aws|azure|gcp|cloud|api|rest|graphql|microservices)\b',
-            r'\b(?:git|agile|scrum|ci/cd|devops|linux|unix)\b',
+            r"\b(?:python|java|javascript|typescript|react|angular|vue|node\.?js)\b",
+            r"\b(?:sql|postgresql|mysql|mongodb|redis|docker|kubernetes)\b",
+            r"\b(?:aws|azure|gcp|cloud|api|rest|graphql|microservices)\b",
+            r"\b(?:git|agile|scrum|ci/cd|devops|linux|unix)\b",
         ]
 
         requirements = set()
@@ -214,7 +218,7 @@ class JobService:
 
         # Also look for explicit requirements sections
         req_section_match = re.search(
-            r'(?:requirements?|qualifications?|skills?):?(.*?)(?:\n\n|\n[A-Z]|$)',
+            r"(?:requirements?|qualifications?|skills?):?(.*?)(?:\n\n|\n[A-Z]|$)",
             description,
             re.IGNORECASE | re.DOTALL,
         )
@@ -243,17 +247,17 @@ class JobService:
 
         # Remove common job level indicators
         title_clean = re.sub(
-            r'\b(?:senior|junior|lead|principal|staff|intern|entry.level|mid.level)\b',
-            '',
-            job_title.lower()
+            r"\b(?:senior|junior|lead|principal|staff|intern|entry.level|mid.level)\b",
+            "",
+            job_title.lower(),
         )
 
         # Extract role keywords
         keywords = set()
         role_patterns = [
-            r'\b(?:engineer|developer|programmer|architect|analyst|designer)\b',
-            r'\b(?:frontend|backend|fullstack|full.stack|devops|qa|sre)\b',
-            r'\b(?:software|web|mobile|data|ml|ai|cloud)\b',
+            r"\b(?:engineer|developer|programmer|architect|analyst|designer)\b",
+            r"\b(?:frontend|backend|fullstack|full.stack|devops|qa|sre)\b",
+            r"\b(?:software|web|mobile|data|ml|ai|cloud)\b",
         ]
 
         for pattern in role_patterns:
@@ -262,7 +266,9 @@ class JobService:
 
         return keywords
 
-    def _calculate_skills_match(self, user_skills: set[str], job_requirements: set[str]) -> int:
+    def _calculate_skills_match(
+        self, user_skills: set[str], job_requirements: set[str]
+    ) -> int:
         """Calculate skill overlap score.
 
         Args:
@@ -284,7 +290,9 @@ class JobService:
         match_ratio = matches / total_requirements
         return int(match_ratio * 40)
 
-    def _calculate_title_match(self, parsed_cv: dict, job_title_keywords: set[str]) -> int:
+    def _calculate_title_match(
+        self, parsed_cv: dict, job_title_keywords: set[str]
+    ) -> int:
         """Calculate job title relevance score.
 
         Args:
@@ -328,11 +336,16 @@ class JobService:
         # Infer required experience from job title and description
         job_text = f"{job.job_title} {job.description or ''}".lower()
 
-        if any(term in job_text for term in ["senior", "lead", "principal", "10+ years", "8+ years"]):
+        if any(
+            term in job_text
+            for term in ["senior", "lead", "principal", "10+ years", "8+ years"]
+        ):
             required_years = 8
         elif any(term in job_text for term in ["mid-level", "5+ years", "3+ years"]):
             required_years = 3
-        elif any(term in job_text for term in ["junior", "entry", "1+ year", "0-2 years"]):
+        elif any(
+            term in job_text for term in ["junior", "entry", "1+ year", "0-2 years"]
+        ):
             required_years = 1
         else:
             required_years = 2  # Default assumption
@@ -348,9 +361,9 @@ class JobService:
             if gap <= 1:
                 return 12  # Slight underqualification
             elif gap <= 3:
-                return 8   # Moderate gap
+                return 8  # Moderate gap
             else:
-                return 3   # Significant gap
+                return 3  # Significant gap
 
     def _calculate_domain_match(self, parsed_cv: dict, job: ScrapedJob) -> int:
         """Calculate industry/domain compatibility.
@@ -371,8 +384,16 @@ class JobService:
             if isinstance(exp, dict) and "company" in exp:
                 user_company = exp["company"].lower()
                 # Check for similar company patterns (startup, corp, etc.)
-                if any(indicator in job_company and indicator in user_company
-                       for indicator in ["tech", "software", "systems", "solutions", "labs"]):
+                if any(
+                    indicator in job_company and indicator in user_company
+                    for indicator in [
+                        "tech",
+                        "software",
+                        "systems",
+                        "solutions",
+                        "labs",
+                    ]
+                ):
                     return 15
 
         # Check for domain-specific technologies
@@ -462,7 +483,11 @@ class JobService:
         total_count = count_result.scalar_one()
 
         # Apply ordering and pagination
-        paged_stmt = base_stmt.order_by(order_expr, desc(UserJob.created_at)).limit(limit).offset(offset)
+        paged_stmt = (
+            base_stmt.order_by(order_expr, desc(UserJob.created_at))
+            .limit(limit)
+            .offset(offset)
+        )
         result = await db.execute(paged_stmt)
         jobs = list(result.scalars().all())
 
@@ -473,34 +498,87 @@ class JobService:
         user_job_id: str,
         new_status: str,
         db: AsyncSession,
+        user_id: Optional[str] = None,
     ) -> Optional[UserJob]:
-        """Update the status of a user-job relationship.
+        """Update the status of a user-job relationship atomically.
 
-        When transitioning to 'applied', automatically records `applied_at`
-        timestamp so the Application History tab can show when the user applied.
+        Uses a single ``UPDATE ... RETURNING`` statement to avoid the
+        read-modify-write race where two concurrent "Apply" clicks could
+        both pass an in-Python check and both set ``applied_at``. When
+        transitioning to ``"applied"``, the WHERE clause is constrained so
+        the update only fires on rows whose ``applied_at`` is still NULL —
+        making a duplicate "Apply" an idempotent no-op rather than a clobber.
+
+        If the apply UPDATE matches zero rows we fall back to a SELECT and
+        return the existing state (idempotent 200 — friendlier UX than 409).
 
         Args:
             user_job_id: UserJob UUID.
             new_status: New status value.
             db: Database session.
+            user_id: Optional owner UUID — if provided, narrows the WHERE
+                clause so the update only fires when the row belongs to
+                this user. Callers that have already validated ownership
+                can omit it without changing behaviour.
 
         Returns:
             UserJob | None: Updated user-job or None if not found.
         """
-        from datetime import datetime, timezone  # local import to avoid circular
+        is_apply = new_status == "applied"
 
-        user_job = await db.get(UserJob, user_job_id)
-        if not user_job:
-            return None
+        where_clauses = [UserJob.id == user_job_id]
+        if user_id is not None:
+            where_clauses.append(UserJob.user_id == user_id)
 
-        user_job.status = new_status
+        # Apply transition: only fire on rows that haven't been applied yet.
+        # Two simultaneous "Apply" clicks → only one wins the UPDATE, the
+        # other matches zero rows and falls through to the SELECT below.
+        if is_apply:
+            where_clauses.append(UserJob.applied_at.is_(None))
+            values: dict[str, Any] = {
+                "status": new_status,
+                "applied_at": datetime.now(timezone.utc),
+            }
+        else:
+            values = {"status": new_status}
 
-        # Record the exact moment the user clicked "Applied"
-        if new_status == "applied" and user_job.applied_at is None:
-            user_job.applied_at = datetime.now(timezone.utc)
+        stmt = (
+            update(UserJob)
+            .where(*where_clauses)
+            .values(**values)
+            .returning(UserJob.id)
+            .execution_options(synchronize_session=False)
+        )
+        result = await db.execute(stmt)
+        updated_id = result.scalar_one_or_none()
+
+        if updated_id is None:
+            # Either the row doesn't exist (or isn't owned by user_id), or
+            # it's an apply on an already-applied row. Fall back to SELECT —
+            # for the latter we want to return the current state (idempotent).
+            select_where = [UserJob.id == user_job_id]
+            if user_id is not None:
+                select_where.append(UserJob.user_id == user_id)
+            existing = await db.execute(select(UserJob).where(*select_where))
+            existing_row = existing.scalar_one_or_none()
+            if existing_row is None:
+                return None
+            # Already-applied case: idempotent success, no commit needed.
+            await db.commit()
+            logger.info(
+                f"UserJob {user_job_id} status update is a no-op "
+                f"(already in target state for '{new_status}')"
+            )
+            await db.refresh(existing_row)
+            return existing_row
 
         await db.commit()
-        await db.refresh(user_job)
+
+        # Re-fetch the updated row so callers get a fully populated ORM
+        # instance (the UPDATE...RETURNING above only returned the id to
+        # keep the statement simple and avoid relationship-load issues).
+        refreshed = await db.execute(select(UserJob).where(UserJob.id == user_job_id))
+        user_job = refreshed.scalar_one_or_none()
 
         logger.info(f"Updated UserJob {user_job_id} status to {new_status}")
         return user_job
