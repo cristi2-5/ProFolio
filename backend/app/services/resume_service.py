@@ -5,14 +5,14 @@ Handles file storage, triggers the CV Profiler agent for parsing,
 and manages resume CRUD operations with proper user isolation.
 """
 
+import logging
 import os
 import uuid
-import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,10 +20,17 @@ from app.agents.cv_profiler import CVProfilerAgent
 from app.config import get_settings
 from app.models.resume import ParsedResume
 from app.models.user import User
-from app.utils.exceptions import NotFoundError, raise_http_exception
+from app.utils.exceptions import (
+    AgentError,
+    CVProfilerError,
+    NotFoundError,
+    raise_http_exception,
+)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+MAX_RESUMES_PER_USER = settings.max_resumes_per_user
 
 
 class ResumeService:
@@ -48,10 +55,7 @@ class ResumeService:
         logger.info(f"Resume upload directory: {self.upload_dir.absolute()}")
 
     async def upload_and_parse(
-        self,
-        db: AsyncSession,
-        user: User,
-        file: UploadFile
+        self, db: AsyncSession, user: User, file: UploadFile
     ) -> ParsedResume:
         """Upload CV file, parse with AI, and store results.
 
@@ -65,8 +69,19 @@ class ResumeService:
 
         Raises:
             ValueError: If file validation fails or parsing errors occur.
+            HTTPException: 413 if the user's resume quota is exhausted.
             Exception: If file storage or database operations fail.
         """
+        existing_count = await self._count_user_resumes(db, user.id)
+        if existing_count >= MAX_RESUMES_PER_USER:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(
+                    f"Maximum of {MAX_RESUMES_PER_USER} resumes per user reached. "
+                    "Delete an old resume before uploading a new one."
+                ),
+            )
+
         try:
             # Generate unique filename
             file_id = str(uuid.uuid4())
@@ -96,9 +111,11 @@ class ResumeService:
             resume = ParsedResume(
                 user_id=user.id,
                 original_filename=file.filename,
-                file_url=str(file_path),  # Local file path (can be replaced with S3 URL later)
+                file_url=str(
+                    file_path
+                ),  # Local file path (can be replaced with S3 URL later)
                 parsed_data=parsed_data,
-                is_active=is_active
+                is_active=is_active,
             )
 
             db.add(resume)
@@ -112,12 +129,17 @@ class ResumeService:
             file_path.unlink(missing_ok=True)
             logger.error(f"Resume processing validation error: {e}")
             raise
+        except AgentError:
+            file_path.unlink(missing_ok=True)
+            raise
         except Exception as e:
             file_path.unlink(missing_ok=True)
             logger.error(f"Resume processing failed: {e}")
             raise Exception(f"Resume processing failed: {str(e)}")
 
-    async def list_user_resumes(self, db: AsyncSession, user_id: uuid.UUID) -> List[ParsedResume]:
+    async def list_user_resumes(
+        self, db: AsyncSession, user_id: uuid.UUID
+    ) -> List[ParsedResume]:
         """Retrieve all resumes for a user ordered by creation date.
 
         Args:
@@ -135,10 +157,7 @@ class ResumeService:
         return result.scalars().all()
 
     async def get_user_resume(
-        self,
-        db: AsyncSession,
-        user_id: uuid.UUID,
-        resume_id: uuid.UUID
+        self, db: AsyncSession, user_id: uuid.UUID, resume_id: uuid.UUID
     ) -> ParsedResume:
         """Get specific resume by ID with user ownership validation.
 
@@ -155,8 +174,7 @@ class ResumeService:
         """
         result = await db.execute(
             select(ParsedResume).where(
-                ParsedResume.id == resume_id,
-                ParsedResume.user_id == user_id
+                ParsedResume.id == resume_id, ParsedResume.user_id == user_id
             )
         )
         resume = result.scalar_one_or_none()
@@ -172,7 +190,7 @@ class ResumeService:
         user_id: uuid.UUID,
         resume_id: uuid.UUID,
         parsed_data: Optional[dict] = None,
-        is_active: Optional[bool] = None
+        is_active: Optional[bool] = None,
     ) -> ParsedResume:
         """Update resume with manual corrections or active status.
 
@@ -193,9 +211,7 @@ class ResumeService:
         resume = await self.get_user_resume(db, user_id, resume_id)
 
         # Prepare update fields
-        update_fields = {
-            "updated_at": datetime.now(timezone.utc)
-        }
+        update_fields = {"updated_at": datetime.now(timezone.utc)}
 
         if parsed_data is not None:
             update_fields["parsed_data"] = parsed_data
@@ -218,10 +234,7 @@ class ResumeService:
         return resume
 
     async def delete_resume(
-        self,
-        db: AsyncSession,
-        user_id: uuid.UUID,
-        resume_id: uuid.UUID
+        self, db: AsyncSession, user_id: uuid.UUID, resume_id: uuid.UUID
     ) -> None:
         """Delete resume and associated files.
 
@@ -251,10 +264,7 @@ class ResumeService:
         logger.info(f"Deleted resume record: {resume_id}")
 
     async def set_active_resume(
-        self,
-        db: AsyncSession,
-        user_id: uuid.UUID,
-        resume_id: uuid.UUID
+        self, db: AsyncSession, user_id: uuid.UUID, resume_id: uuid.UUID
     ) -> ParsedResume:
         """Set a resume as the user's active CV.
 
@@ -275,7 +285,9 @@ class ResumeService:
         # Activate the specified resume
         return await self.update_resume(db, user_id, resume_id, is_active=True)
 
-    async def get_active_resume(self, db: AsyncSession, user_id: uuid.UUID) -> Optional[ParsedResume]:
+    async def get_active_resume(
+        self, db: AsyncSession, user_id: uuid.UUID
+    ) -> Optional[ParsedResume]:
         """Get user's currently active resume.
 
         Args:
@@ -287,8 +299,7 @@ class ResumeService:
         """
         result = await db.execute(
             select(ParsedResume).where(
-                ParsedResume.user_id == user_id,
-                ParsedResume.is_active == True
+                ParsedResume.user_id == user_id, ParsedResume.is_active == True
             )
         )
         return result.scalar_one_or_none()
@@ -304,13 +315,12 @@ class ResumeService:
         )
         return len(result.scalars().all())
 
-    async def _deactivate_user_resumes(self, db: AsyncSession, user_id: uuid.UUID) -> None:
+    async def _deactivate_user_resumes(
+        self, db: AsyncSession, user_id: uuid.UUID
+    ) -> None:
         """Deactivate all resumes for a user."""
         await db.execute(
             update(ParsedResume)
-            .where(
-                ParsedResume.user_id == user_id,
-                ParsedResume.is_active == True
-            )
+            .where(ParsedResume.user_id == user_id, ParsedResume.is_active == True)
             .values(is_active=False, updated_at=datetime.now(timezone.utc))
         )
