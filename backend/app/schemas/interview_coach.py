@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ----------------------------------------------------------------------
 # Atoms
 # ----------------------------------------------------------------------
@@ -72,6 +71,15 @@ class InterviewPrepResponse(BaseModel):
     generated_at: str
     job_title: str
     company_name: str
+    jd_truncated: bool = Field(
+        default=False,
+        description="Whether the JD was truncated to fit the prompt token budget",
+    )
+    jd_truncation_chars_dropped: int = Field(
+        default=0,
+        ge=0,
+        description="Number of characters dropped from the JD during truncation",
+    )
 
 
 class InterviewPrepSummary(BaseModel):

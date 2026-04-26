@@ -12,6 +12,41 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class OptimizedExperience(BaseModel):
+    """Single optimized experience entry returned by the LLM."""
+
+    company: str = ""
+    role: str = ""
+    duration: Optional[str] = None
+    description: str = ""
+
+
+class OptimizedCV(BaseModel):
+    """Schema for the JSON object the LLM returns from /optimize.
+
+    Fields are intentionally permissive (defaults + extras allowed) so
+    minor LLM drift on optional sections doesn't fail the whole call —
+    but the core structure is enforced.
+    """
+
+    model_config = {"extra": "allow"}
+
+    summary: str = ""
+    experience: List[OptimizedExperience] = Field(default_factory=list)
+    skills: List[str] = Field(default_factory=list)
+    education: List[Dict[str, Any]] = Field(default_factory=list)
+    optimized_keywords: List[str] = Field(default_factory=list)
+    changes_summary: List[str] = Field(default_factory=list)
+    potential_fabrications: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Heuristic warnings: tokens in the optimized CV that look like "
+            "technologies/skills but were not present in the original CV. "
+            "Caller should surface these for user verification, not block."
+        ),
+    )
+
+
 class CVOptimizationRequest(BaseModel):
     """Schema for CV optimization requests.
 
