@@ -8,6 +8,7 @@ Supports common resume formats with error handling and validation.
 import logging
 import mimetypes
 import os
+import zipfile
 from pathlib import Path
 from typing import List, Tuple
 
@@ -19,11 +20,17 @@ logger = logging.getLogger(__name__)
 # Supported file types with corresponding MIME types
 SUPPORTED_MIME_TYPES = {
     "application/pdf": ".pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx"
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
 }
 
 SUPPORTED_EXTENSIONS = [".pdf", ".docx"]
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB limit
+
+# Magic-byte signatures (extension-spoofing defence; mimetypes.guess_type is
+# extension-based and trivially bypassable).
+_PDF_MAGIC = b"%PDF"
+_ZIP_MAGIC = b"PK\x03\x04"
+_DOCX_REQUIRED_MEMBER = "word/document.xml"
 
 
 def validate_cv_file(file_path: str, original_filename: str) -> Tuple[bool, str]:
@@ -55,21 +62,56 @@ def validate_cv_file(file_path: str, original_filename: str) -> Tuple[bool, str]
         if file_size == 0:
             return False, "File is empty"
         if file_size > MAX_FILE_SIZE:
-            return False, f"File size ({file_size / 1024 / 1024:.1f}MB) exceeds limit ({MAX_FILE_SIZE / 1024 / 1024}MB)"
+            return (
+                False,
+                f"File size ({file_size / 1024 / 1024:.1f}MB) exceeds limit ({MAX_FILE_SIZE / 1024 / 1024}MB)",
+            )
 
         # Check extension
         file_extension = Path(original_filename).suffix.lower()
         if file_extension not in SUPPORTED_EXTENSIONS:
-            return False, f"File extension '{file_extension}' not supported. Allowed: {', '.join(SUPPORTED_EXTENSIONS)}"
+            return (
+                False,
+                f"File extension '{file_extension}' not supported. Allowed: {', '.join(SUPPORTED_EXTENSIONS)}",
+            )
 
         # MIME type verification (security: prevents .pdf.exe type attacks)
         detected_mime, _ = mimetypes.guess_type(file_path)
         if detected_mime not in SUPPORTED_MIME_TYPES:
-            return False, f"File type not recognized or unsupported. Detected: {detected_mime}"
+            return (
+                False,
+                f"File type not recognized or unsupported. Detected: {detected_mime}",
+            )
+
+        # Magic-byte verification — extension/MIME alone are spoofable.
+        with open(file_path, "rb") as raw:
+            header = raw.read(4)
+
+        if file_extension == ".pdf":
+            if header != _PDF_MAGIC:
+                return (
+                    False,
+                    "File content does not match PDF format (magic bytes mismatch)",
+                )
+        elif file_extension == ".docx":
+            if header != _ZIP_MAGIC:
+                return (
+                    False,
+                    "File content does not match DOCX format (magic bytes mismatch)",
+                )
+            try:
+                with zipfile.ZipFile(file_path) as zf:
+                    if _DOCX_REQUIRED_MEMBER not in zf.namelist():
+                        return (
+                            False,
+                            "ZIP archive is not a valid DOCX (missing word/document.xml)",
+                        )
+            except zipfile.BadZipFile:
+                return False, "DOCX file is not a valid ZIP archive"
 
         # File integrity check (attempt to open with appropriate library)
         if file_extension == ".pdf":
-            with open(file_path, 'rb') as pdf_file:
+            with open(file_path, "rb") as pdf_file:
                 pdf_reader = pypdf.PdfReader(pdf_file)
                 if len(pdf_reader.pages) == 0:
                     return False, "PDF file contains no pages"
@@ -104,7 +146,7 @@ def extract_text_from_pdf(file_path: str) -> str:
     try:
         extracted_text = []
 
-        with open(file_path, 'rb') as pdf_file:
+        with open(file_path, "rb") as pdf_file:
             pdf_reader = pypdf.PdfReader(pdf_file)
 
             if len(pdf_reader.pages) == 0:
@@ -115,9 +157,13 @@ def extract_text_from_pdf(file_path: str) -> str:
                 try:
                     page_text = page.extract_text()
                     if page_text.strip():  # Only add non-empty pages
-                        extracted_text.append(f"--- Page {page_num + 1} ---\n{page_text}")
+                        extracted_text.append(
+                            f"--- Page {page_num + 1} ---\n{page_text}"
+                        )
                 except Exception as e:
-                    logger.warning(f"Failed to extract text from PDF page {page_num + 1}: {e}")
+                    logger.warning(
+                        f"Failed to extract text from PDF page {page_num + 1}: {e}"
+                    )
                     continue
 
             if not extracted_text:
@@ -235,12 +281,12 @@ def clean_extracted_text(text: str) -> str:
         return ""
 
     # Split into lines for processing
-    lines = text.split('\n')
+    lines = text.split("\n")
     cleaned_lines = []
 
     for line in lines:
         # Remove excessive whitespace
-        cleaned_line = ' '.join(line.split())
+        cleaned_line = " ".join(line.split())
 
         # Skip empty lines
         if not cleaned_line:
@@ -253,10 +299,11 @@ def clean_extracted_text(text: str) -> str:
             cleaned_lines.append(cleaned_line)
 
     # Join with single newlines and limit consecutive newlines
-    cleaned_text = '\n'.join(cleaned_lines)
+    cleaned_text = "\n".join(cleaned_lines)
 
     # Remove excessive consecutive newlines (more than 2)
     import re
-    cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)
+
+    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text)
 
     return cleaned_text.strip()

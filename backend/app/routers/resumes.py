@@ -5,8 +5,8 @@ Handles CV file upload (PDF/DOCX) and triggers the CV Profiler agent
 for automatic parsing. Also supports manual corrections to parsed data.
 """
 
-from typing import Annotated, List
 import uuid
+from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +16,12 @@ from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.schemas.resume import ResumeResponse, ResumeUpdate
 from app.services.resume_service import ResumeService
-from app.utils.exceptions import NotFoundError, raise_http_exception
+from app.utils.exceptions import (
+    AgentError,
+    CVProfilerError,
+    NotFoundError,
+    raise_http_exception,
+)
 
 router = APIRouter(prefix="/api/resumes", tags=["Resumes"])
 resume_service = ResumeService()
@@ -57,8 +62,7 @@ async def upload_resume(
         # Validate file is provided
         if not file.filename:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No file provided"
+                status_code=status.HTTP_400_BAD_REQUEST, detail="No file provided"
             )
 
         # Upload and parse via service layer
@@ -68,14 +72,23 @@ async def upload_resume(
         return ResumeResponse.model_validate(resume)
 
     except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except CVProfilerError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "We couldn't parse your CV — try uploading a clearer "
+                "text-based PDF or DOCX"
+            ),
         )
+    except AgentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Resume processing failed: {str(e)}"
+            detail=f"Resume processing failed: {str(e)}",
         )
 
 
@@ -173,7 +186,7 @@ async def update_resume(
             current_user.id,
             resume_id,
             parsed_data=update_data.parsed_data,
-            is_active=update_data.is_active
+            is_active=update_data.is_active,
         )
         await db.commit()
 
@@ -279,7 +292,7 @@ async def get_active_resume(
     if not resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active resume found. Please upload and activate a resume first."
+            detail="No active resume found. Please upload and activate a resume first.",
         )
 
     return ResumeResponse.model_validate(resume)
