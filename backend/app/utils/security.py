@@ -22,7 +22,7 @@ pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
     bcrypt__rounds=12,  # Secure but not excessive
-    bcrypt__ident="2b"  # Standard bcrypt identifier
+    bcrypt__ident="2b",  # Standard bcrypt identifier
 )
 
 
@@ -35,19 +35,18 @@ def hash_password(password: str) -> str:
     Returns:
         str: The bcrypt hash string.
     """
-    try:
-        # Workaround for bcrypt version compatibility issue
-        # Manually truncate to 72 bytes to prevent the error
-        if len(password.encode('utf-8')) > 72:
-            password = password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
+    if len(password.encode("utf-8")) > 72:
+        raise ValueError("Password too long: max 72 bytes when UTF-8 encoded")
 
+    try:
         return pwd_context.hash(password)
     except Exception as e:
         # If bcrypt fails, try fallback approach
         try:
             import bcrypt
+
             salt = bcrypt.gensalt()
-            return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+            return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
         except Exception as e2:
             raise Exception(f"Password hashing failed: {e}")
 
@@ -68,7 +67,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         # Fallback to direct bcrypt
         try:
             import bcrypt
-            return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+            return bcrypt.checkpw(
+                plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+            )
         except Exception as e2:
             return False
 
@@ -146,14 +148,14 @@ def validate_password_strength(password: str) -> Tuple[bool, List[str]]:
         errors.append("Password must be no more than 72 characters long")
 
     # Character type requirements
-    if not re.search(r'[A-Z]', password):
+    if not re.search(r"[A-Z]", password):
         errors.append("Password must contain at least one uppercase letter")
 
-    if not re.search(r'[a-z]', password):
+    if not re.search(r"[a-z]", password):
         errors.append("Password must contain at least one lowercase letter")
 
     # Require either a number OR special character (more flexible)
-    has_number = bool(re.search(r'\d', password))
+    has_number = bool(re.search(r"\d", password))
     has_special = bool(re.search(r'[!@#$%^&*(),.?":{}|<>]', password))
 
     if not (has_number or has_special):
@@ -161,7 +163,9 @@ def validate_password_strength(password: str) -> Tuple[bool, List[str]]:
 
     # Only check for obvious weak patterns
     if _contains_obvious_weak_patterns(password):
-        errors.append("Password contains weak patterns (avoid simple sequences like '123456' or 'password')")
+        errors.append(
+            "Password contains weak patterns (avoid simple sequences like '123456' or 'password')"
+        )
 
     return len(errors) == 0, errors
 
@@ -179,12 +183,21 @@ def _contains_obvious_weak_patterns(password: str) -> bool:
 
     # Only check for very obvious weak patterns
     obvious_weak_patterns = [
-        "123456", "654321", "password", "123123", "qwerty", "111111", "000000",
-        "abcdef", "fedcba", "123abc", "abc123"
+        "123456",
+        "654321",
+        "password",
+        "123123",
+        "qwerty",
+        "111111",
+        "000000",
+        "abcdef",
+        "fedcba",
+        "123abc",
+        "abc123",
     ]
 
     # Check for repeated characters (4+ in a row, not 3)
-    repeated_pattern = re.compile(r'(.)\1{3,}')
+    repeated_pattern = re.compile(r"(.)\1{3,}")
 
     # Check obvious patterns
     for pattern in obvious_weak_patterns:
@@ -217,9 +230,7 @@ def sanitize_email(email: str) -> str:
     normalized = email.strip().lower()
 
     # Basic email format validation
-    email_pattern = re.compile(
-        r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    )
+    email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
     if not email_pattern.match(normalized):
         raise ValueError("Invalid email address format")

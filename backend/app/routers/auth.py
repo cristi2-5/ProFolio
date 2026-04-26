@@ -5,18 +5,20 @@ Handles user authentication via email/password with JWT tokens.
 OAuth (Google, LinkedIn) endpoints will be added in Phase 2.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Annotated
 from datetime import datetime, timezone
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
-from app.schemas.user import LoginRequest, Token, UserCreate, UserResponse
 from app.schemas.benchmark import BenchmarkOptInRequest, BenchmarkOptInResponse
+from app.schemas.user import LoginRequest, Token, UserCreate, UserResponse
 from app.services.auth_service import AuthService
 from app.utils.exceptions import DuplicateError, UnauthorizedError, raise_http_exception
+from app.utils.rate_limit import limiter
 from app.utils.security import sanitize_email, validate_password_strength
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -28,7 +30,9 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
 )
+@limiter.limit("5/minute")
 async def register(
+    request: Request,
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
@@ -58,14 +62,14 @@ async def register(
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Password requirements not met: {', '.join(password_errors)}"
+                detail=f"Password requirements not met: {', '.join(password_errors)}",
             )
 
         # Business rule: Mid/senior levels require niche specification
         if user_data.seniority_level in ["mid", "senior"] and not user_data.niche:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"{user_data.seniority_level.title()} level requires specifying your technical niche."
+                detail=f"{user_data.seniority_level.title()} level requires specifying your technical niche.",
             )
 
         # Update user_data with sanitized email
@@ -81,10 +85,7 @@ async def register(
         raise_http_exception(e)
     except ValueError as e:
         # Email validation errors from sanitize_email()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post(
@@ -92,7 +93,9 @@ async def register(
     response_model=Token,
     summary="Authenticate and receive JWT token",
 )
+@limiter.limit("10/minute")
 async def login(
+    request: Request,
     credentials: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ) -> Token:
@@ -118,7 +121,9 @@ async def login(
         sanitized_email = sanitize_email(credentials.email)
 
         # Authenticate via service layer
-        access_token = await AuthService.authenticate(db, sanitized_email, credentials.password)
+        access_token = await AuthService.authenticate(
+            db, sanitized_email, credentials.password
+        )
 
         return Token(access_token=access_token, token_type="bearer")
 
@@ -126,15 +131,13 @@ async def login(
         raise_http_exception(e)
     except ValueError as e:
         # Email validation errors from sanitize_email()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 # ================================================================
 # User Profile & Account Management
 # ================================================================
+
 
 @router.get(
     "/me",

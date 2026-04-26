@@ -14,7 +14,10 @@ Tech Decisions (for the team):
 from functools import lru_cache
 from typing import List
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEFAULT_SECRET_KEY = "dev-secret-key-change-in-production"
 
 
 class Settings(BaseSettings):
@@ -50,7 +53,7 @@ class Settings(BaseSettings):
     )
 
     # --- Authentication ---
-    secret_key: str = "dev-secret-key-change-in-production"
+    secret_key: str = _DEFAULT_SECRET_KEY
     access_token_expire_minutes: int = 60
     algorithm: str = "HS256"
 
@@ -63,6 +66,7 @@ class Settings(BaseSettings):
 
     # --- File Storage ---
     upload_dir: str = "./uploads"
+    max_resumes_per_user: int = 5
 
     # --- CORS ---
     cors_origins: List[str] = ["http://localhost:5173"]
@@ -76,6 +80,21 @@ class Settings(BaseSettings):
     redis_url: str = ""
     prompt_cache_enabled: bool = True
     prompt_cache_ttl_seconds: int = 60 * 60 * 24  # 24 hours
+
+    @model_validator(mode="after")
+    def _validate_secret_key_for_production(self) -> "Settings":
+        """Refuse to start in production with a weak or default secret key."""
+        if self.environment == "production":
+            if self.secret_key == _DEFAULT_SECRET_KEY:
+                raise ValueError(
+                    "SECRET_KEY must not be the default value in production. "
+                    "Set a strong, unique SECRET_KEY environment variable."
+                )
+            if len(self.secret_key) < 32:
+                raise ValueError(
+                    "SECRET_KEY must be at least 32 characters long in production."
+                )
+        return self
 
 
 @lru_cache
