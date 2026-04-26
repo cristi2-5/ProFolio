@@ -6,8 +6,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth, consumeReturnTo } from '../contexts/AuthContext';
 
 /**
  * Login/Registration page component with full backend integration.
@@ -23,7 +23,20 @@ import { useAuth } from '../contexts/AuthContext';
  */
 function Login() {
   const navigate = useNavigate();
-  const { login, register, isLoading, error, clearError, isAuthenticated } = useAuth();
+  const location = useLocation();
+  const { login, register, isLoading, error, clearError, isAuthenticated } =
+    useAuth();
+
+  const resolveRedirectTarget = () => {
+    const fromState = location.state?.from?.pathname;
+    if (fromState && fromState !== '/login') {
+      const search = location.state?.from?.search || '';
+      return fromState + search;
+    }
+    const stored = consumeReturnTo();
+    if (stored && stored !== '/login') return stored;
+    return '/dashboard';
+  };
 
   // Form state
   const [isRegister, setIsRegister] = useState(false);
@@ -39,8 +52,9 @@ function Login() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard');
+      navigate(resolveRedirectTarget(), { replace: true });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, navigate]);
 
   // Clear errors when switching modes
@@ -54,43 +68,45 @@ function Login() {
    */
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
 
     // Clear field-specific validation error
     if (validationErrors[name]) {
-      setValidationErrors(prev => ({ ...prev, [name]: null }));
+      setValidationErrors((prev) => ({ ...prev, [name]: null }));
     }
   };
 
   /**
    * Validate form fields client-side.
    */
-  const validateForm = () => {
+  const validateForm = (trimmedEmail) => {
     const errors = {};
 
-    // Email validation
+    // Email validation (against the trimmed value the server will see)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!formData.email) {
+    if (!trimmedEmail) {
       errors.email = 'Email is required';
-    } else if (!emailRegex.test(formData.email)) {
+    } else if (!emailRegex.test(trimmedEmail)) {
       errors.email = 'Please enter a valid email address';
     }
 
-    // Password validation
+    // Password validation — never trim the password value, but reject all-whitespace
     if (!formData.password) {
       errors.password = 'Password is required';
+    } else if (formData.password.trim().length === 0) {
+      errors.password = 'Password cannot be only whitespace';
     } else if (formData.password.length < 8) {
       errors.password = 'Password must be at least 8 characters';
     }
 
     // Registration-specific validation
     if (isRegister) {
-      if (!formData.full_name) {
+      if (!formData.full_name.trim()) {
         errors.full_name = 'Full name is required';
       }
 
       // Password strength for registration
-      if (formData.password) {
+      if (formData.password && !errors.password) {
         const passwordErrors = [];
         if (!/[A-Z]/.test(formData.password)) {
           passwordErrors.push('one uppercase letter');
@@ -104,7 +120,10 @@ function Login() {
       }
 
       // Niche required for mid/senior levels
-      if (['mid', 'senior'].includes(formData.seniority_level) && !formData.niche) {
+      if (
+        ['mid', 'senior'].includes(formData.seniority_level) &&
+        !formData.niche.trim()
+      ) {
         errors.niche = 'Specialization is required for mid/senior levels';
       }
     }
@@ -119,8 +138,12 @@ function Login() {
     e.preventDefault();
     clearError();
 
+    const trimmedEmail = formData.email.trim();
+    const trimmedFullName = formData.full_name.trim();
+    const trimmedNiche = formData.niche.trim();
+
     // Validate form
-    const errors = validateForm();
+    const errors = validateForm(trimmedEmail);
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
       return;
@@ -130,15 +153,15 @@ function Login() {
       if (isRegister) {
         // Registration
         await register({
-          email: formData.email,
+          email: trimmedEmail,
           password: formData.password,
-          full_name: formData.full_name,
+          full_name: trimmedFullName,
           seniority_level: formData.seniority_level,
-          niche: formData.niche || null,
+          niche: trimmedNiche || null,
         });
       } else {
         // Login
-        await login(formData.email, formData.password);
+        await login(trimmedEmail, formData.password);
       }
 
       // Success - AuthContext will handle redirect via useEffect
@@ -317,7 +340,11 @@ function Login() {
               name="password"
               value={formData.password}
               onChange={handleChange}
-              placeholder={isRegister ? "Min. 8 chars, 1 upper, 1 number" : "Enter your password"}
+              placeholder={
+                isRegister
+                  ? 'Min. 8 chars, 1 upper, 1 number'
+                  : 'Enter your password'
+              }
               required
               minLength={8}
               style={{
@@ -359,9 +386,12 @@ function Login() {
               />
             )}
             {isLoading
-              ? (isRegister ? 'Creating Account...' : 'Signing In...')
-              : (isRegister ? 'Create Account' : 'Sign In')
-            }
+              ? isRegister
+                ? 'Creating Account...'
+                : 'Signing In...'
+              : isRegister
+                ? 'Create Account'
+                : 'Sign In'}
           </button>
         </form>
 

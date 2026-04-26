@@ -5,7 +5,7 @@
  * Supports drag-and-drop, file validation, and manual editing of parsed content.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { post, get } from '../api/client';
 
 /**
@@ -38,10 +38,16 @@ function CVUpload({ onUploadComplete }) {
     const errors = [];
 
     // Check file type
-    const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const allowedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
     const allowedExtensions = ['.pdf', '.docx'];
 
-    if (!allowedTypes.includes(file.type) && !allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext))) {
+    if (
+      !allowedTypes.includes(file.type) &&
+      !allowedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
+    ) {
       errors.push('Only PDF and DOCX files are supported');
     }
 
@@ -89,7 +95,6 @@ function CVUpload({ onUploadComplete }) {
       if (onUploadComplete) {
         onUploadComplete(resumeData);
       }
-
     } catch (err) {
       setError(err.message);
     } finally {
@@ -120,14 +125,13 @@ function CVUpload({ onUploadComplete }) {
           throw new Error(resume.parsing_error);
         }
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         attempts++;
       }
 
       if (attempts >= maxAttempts) {
         throw new Error('Parsing timeout - please try again');
       }
-
     } catch (err) {
       setError(err.message);
     } finally {
@@ -177,42 +181,52 @@ function CVUpload({ onUploadComplete }) {
   /**
    * Handle drop event.
    */
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
+  const handleDrop = useCallback(
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragActive(false);
 
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      handleFile(files[0]);
-    }
-  }, [handleFile]);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) {
+        handleFile(files[0]);
+      }
+    },
+    [handleFile]
+  );
 
   /**
    * Handle file input change.
    */
-  const handleInputChange = useCallback((e) => {
-    const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      handleFile(files[0]);
-    }
-  }, [handleFile]);
+  const handleInputChange = useCallback(
+    (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length > 0) {
+        handleFile(files[0]);
+      }
+    },
+    [handleFile]
+  );
 
   /**
    * Load existing resumes on mount.
    */
-  useState(() => {
+  useEffect(() => {
     fetchResumes();
   }, []);
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: 'var(--space-6)' }}>
-      <h2 style={{
-        fontSize: 'var(--font-size-2xl)',
-        fontWeight: 'var(--font-weight-bold)',
-        marginBottom: 'var(--space-6)',
-        color: 'var(--color-text-primary)'
-      }}>
+    <div
+      style={{ maxWidth: '800px', margin: '0 auto', padding: 'var(--space-6)' }}
+    >
+      <h2
+        style={{
+          fontSize: 'var(--font-size-2xl)',
+          fontWeight: 'var(--font-weight-bold)',
+          marginBottom: 'var(--space-6)',
+          color: 'var(--color-text-primary)',
+        }}
+      >
         Upload Your Resume
       </h2>
 
@@ -220,7 +234,9 @@ function CVUpload({ onUploadComplete }) {
       <div
         className="card"
         style={{
-          border: dragActive ? '2px dashed var(--color-accent)' : '2px dashed var(--color-border)',
+          border: dragActive
+            ? '2px dashed var(--color-accent)'
+            : '2px dashed var(--color-border)',
           borderRadius: 'var(--radius-lg)',
           padding: 'var(--space-8)',
           textAlign: 'center',
@@ -233,7 +249,9 @@ function CVUpload({ onUploadComplete }) {
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
         onDrop={handleDrop}
-        onClick={() => !uploading && document.getElementById('file-input').click()}
+        onClick={() =>
+          !uploading && document.getElementById('file-input').click()
+        }
       >
         <input
           type="file"
@@ -245,7 +263,14 @@ function CVUpload({ onUploadComplete }) {
         />
 
         {uploading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-4)' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 'var(--space-4)',
+            }}
+          >
             <div
               style={{
                 width: '32px',
@@ -257,16 +282,33 @@ function CVUpload({ onUploadComplete }) {
               }}
             />
             <div>
-              <p style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-medium)' }}>
+              <p
+                style={{
+                  fontSize: 'var(--font-size-lg)',
+                  fontWeight: 'var(--font-weight-medium)',
+                }}
+              >
                 Uploading...
               </p>
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+              <p
+                style={{
+                  color: 'var(--color-text-secondary)',
+                  fontSize: 'var(--font-size-sm)',
+                }}
+              >
                 Please wait while we process your resume
               </p>
             </div>
           </div>
         ) : parsing ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-4)' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 'var(--space-4)',
+            }}
+          >
             <div
               style={{
                 width: '32px',
@@ -278,25 +320,44 @@ function CVUpload({ onUploadComplete }) {
               }}
             />
             <div>
-              <p style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-medium)' }}>
+              <p
+                style={{
+                  fontSize: 'var(--font-size-lg)',
+                  fontWeight: 'var(--font-weight-medium)',
+                }}
+              >
                 Parsing with AI...
               </p>
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+              <p
+                style={{
+                  color: 'var(--color-text-secondary)',
+                  fontSize: 'var(--font-size-sm)',
+                }}
+              >
                 GPT-4 is analyzing your resume structure
               </p>
             </div>
           </div>
         ) : (
           <div>
-            <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>📄</div>
-            <h3 style={{
-              fontSize: 'var(--font-size-lg)',
-              fontWeight: 'var(--font-weight-medium)',
-              marginBottom: 'var(--space-2)'
-            }}>
+            <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>
+              📄
+            </div>
+            <h3
+              style={{
+                fontSize: 'var(--font-size-lg)',
+                fontWeight: 'var(--font-weight-medium)',
+                marginBottom: 'var(--space-2)',
+              }}
+            >
               Drop your resume here or click to browse
             </h3>
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+            <p
+              style={{
+                color: 'var(--color-text-secondary)',
+                fontSize: 'var(--font-size-sm)',
+              }}
+            >
               Supports PDF and DOCX files up to 5MB
             </p>
           </div>
@@ -315,8 +376,17 @@ function CVUpload({ onUploadComplete }) {
             color: 'var(--color-error)',
           }}
         >
-          <p style={{ fontWeight: 'var(--font-weight-medium)' }}>Upload Error</p>
-          <p style={{ fontSize: 'var(--font-size-sm)', marginTop: 'var(--space-1)' }}>{error}</p>
+          <p style={{ fontWeight: 'var(--font-weight-medium)' }}>
+            Upload Error
+          </p>
+          <p
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              marginTop: 'var(--space-1)',
+            }}
+          >
+            {error}
+          </p>
           <button
             onClick={() => setError(null)}
             style={{
@@ -337,12 +407,14 @@ function CVUpload({ onUploadComplete }) {
       {/* Parsed Resume Display */}
       {selectedResume && selectedResume.parsed_data && (
         <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-          <h3 style={{
-            fontSize: 'var(--font-size-xl)',
-            fontWeight: 'var(--font-weight-bold)',
-            marginBottom: 'var(--space-4)',
-            color: 'var(--color-text-primary)'
-          }}>
+          <h3
+            style={{
+              fontSize: 'var(--font-size-xl)',
+              fontWeight: 'var(--font-weight-bold)',
+              marginBottom: 'var(--space-4)',
+              color: 'var(--color-text-primary)',
+            }}
+          >
             Parsed Resume Data
           </h3>
 
@@ -350,98 +422,165 @@ function CVUpload({ onUploadComplete }) {
             {/* Personal Info */}
             {selectedResume.parsed_data.personal_info && (
               <div>
-                <h4 style={{
-                  fontSize: 'var(--font-size-md)',
-                  fontWeight: 'var(--font-weight-medium)',
-                  marginBottom: 'var(--space-2)',
-                  color: 'var(--color-accent)'
-                }}>
+                <h4
+                  style={{
+                    fontSize: 'var(--font-size-md)',
+                    fontWeight: 'var(--font-weight-medium)',
+                    marginBottom: 'var(--space-2)',
+                    color: 'var(--color-accent)',
+                  }}
+                >
                   Personal Information
                 </h4>
-                <p><strong>Name:</strong> {selectedResume.parsed_data.personal_info.full_name || 'Not specified'}</p>
-                <p><strong>Email:</strong> {selectedResume.parsed_data.personal_info.email || 'Not specified'}</p>
-                <p><strong>Phone:</strong> {selectedResume.parsed_data.personal_info.phone || 'Not specified'}</p>
+                <p>
+                  <strong>Name:</strong>{' '}
+                  {selectedResume.parsed_data.personal_info.full_name ||
+                    'Not specified'}
+                </p>
+                <p>
+                  <strong>Email:</strong>{' '}
+                  {selectedResume.parsed_data.personal_info.email ||
+                    'Not specified'}
+                </p>
+                <p>
+                  <strong>Phone:</strong>{' '}
+                  {selectedResume.parsed_data.personal_info.phone ||
+                    'Not specified'}
+                </p>
               </div>
             )}
 
             {/* Skills */}
-            {selectedResume.parsed_data.skills && selectedResume.parsed_data.skills.length > 0 && (
-              <div>
-                <h4 style={{
-                  fontSize: 'var(--font-size-md)',
-                  fontWeight: 'var(--font-weight-medium)',
-                  marginBottom: 'var(--space-2)',
-                  color: 'var(--color-accent)'
-                }}>
-                  Skills
-                </h4>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-                  {selectedResume.parsed_data.skills.map((skill, index) => (
-                    <span
-                      key={index}
-                      style={{
-                        background: 'var(--color-accent)',
-                        color: 'white',
-                        padding: 'var(--space-1) var(--space-2)',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: 'var(--font-size-sm)',
-                      }}
-                    >
-                      {skill}
-                    </span>
-                  ))}
+            {selectedResume.parsed_data.skills &&
+              selectedResume.parsed_data.skills.length > 0 && (
+                <div>
+                  <h4
+                    style={{
+                      fontSize: 'var(--font-size-md)',
+                      fontWeight: 'var(--font-weight-medium)',
+                      marginBottom: 'var(--space-2)',
+                      color: 'var(--color-accent)',
+                    }}
+                  >
+                    Skills
+                  </h4>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 'var(--space-2)',
+                    }}
+                  >
+                    {selectedResume.parsed_data.skills.map((skill, index) => (
+                      <span
+                        key={index}
+                        style={{
+                          background: 'var(--color-accent)',
+                          color: 'white',
+                          padding: 'var(--space-1) var(--space-2)',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: 'var(--font-size-sm)',
+                        }}
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
             {/* Experience */}
-            {selectedResume.parsed_data.experience && selectedResume.parsed_data.experience.length > 0 && (
-              <div>
-                <h4 style={{
-                  fontSize: 'var(--font-size-md)',
-                  fontWeight: 'var(--font-weight-medium)',
-                  marginBottom: 'var(--space-2)',
-                  color: 'var(--color-accent)'
-                }}>
-                  Experience ({selectedResume.parsed_data.experience.length} roles)
-                </h4>
-                {selectedResume.parsed_data.experience.slice(0, 3).map((exp, index) => (
-                  <div key={index} style={{ marginBottom: 'var(--space-3)' }}>
-                    <p><strong>{exp.role}</strong> at {exp.company}</p>
-                    <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                      {exp.duration}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
+            {selectedResume.parsed_data.experience &&
+              selectedResume.parsed_data.experience.length > 0 && (
+                <div>
+                  <h4
+                    style={{
+                      fontSize: 'var(--font-size-md)',
+                      fontWeight: 'var(--font-weight-medium)',
+                      marginBottom: 'var(--space-2)',
+                      color: 'var(--color-accent)',
+                    }}
+                  >
+                    Experience ({selectedResume.parsed_data.experience.length}{' '}
+                    roles)
+                  </h4>
+                  {selectedResume.parsed_data.experience
+                    .slice(0, 3)
+                    .map((exp, index) => (
+                      <div
+                        key={index}
+                        style={{ marginBottom: 'var(--space-3)' }}
+                      >
+                        <p>
+                          <strong>{exp.role}</strong> at {exp.company}
+                        </p>
+                        <p
+                          style={{
+                            fontSize: 'var(--font-size-sm)',
+                            color: 'var(--color-text-secondary)',
+                          }}
+                        >
+                          {exp.duration}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              )}
 
             {/* Education */}
-            {selectedResume.parsed_data.education && selectedResume.parsed_data.education.length > 0 && (
-              <div>
-                <h4 style={{
-                  fontSize: 'var(--font-size-md)',
-                  fontWeight: 'var(--font-weight-medium)',
-                  marginBottom: 'var(--space-2)',
-                  color: 'var(--color-accent)'
-                }}>
-                  Education
-                </h4>
-                {selectedResume.parsed_data.education.slice(0, 2).map((edu, index) => (
-                  <div key={index} style={{ marginBottom: 'var(--space-2)' }}>
-                    <p><strong>{edu.degree}</strong></p>
-                    <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                      {edu.institution} {edu.year && `(${edu.year})`}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
+            {selectedResume.parsed_data.education &&
+              selectedResume.parsed_data.education.length > 0 && (
+                <div>
+                  <h4
+                    style={{
+                      fontSize: 'var(--font-size-md)',
+                      fontWeight: 'var(--font-weight-medium)',
+                      marginBottom: 'var(--space-2)',
+                      color: 'var(--color-accent)',
+                    }}
+                  >
+                    Education
+                  </h4>
+                  {selectedResume.parsed_data.education
+                    .slice(0, 2)
+                    .map((edu, index) => (
+                      <div
+                        key={index}
+                        style={{ marginBottom: 'var(--space-2)' }}
+                      >
+                        <p>
+                          <strong>{edu.degree}</strong>
+                        </p>
+                        <p
+                          style={{
+                            fontSize: 'var(--font-size-sm)',
+                            color: 'var(--color-text-secondary)',
+                          }}
+                        >
+                          {edu.institution} {edu.year && `(${edu.year})`}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              )}
           </div>
 
-          <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', background: 'var(--color-bg-secondary)', borderRadius: 'var(--radius-md)' }}>
-            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-              ✅ Resume successfully parsed with GPT-4. You can now use this data for job matching and CV optimization.
+          <div
+            style={{
+              marginTop: 'var(--space-4)',
+              padding: 'var(--space-4)',
+              background: 'var(--color-bg-secondary)',
+              borderRadius: 'var(--radius-md)',
+            }}
+          >
+            <p
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              ✅ Resume successfully parsed with GPT-4. You can now use this
+              data for job matching and CV optimization.
             </p>
           </div>
         </div>
@@ -450,11 +589,13 @@ function CVUpload({ onUploadComplete }) {
       {/* Existing Resumes List */}
       {resumes.length > 0 && (
         <div className="card">
-          <h3 style={{
-            fontSize: 'var(--font-size-xl)',
-            fontWeight: 'var(--font-weight-bold)',
-            marginBottom: 'var(--space-4)'
-          }}>
+          <h3
+            style={{
+              fontSize: 'var(--font-size-xl)',
+              fontWeight: 'var(--font-weight-bold)',
+              marginBottom: 'var(--space-4)',
+            }}
+          >
             Your Resumes
           </h3>
           <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
@@ -473,27 +614,49 @@ function CVUpload({ onUploadComplete }) {
                 onClick={() => setSelectedResume(resume)}
               >
                 <div>
-                  <p style={{ fontWeight: 'var(--font-weight-medium)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <p
+                    style={{
+                      fontWeight: 'var(--font-weight-medium)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
                     {resume.filename}
                     {resume.is_active && (
-                      <span style={{
-                        fontSize: '10px',
-                        background: 'var(--color-success)',
-                        color: 'white',
-                        padding: '2px 6px',
-                        borderRadius: '4px'
-                      }}>ACTIVE</span>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          background: 'var(--color-success)',
+                          color: 'white',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        ACTIVE
+                      </span>
                     )}
                   </p>
-                  <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+                  <p
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-text-secondary)',
+                    }}
+                  >
                     Uploaded {new Date(resume.created_at).toLocaleDateString()}
                   </p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
-                    fontSize: 'var(--font-size-sm)',
-                    color: resume.parsed_data ? 'var(--color-success)' : 'var(--color-warning)'
-                  }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px' }}
+                >
+                  <div
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: resume.parsed_data
+                        ? 'var(--color-success)'
+                        : 'var(--color-warning)',
+                    }}
+                  >
                     {resume.parsed_data ? '✅ Parsed' : '⏳ Processing'}
                   </div>
                   {!resume.is_active && resume.parsed_data && (
@@ -506,7 +669,7 @@ function CVUpload({ onUploadComplete }) {
                           await post(`/resumes/${resume.id}/activate`);
                           fetchResumes();
                         } catch (err) {
-                           console.error(err);
+                          console.error(err);
                         }
                       }}
                     >
