@@ -524,7 +524,6 @@ def _parse_llm_json(content: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-
 def _coerce_list(data: Any, key: str) -> List[Dict[str, Any]]:
     """Accept either a raw list or a ``{key: [...]}`` envelope."""
     if isinstance(data, list):
@@ -553,7 +552,9 @@ def _validate_items(
         if not isinstance(item, dict):
             logger.warning(
                 "Interview-coach %s item %d is not a dict (got %s); skipping",
-                label, index, type(item).__name__,
+                label,
+                index,
+                type(item).__name__,
             )
             failures += 1
             continue
@@ -562,14 +563,18 @@ def _validate_items(
         except (ValidationError, TypeError) as exc:
             logger.warning(
                 "Interview-coach %s item %d failed schema validation; skipping: %s | raw=%r",
-                label, index, exc, str(item)[:300],
+                label,
+                index,
+                exc,
+                str(item)[:300],
             )
             failures += 1
 
     if items and not validated:
         logger.error(
             "Interview-coach %s: all %d items failed validation",
-            label, failures,
+            label,
+            failures,
         )
         raise InterviewCoachError("LLM returned malformed interview prep")
     return validated

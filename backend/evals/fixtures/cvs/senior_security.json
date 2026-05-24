@@ -1,0 +1,44 @@
+{
+  "full_name": "Alex Pavel",
+  "email": "alex.pavel@example.com",
+  "phone": "+40 700 000 010",
+  "location": "Bucharest, Romania",
+  "summary": "Senior application security engineer with 9 years bridging offensive and defensive work. Led the AppSec function at SecureBank — drove SAST/DAST integration into CI and reduced critical findings by 81% over 18 months. OSCP holder.",
+  "skills": ["Threat Modeling", "Secure SDLC Coaching", "Incident Response", "Executive Communication"],
+  "technologies": ["Python", "Go", "Burp Suite", "Nmap", "SAST", "DAST", "OWASP ZAP", "Semgrep", "Linux", "AWS", "Terraform", "Kubernetes"],
+  "experience": [
+    {
+      "role": "Principal AppSec Engineer",
+      "company": "SecureBank",
+      "period": "Feb 2020 - Present",
+      "description": "Run the AppSec program across 30 product teams. Integrated Semgrep + Snyk into 80 CI pipelines. Drove critical-finding count from 47 to 9 over 18 months. Co-authored the threat-model template used company-wide.",
+      "technologies": ["Semgrep", "Python", "Go", "AWS"]
+    },
+    {
+      "role": "Penetration Tester",
+      "company": "RedTeamGroup",
+      "period": "Jul 2017 - Jan 2020",
+      "description": "Delivered 60+ pentest engagements (web, mobile, internal network). Authored client-facing reports and remediation guidance. Wrote 4 internal exploit-development tools in Python.",
+      "technologies": ["Burp Suite", "Python", "Nmap", "Linux"]
+    },
+    {
+      "role": "Security Analyst",
+      "company": "NetDefend",
+      "period": "Aug 2015 - Jun 2017",
+      "description": "L2 SOC analyst — triaged ~80 alerts/day. Built 12 Sigma detection rules adopted across 4 customers.",
+      "technologies": ["Linux", "Python"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "BSc Computer Science",
+      "institution": "Military Technical Academy of Bucharest",
+      "year": "2015",
+      "details": ""
+    }
+  ],
+  "certifications": ["OSCP", "GIAC Web Application Penetration Tester (GWAPT)", "CISSP"],
+  "languages": ["Romanian (native)", "English (C2)"],
+  "total_years_experience": 9,
+  "senior_technologies": ["Python", "Go", "Burp Suite", "Linux"]
+}

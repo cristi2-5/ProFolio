@@ -132,7 +132,9 @@ class TestTechnicalQuestions:
 
         call_kwargs = coach_with_client.client.chat.completions.create.call_args.kwargs
         assert call_kwargs["response_format"] == {"type": "json_object"}
-        assert call_kwargs["model"] == "gemini-2.5-flash"  # primary model in fallback chain
+        assert (
+            call_kwargs["model"] == "gemini-2.5-flash"
+        )  # primary model in fallback chain
 
     @pytest.mark.asyncio
     async def test_includes_extracted_techs_in_prompt(self, coach_with_client) -> None:

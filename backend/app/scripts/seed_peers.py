@@ -99,9 +99,7 @@ NICHE_SKILLS: Dict[str, List[str]] = {
 }
 
 NICHES: List[str] = list(NICHE_SKILLS.keys())
-SENIORITY_DISTRIBUTION: List[str] = (
-    ["junior"] * 30 + ["mid"] * 30 + ["senior"] * 30
-)
+SENIORITY_DISTRIBUTION: List[str] = ["junior"] * 30 + ["mid"] * 30 + ["senior"] * 30
 PEER_COUNT = len(SENIORITY_DISTRIBUTION)
 SEED_PASSWORD = "PeerPass1!"
 SEED_EMAIL_DOMAIN = "@profolio.seed"
@@ -183,8 +181,7 @@ async def _main() -> None:
     async with async_session_factory() as db:
         created = await seed_peers(db)
     print(
-        f"seed_peers: {created} new peer(s) inserted "
-        f"(target total = {PEER_COUNT})."
+        f"seed_peers: {created} new peer(s) inserted " f"(target total = {PEER_COUNT})."
     )
 
 

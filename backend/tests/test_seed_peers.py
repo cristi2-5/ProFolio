@@ -62,9 +62,9 @@ async def test_seed_peers_each_has_one_active_resume(test_session: AsyncSession)
             ParsedResume.is_active.is_(True),
         )
         resumes = list((await test_session.execute(stmt)).scalars().all())
-        assert len(resumes) == 1, (
-            f"peer {peer.email} expected 1 active resume, got {len(resumes)}"
-        )
+        assert (
+            len(resumes) == 1
+        ), f"peer {peer.email} expected 1 active resume, got {len(resumes)}"
 
 
 async def test_seed_peers_is_idempotent(test_session: AsyncSession):
@@ -78,8 +78,10 @@ async def test_seed_peers_is_idempotent(test_session: AsyncSession):
     assert len(peers) == 90
 
     # No duplicate resumes either.
-    stmt = select(func.count(ParsedResume.id)).join(
-        User, ParsedResume.user_id == User.id
-    ).where(User.email.like(f"%{SEED_EMAIL_DOMAIN}"))
+    stmt = (
+        select(func.count(ParsedResume.id))
+        .join(User, ParsedResume.user_id == User.id)
+        .where(User.email.like(f"%{SEED_EMAIL_DOMAIN}"))
+    )
     total_resumes = (await test_session.execute(stmt)).scalar_one()
     assert total_resumes == 90

@@ -16,9 +16,7 @@ function NotFound() {
         className="card"
         style={{ maxWidth: '500px', width: '100%', textAlign: 'center' }}
       >
-        <h2 style={{ marginBottom: 'var(--space-4)' }}>
-          404 — Page not found
-        </h2>
+        <h2 style={{ marginBottom: 'var(--space-4)' }}>404 — Page not found</h2>
         <p style={{ marginBottom: 'var(--space-6)' }}>
           The page you&apos;re looking for doesn&apos;t exist or has been moved.
         </p>

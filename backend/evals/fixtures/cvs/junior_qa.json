@@ -1,0 +1,37 @@
+{
+  "full_name": "Bianca Munteanu",
+  "email": "bianca.munteanu@example.com",
+  "phone": "+40 700 000 008",
+  "location": "Brașov, Romania",
+  "summary": "Junior QA engineer with 1.5 years of hands-on testing for a B2B SaaS. Wrote 240+ regression tests in Selenium and Playwright. Comfortable triaging bugs and pairing with developers.",
+  "skills": ["Bug Triage", "Attention to Detail", "User Empathy", "Documentation"],
+  "technologies": ["Selenium", "Playwright", "Cypress", "Python", "Jira", "Postman", "Git", "SQL"],
+  "experience": [
+    {
+      "role": "QA Engineer",
+      "company": "RetailCloud",
+      "period": "Oct 2023 - Present",
+      "description": "Maintain a Playwright regression suite of 240 tests across 3 web apps. Wrote the test plan template now used by all 6 QAs. Drove flakiness rate from 9% to 1.4% via fixture refactors.",
+      "technologies": ["Playwright", "Python", "Jira"]
+    },
+    {
+      "role": "QA Intern",
+      "company": "RetailCloud",
+      "period": "Apr 2023 - Sep 2023",
+      "description": "Manual exploratory testing on 4 mobile-web flows. Filed 80+ bugs with reproduction steps and severity tags.",
+      "technologies": ["Selenium", "Postman"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "BSc Information Systems",
+      "institution": "Transilvania University of Brașov",
+      "year": "2023",
+      "details": ""
+    }
+  ],
+  "certifications": ["ISTQB Certified Tester - Foundation Level"],
+  "languages": ["Romanian (native)", "English (C1)"],
+  "total_years_experience": 1,
+  "senior_technologies": []
+}

@@ -1,0 +1,28 @@
+Mid-level React Frontend Developer — PixelStudio
+
+Who we are
+PixelStudio builds dashboards for B2B SaaS companies. Our customers use our UI to run their go-to-market operations. We are 22 people, hybrid (Bucharest office, 2 days/week).
+
+The role
+You will join a 4-engineer frontend team owning the customer-facing dashboard. We use React 18, TypeScript, TanStack Query, Vite, and Tailwind. Backend is a clean REST API maintained by another team.
+
+Day-to-day
+- Build new features end-to-end in React + TypeScript.
+- Pair with designers in Figma; we ship pixel-perfect UIs.
+- Write unit and integration tests in Vitest + Testing Library.
+- Review pull requests from teammates; participate in our weekly UX review.
+
+Must have
+- 3+ years professional React experience with TypeScript.
+- Comfortable with hooks, suspense, and modern data-fetching patterns.
+- Solid CSS instincts; experience with Tailwind or a similar utility-first framework.
+- Care about accessibility (WCAG 2.1 AA).
+
+Nice to have
+- Experience with TanStack Query, React Router, Vite.
+- Storybook component libraries.
+- Some Node.js experience for BFF tasks.
+
+Compensation
+- €45-60k base depending on level.
+- Hybrid (Bucharest), 25 days off, private health insurance, MacBook Pro.

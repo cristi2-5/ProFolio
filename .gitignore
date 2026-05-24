@@ -71,3 +71,18 @@ alembic/versions/*.pyc
 # (Real tests live in backend/tests/ and frontend/src/**)
 # ========================
 /test_*.py
+
+# ========================
+# Claude Code / agent local config
+# (per-developer permission allowlists; don't pollute the team repo)
+# ========================
+.claude/
+
+# ========================
+# Agent evals — generated artifacts
+# (Calibration reports + judge cache are LLM-output snapshots, not
+# inputs. They change every run; committing them would create noisy
+# diffs and leak Gemini outputs into git history.)
+# ========================
+backend/evals/reports/
+backend/evals/.judge_cache/

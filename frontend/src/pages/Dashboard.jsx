@@ -277,7 +277,7 @@ function Dashboard() {
           {
             key: 'scan',
             done: firstScanDone,
-            label: "Run your first job scan",
+            label: 'Run your first job scan',
             description:
               'We pull live openings from Adzuna and rank them against your CV. Works without a CV or preferences (match score will be 0).',
             actionLabel: scanning ? 'Scanning…' : 'Scan jobs',

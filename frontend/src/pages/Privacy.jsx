@@ -10,16 +10,16 @@ function Privacy() {
         preferences. We use this data to provide the service.
       </p>
       <p style={{ marginBottom: 'var(--space-4)' }}>
-        We do not share your data with third parties. Your information is
-        stored securely and used solely to power your job search experience.
+        We do not share your data with third parties. Your information is stored
+        securely and used solely to power your job search experience.
       </p>
       <p style={{ marginBottom: 'var(--space-4)' }}>
         You may delete your account at any time via Settings → Delete account.
         Deletion is permanent and removes all associated data.
       </p>
       <p>
-        For any privacy-related questions or requests, please contact us
-        through the support channels.
+        For any privacy-related questions or requests, please contact us through
+        the support channels.
       </p>
     </div>
   );

@@ -1,0 +1,28 @@
+Senior Site Reliability Engineer — Platform Team — CloudOps
+
+Why this role exists
+CloudOps runs payment infrastructure for 200+ merchants across the EU. Reliability is the product. We are growing the platform team from 4 to 7 to handle the upcoming multi-region expansion.
+
+What you will do
+- Operate and evolve our Kubernetes platform (EKS, 4 clusters, ~600 services).
+- Lead the multi-region active-active migration during the next 12 months.
+- Drive the GitOps adoption (ArgoCD) for the 3 remaining product teams not yet on it.
+- Improve our SLO framework — currently SLIs are inconsistent across services.
+- Take part in the on-call rotation (1 week / 5).
+
+Must have
+- 6+ years operating production Kubernetes at non-trivial scale.
+- Strong Terraform — we treat infrastructure changes as code reviews.
+- Comfort with at least one of: Go, Python, Bash, for platform tooling.
+- Solid Prometheus / Grafana / alerting story.
+- Experience leading or coaching incident response.
+
+Nice to have
+- CKA / AWS DevOps Pro certifications.
+- Experience with multi-region or multi-cluster failover.
+- Background in regulated environments (PCI DSS, SOC2).
+
+Compensation
+- €80-110k base.
+- Remote, EU-only.
+- €3000 annual training budget. On-call paid time off.

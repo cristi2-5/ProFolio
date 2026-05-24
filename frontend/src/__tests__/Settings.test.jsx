@@ -124,7 +124,9 @@ describe('Settings page — profile form', () => {
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(/no changes to save/i);
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /no changes to save/i
+      );
     });
     expect(patchMock).not.toHaveBeenCalled();
   });

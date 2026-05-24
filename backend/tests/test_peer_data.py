@@ -37,7 +37,6 @@ from app.services.benchmark_service import (
 from app.services.peer_data import load_peer_profiles
 from app.utils.benchmark_sanitizer import SanitizedProfile
 
-
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------

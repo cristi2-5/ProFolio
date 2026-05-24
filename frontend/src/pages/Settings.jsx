@@ -177,8 +177,8 @@ function Settings() {
             color: 'var(--color-text-secondary)',
           }}
         >
-          Update your display information. Email changes take effect
-          immediately (verification is disabled in local development).
+          Update your display information. Email changes take effect immediately
+          (verification is disabled in local development).
         </p>
 
         <form
@@ -204,9 +204,7 @@ function Settings() {
               autoComplete="name"
               value={profileForm.full_name}
               onChange={handleProfileChange('full_name')}
-              aria-describedby={
-                profileError ? 'full_name-error' : undefined
-              }
+              aria-describedby={profileError ? 'full_name-error' : undefined}
               disabled={profileSaving}
               style={inputStyle}
             />

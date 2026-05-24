@@ -23,7 +23,9 @@ class TechnicalQuestion(BaseModel):
     question: str = Field(default="")
     difficulty: str = Field(default="medium", description="easy | medium | hard")
     topics: List[str] = Field(default_factory=list)
-    guidance: str = Field(default="", description="Short guide on what an ideal answer covers")
+    guidance: str = Field(
+        default="", description="Short guide on what an ideal answer covers"
+    )
     sample_answer: Optional[str] = Field(
         default=None, description="Example of a strong answer (2-4 sentences)"
     )
@@ -35,8 +37,12 @@ class BehavioralQuestion(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     question: str = Field(default="")
-    scenario: str = Field(default="", description="Which competency this question probes")
-    star_guidance: str = Field(default="", description="How to structure the STAR answer")
+    scenario: str = Field(
+        default="", description="Which competency this question probes"
+    )
+    star_guidance: str = Field(
+        default="", description="How to structure the STAR answer"
+    )
     company_context: Optional[str] = Field(
         default=None,
         description="Which culture signal from the JD justifies this question",
@@ -49,7 +55,9 @@ class TechnologyConcept(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     concept: str = Field(default="")
-    definition: str = Field(default="", description="One-paragraph definition (~2-4 sentences)")
+    definition: str = Field(
+        default="", description="One-paragraph definition (~2-4 sentences)"
+    )
     key_points: List[str] = Field(default_factory=list)
     practical_example: Optional[str] = None
 

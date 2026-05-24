@@ -1,0 +1,44 @@
+{
+  "full_name": "Mihai Stoica",
+  "email": "mihai.stoica@example.com",
+  "phone": "+40 700 000 005",
+  "location": "Iași, Romania",
+  "summary": "Senior DevOps / SRE with 8 years building self-service platforms on Kubernetes. Migrated 3 organizations from manual deploys to GitOps. Designed multi-region failover for a payments product processing €1.2B/year.",
+  "skills": ["Incident Command", "Platform Strategy", "Team Mentoring", "Capacity Planning"],
+  "technologies": ["Kubernetes", "Terraform", "AWS", "GCP", "Docker", "ArgoCD", "Helm", "Prometheus", "Grafana", "Bash", "Python", "Go", "Linux"],
+  "experience": [
+    {
+      "role": "Staff SRE",
+      "company": "PayBridge",
+      "period": "Apr 2021 - Present",
+      "description": "Designed the multi-region active-active topology on AWS EKS (€1.2B/year volume). Cut MTTR from 47 min to 9 min via runbook automation in Go. Lead the 5-person platform team.",
+      "technologies": ["Kubernetes", "Terraform", "AWS", "Go", "Prometheus"]
+    },
+    {
+      "role": "DevOps Engineer",
+      "company": "CloudFirst SRL",
+      "period": "Sep 2018 - Mar 2021",
+      "description": "Migrated 12 microservices from manual `kubectl apply` to ArgoCD GitOps. Built a Helm chart library shared by 4 product teams.",
+      "technologies": ["Kubernetes", "ArgoCD", "Helm", "Docker"]
+    },
+    {
+      "role": "Systems Engineer",
+      "company": "TelcoMonitor",
+      "period": "Jun 2016 - Aug 2018",
+      "description": "On-call for 400+ Linux hosts. Automated patching pipelines reducing nightly toil by 14 hours/week.",
+      "technologies": ["Linux", "Bash", "Python"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "BSc Computer Engineering",
+      "institution": "Gheorghe Asachi Technical University, Iași",
+      "year": "2016",
+      "details": ""
+    }
+  ],
+  "certifications": ["Certified Kubernetes Administrator (CKA)", "AWS Certified DevOps Engineer - Professional", "HashiCorp Certified: Terraform Associate"],
+  "languages": ["Romanian (native)", "English (C2)", "German (B1)"],
+  "total_years_experience": 8,
+  "senior_technologies": ["Kubernetes", "Terraform", "AWS", "Linux", "Bash"]
+}

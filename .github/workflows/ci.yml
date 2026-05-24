@@ -190,6 +190,162 @@ jobs:
           fail_ci_if_error: false
 
   # ================================================================
+  # Agent Evals — Deterministic Layer (Phase 1)
+  # ================================================================
+  # Fast, mock-friendly evals running on every PR. No real LLM calls.
+  # Validates: Pydantic schema conformance for every agent output,
+  # JD-keyword coverage of the post-processed CV, fabrication-detector
+  # behavior, and prompt-injection sanitizer resistance.
+  #
+  # Phase 3 (DeepEval) and Phase 4 (Promptfoo) layers will land as a
+  # separate ``evals-llm`` job gated on main + workflow_dispatch.
+  evals-deterministic:
+    name: Evals — Deterministic (Schema, Keywords, Injection)
+    runs-on: ubuntu-latest
+    needs: [backend-ci]
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run deterministic eval suite
+        run: |
+          echo "::group::Deterministic Evals"
+          # The eval suite lives next to ``tests/`` and has its own
+          # pytest.ini so it doesn't inherit per-test autouse fixtures.
+          # ``-m "eval and not llm_judge"`` keeps real-LLM evals out of
+          # this job — those run in evals-llm on main only.
+          pytest evals/ -c evals/pytest.ini -v \
+            --tb=short \
+            -m "eval and not llm_judge"
+          echo "::endgroup::"
+        env:
+          # Test-prefixed key so agents return canned mock responses —
+          # this layer must work without consuming Gemini quota.
+          OPENAI_API_KEY: test-dummy-key-for-evals-deterministic
+          SECRET_KEY: test-secret-key-evals-deterministic
+          ENVIRONMENT: test
+
+  # ================================================================
+  # Agent Evals — LLM-Judge Layer (Phase 3)
+  # ================================================================
+  # Real Gemini calls for DeepEval-based LLM-judge metrics.
+  # Gated on main + manual dispatch so we don't burn Gemini free-tier
+  # quota on every PR. The deterministic eval job above is the PR gate;
+  # this job is the merge gate + opt-in calibration tool.
+  #
+  # Required GitHub repo secret: ``OPENAI_API_KEY`` (real Gemini key).
+  # The conftest skips every test when the key starts with ``test-`` or
+  # contains ``dummy``, so a missing secret won't fail the job — it
+  # will skip all evals and exit green. That's intentional: we'd rather
+  # surface "no key, no signal" than fail builds for missing config.
+  evals-llm:
+    name: Evals — LLM Judge (DeepEval + Gemini)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [evals-deterministic]
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Install DeepEval (on-demand)
+        # DeepEval lives outside requirements-dev.txt because its 4.x
+        # line bumps pydantic to >=2.11.7 (repo pins 2.10.5) and 2.x
+        # bumps tenacity (repo pins 9.0.0). Both upgrades would risk
+        # subtle regressions across the agent code paths. We isolate
+        # the pin to this job only — pip resolver may upgrade pydantic
+        # transitively here, but that affects only this ephemeral
+        # runner, not production.
+        run: pip install 'deepeval>=4.0,<5.0'
+
+      - name: Run DeepEval LLM-judge suite
+        run: |
+          echo "::group::DeepEval Suite"
+          # ``-m "llm_judge"`` filters to the LLM-judge subset
+          # (deterministic ones already ran in evals-deterministic).
+          # Tests auto-skip if the API key is mock/dummy/empty — the
+          # conftest guard surfaces a clear message in that case.
+          pytest evals/ -c evals/pytest.ini -v \
+            --tb=short \
+            -m "llm_judge" \
+            --junitxml=evals-results.xml
+          echo "::endgroup::"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SECRET_KEY: test-secret-key-evals-llm
+          ENVIRONMENT: test
+
+      - name: Set up Node.js (for Promptfoo)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Promptfoo
+        run: npm install -g promptfoo
+
+      - name: Run Promptfoo eval (CV Optimizer)
+        # Promptfoo's exit code is non-zero on any failed assertion.
+        # We still want the HTML/JSON artifacts uploaded for review, so
+        # we capture the exit and re-raise after the upload step.
+        run: |
+          echo "::group::Promptfoo — CV Optimizer"
+          mkdir -p evals/reports
+          cd evals/promptfoo
+          # ``--max-concurrency 1`` is critical — Gemini free tier is 5 RPM,
+          # so any parallelism risks 429 cascades. The YAML also sets it
+          # at provider level; the CLI flag is belt-and-braces.
+          npx promptfoo eval \
+            -c cv_optimizer.promptfooconfig.yaml \
+            --max-concurrency 1 \
+            --output ../reports/promptfoo-cv-optimizer.json
+          echo "::endgroup::"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SECRET_KEY: test-secret-key-evals-llm
+          ENVIRONMENT: test
+        continue-on-error: true  # capture artifacts even when asserts fail
+
+      - name: Upload eval results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evals-llm-results
+          path: |
+            backend/evals-results.xml
+            backend/evals/reports/promptfoo-cv-optimizer.json
+
+  # ================================================================
   # Frontend CI — Enhanced Testing & Build
   # ================================================================
   frontend-ci:

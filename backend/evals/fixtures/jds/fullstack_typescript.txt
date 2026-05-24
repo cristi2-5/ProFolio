@@ -1,0 +1,30 @@
+Full-Stack Engineer (TypeScript) — FinanceFlow
+
+About FinanceFlow
+We are a fintech serving SMBs across central Europe. Our product is a unified accounting + cashflow dashboard. We are 35 people, hybrid in Cluj (3 days/week).
+
+About the role
+We are hiring a full-stack engineer to join the Payments squad — 5 engineers building the customer-facing payment-collection product. You'll work end-to-end in our TypeScript stack (React + Node.js + PostgreSQL).
+
+What you'll do
+- Build customer-facing features end-to-end in TypeScript.
+- Work closely with product designers and the PM on the squad.
+- Contribute to our shared design system (~40 components, Storybook).
+- Pair with the dedicated Payments backend team on API contracts.
+- Write meaningful tests (Jest, Vitest, Playwright).
+
+What we need
+- 3+ years professional TypeScript experience covering both backend (Node.js) and frontend (React).
+- Comfort with PostgreSQL — joins, indexes, transactions.
+- Solid React fundamentals (hooks, context, performance basics).
+- Care about accessibility and i18n.
+
+Nice to have
+- Experience in fintech or any domain with strict correctness requirements.
+- Previously contributed to a design system.
+- Familiarity with monitoring (Sentry, Datadog).
+
+What we offer
+- Hybrid Cluj-Napoca, 3 days/week in office.
+- €50-70k base + 0.05-0.10% equity.
+- Annual training budget, mental-health support, MacBook Pro.
