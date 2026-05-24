@@ -62,9 +62,9 @@ describe('apiRequest', () => {
       })
     );
 
-    await expect(apiRequest('/x', { method: 'POST', body: {} })).rejects.toThrow(
-      /field required.*value is not a valid email/
-    );
+    await expect(
+      apiRequest('/x', { method: 'POST', body: {} })
+    ).rejects.toThrow(/field required.*value is not a valid email/);
   });
 
   it('extracts message from object-shaped detail (no [object Object])', async () => {

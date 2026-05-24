@@ -6,8 +6,8 @@ function CookiePolicy() {
     >
       <h2 style={{ marginBottom: 'var(--space-6)' }}>Cookie Policy</h2>
       <p style={{ marginBottom: 'var(--space-4)' }}>
-        We use functional cookies and local storage to keep you logged in
-        across sessions. These are essential to provide the service.
+        We use functional cookies and local storage to keep you logged in across
+        sessions. These are essential to provide the service.
       </p>
       <p style={{ marginBottom: 'var(--space-4)' }}>
         We do not currently run analytics or advertising trackers. If we add

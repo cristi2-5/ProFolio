@@ -21,11 +21,7 @@ vi.mock('../api/client', () => ({
 }));
 
 import { get, post } from '../api/client';
-import {
-  AuthProvider,
-  ProtectedRoute,
-  useAuth,
-} from '../contexts/AuthContext';
+import { AuthProvider, ProtectedRoute, useAuth } from '../contexts/AuthContext';
 
 /** Renders the auth state in a way the test can read back. */
 function Consumer() {

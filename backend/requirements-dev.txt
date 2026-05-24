@@ -28,9 +28,13 @@ ipython==8.29.0
 
 # --- Agent Evals (Phase 3+: LLM-as-judge) ---
 # DeepEval brings pytest-native LLM evaluation metrics (Hallucination,
-# Faithfulness, AnswerRelevancy, G-Eval). Pinned to current stable line
-# so CI is reproducible; bump deliberately during dependency updates.
-deepeval==2.0.0
+# Faithfulness, AnswerRelevancy, G-Eval). Pinned to the 4.x line because
+# 2.x requires ``tenacity~=8.4.1`` which conflicts with the repo's
+# ``tenacity==9.0.0`` (production dependency). 4.x supports tenacity 9.
+# Range pin instead of exact so security patches land without churning
+# the lockfile; bump the upper bound deliberately on major version
+# upgrades.
+deepeval>=4.0,<5.0
 # PyYAML — already a transitive dep of FastAPI/Alembic but pinned
 # explicitly so ``evals/conftest.py`` doesn't break if the transitive
 # install changes.
