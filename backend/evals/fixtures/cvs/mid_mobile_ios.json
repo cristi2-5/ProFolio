@@ -1,0 +1,37 @@
+{
+  "full_name": "Răzvan Toma",
+  "email": "razvan.toma@example.com",
+  "phone": "+40 700 000 009",
+  "location": "Cluj-Napoca, Romania",
+  "summary": "iOS developer with 4 years shipping Swift apps. Owner of the booking module in TravelKit (1.2M MAU). Drove the SwiftUI migration that cut crash-free sessions to 99.92%.",
+  "skills": ["Mobile UX Sense", "Performance Profiling", "App Store Release Management"],
+  "technologies": ["Swift", "SwiftUI", "UIKit", "Combine", "Xcode", "CocoaPods", "Swift Package Manager", "Git", "REST APIs", "GraphQL"],
+  "experience": [
+    {
+      "role": "Senior iOS Developer",
+      "company": "TravelKit",
+      "period": "May 2022 - Present",
+      "description": "Own the booking module (40% of app revenue). Led the SwiftUI migration: 14 screens in 6 months, crash-free sessions from 99.71% to 99.92%. Mentored 1 junior.",
+      "technologies": ["Swift", "SwiftUI", "Combine"]
+    },
+    {
+      "role": "iOS Developer",
+      "company": "ConsumerApps SRL",
+      "period": "Mar 2021 - Apr 2022",
+      "description": "Built 2 consumer iOS apps (60k+ downloads each). Set up the Fastlane release pipeline reused across the org.",
+      "technologies": ["Swift", "UIKit", "Fastlane"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "BSc Computer Science",
+      "institution": "Babeș-Bolyai University, Cluj-Napoca",
+      "year": "2020",
+      "details": ""
+    }
+  ],
+  "certifications": [],
+  "languages": ["Romanian (native)", "English (C1)"],
+  "total_years_experience": 4,
+  "senior_technologies": ["Swift", "SwiftUI"]
+}

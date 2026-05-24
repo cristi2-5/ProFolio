@@ -1,0 +1,28 @@
+Senior Backend Engineer (Python) — RemoteFirst SA
+
+About the role
+We are hiring a Senior Backend Engineer to own the next generation of our orders + billing platform. You will join a 6-person backend squad and report to the engineering manager. The role is fully remote within the EU.
+
+What you will do
+- Design and ship FastAPI services backed by PostgreSQL and Redis.
+- Own the migration from our legacy Django monolith to event-driven microservices on Kafka.
+- Set the bar on observability — Prometheus metrics, structured logs, runbooks.
+- Mentor 2-3 mid-level engineers; lead architecture reviews for cross-team initiatives.
+- Be on a humane on-call rotation (1 week / 6).
+
+What we need
+- 5+ years building production Python backends; deep FastAPI or Django expertise.
+- Strong PostgreSQL — query planning, indexing strategy, schema migrations under load.
+- Comfortable with async patterns, idempotency, and message-driven systems (Kafka or NATS).
+- Track record of mentoring and influence beyond your direct team.
+- Excellent written communication — we document decisions in ADRs.
+
+Nice to have
+- Experience with Kubernetes, Docker, Terraform.
+- Background in payments, billing, or anything with strict correctness requirements.
+- Open-source contributions.
+
+What we offer
+- Fully remote, EU-only.
+- €70-90k base depending on level and location.
+- Annual learning budget, conference attendance, work-from-anywhere weeks.

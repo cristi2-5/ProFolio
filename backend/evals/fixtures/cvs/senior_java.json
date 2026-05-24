@@ -1,0 +1,44 @@
+{
+  "full_name": "Vlad Constantin",
+  "email": "vlad.constantin@example.com",
+  "phone": "+40 700 000 007",
+  "location": "Bucharest, Romania",
+  "summary": "Senior Java engineer with 10 years on Spring-based services in banking. Tech lead for the core payments engine at BankCore — 1.4M txns/day, six-nines availability across 3 data centers.",
+  "skills": ["Tech Leadership", "Architecture Review", "Regulatory Engagement", "Mentoring at Senior Level"],
+  "technologies": ["Java", "Spring Boot", "Spring Cloud", "Kafka", "PostgreSQL", "Oracle", "Maven", "Docker", "Kubernetes", "JUnit", "Mockito", "Git"],
+  "experience": [
+    {
+      "role": "Tech Lead — Payments Engine",
+      "company": "BankCore",
+      "period": "Jun 2019 - Present",
+      "description": "Tech lead of a 7-person team. Owned the multi-DC active-active topology for the payments engine (1.4M txns/day). Drove the Kafka migration that decoupled the 4 legacy monoliths.",
+      "technologies": ["Java", "Spring Boot", "Kafka", "PostgreSQL", "Kubernetes"]
+    },
+    {
+      "role": "Senior Java Engineer",
+      "company": "BankCore",
+      "period": "Mar 2016 - May 2019",
+      "description": "Built the fraud-detection scoring service consuming 6 upstream Kafka topics. Cut false-positive rate from 12% to 3.4% via a rules-engine rewrite.",
+      "technologies": ["Java", "Spring Boot", "Kafka"]
+    },
+    {
+      "role": "Java Developer",
+      "company": "InsuranceTech",
+      "period": "Sep 2014 - Feb 2016",
+      "description": "Built REST APIs on Spring MVC backed by Oracle DB. Migrated 3 batch jobs from Quartz to Spring Batch.",
+      "technologies": ["Java", "Spring", "Oracle"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "MSc Software Engineering",
+      "institution": "University Politehnica of Bucharest",
+      "year": "2014",
+      "details": ""
+    }
+  ],
+  "certifications": ["Oracle Certified Professional, Java SE Programmer"],
+  "languages": ["Romanian (native)", "English (C2)"],
+  "total_years_experience": 10,
+  "senior_technologies": ["Java", "Spring Boot", "Kafka", "PostgreSQL"]
+}

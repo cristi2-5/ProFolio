@@ -1,0 +1,102 @@
+# LLM-judge pass thresholds for Phase 3 DeepEval tests.
+#
+# v0 — PRE-CALIBRATION DEFAULTS
+# =============================
+# These are conservative starting values published by DeepEval and
+# adapted from the literature, NOT derived from a project-specific
+# calibration run.
+#
+# Why pre-calibration: the user's Gemini API key is on free tier (5
+# RPM / 20 RPD). Producing a meaningful calibration set (≥10 labeled
+# rows) would exhaust the daily quota and still yield a sample too
+# small to be statistically defensible. Industry defaults from
+# DeepEval's docs are derived from tens of thousands of evaluations
+# across customer projects, so they're a sturdier v0 anchor than 10
+# bespoke labels.
+#
+# Recalibration plan:
+#   1. Wait for paid-tier access OR a fresh free-tier daily window.
+#   2. Run ``python -m evals.run_calibration`` against the 5 sampled
+#      pairs (10 rows; see SAMPLED_PAIR_IDS in run_calibration.py).
+#   3. Label PASS/FAIL/BORDERLINE.
+#   4. Derive: ``threshold = min(scores where verdict == "PASS") - 0.05``
+#   5. Bump ``schema_version`` and commit alongside the labeled report.
+#
+# Schema version tracks both this file AND the fixtures/pairs.yaml +
+# the Pydantic schemas of agent outputs. Bump on ANY of those changes
+# so silent drift fails loudly via
+# ``test_*_schema_fingerprint_is_recorded``.
+#
+# Quota budget per full ``evals-llm`` run (with default skips):
+#   cv_optimizer eval:      2 calls (1 agent + 1 NoFabrication)
+#   cover_letter eval:      2 calls (1 agent + 1 NotGeneric)
+#   cv_profiler eval:       2 calls (1 agent + 1 Faithfulness)
+#   interview_coach eval:   0 calls (SKIPPED by default — see file header)
+#   promptfoo cv_optimizer: 4 calls (2 cases × (1 agent + 1 llm-rubric))
+#   --------------------------------
+#   TOTAL:                 10 calls (free-tier 20 RPD safe; 5 RPM safe at 13s/call)
+
+schema_version: 1
+calibration_status: v0_defaults  # "calibrated" once a labeled run lands
+
+# ----------------------------------------------------------------------
+# CV Optimizer — optimize_cv_for_job()
+# ----------------------------------------------------------------------
+# HallucinationMetric: lower is better (it measures the fraction of
+#   claims unsupported by the input). DeepEval's published default for
+#   passing is ≤ 0.3 (30% of claims can be unsupported in conversational
+#   settings; we want stricter here because of NO_FABRICATION).
+# NoFabricationGEval: our custom criterion — score is 1.0 if every
+#   skill/tech/experience in the output appears in the input CV.
+#   Threshold 0.9 reflects the strict contract: "ONLY rephrase, do not
+#   invent".
+# JSONSchemaMetric: deterministic 0/1. Threshold 1.0 = must round-trip
+#   through OptimizedCV.model_validate() cleanly.
+
+cv_optimizer:
+  hallucination_max: 0.30          # DeepEval default; lower is better
+  no_fabrication_min: 0.90         # custom GEval — strict NO_FABRICATION
+  json_schema_min: 1.0             # deterministic; must validate
+
+# ----------------------------------------------------------------------
+# Cover Letter — generate_cover_letter()
+# ----------------------------------------------------------------------
+# AnswerRelevancyMetric: standard 0.7 cutoff from DeepEval docs — the
+#   answer must address what was asked (JD + CV) without drifting.
+# NotGenericGEval: our custom criterion — score 1.0 if the letter
+#   names the company AND ties at least one CV achievement to a JD
+#   requirement. 0.7 is generous for v0; recalibration will likely
+#   raise this to 0.8 once we see real outputs.
+# Length: kept as a deterministic guard (200-3000 chars), not in this
+#   file — see the eval test directly.
+
+cover_letter:
+  answer_relevancy_min: 0.70       # DeepEval default
+  not_generic_min: 0.70            # custom GEval — placeholder bar
+
+# ----------------------------------------------------------------------
+# Interview Coach — generate_interview_prep_materials()
+# ----------------------------------------------------------------------
+# FaithfulnessMetric: 0.7 is DeepEval's published cutoff. Coach outputs
+#   are highly structured (3 technical Qs + 2 behavioral Qs + cheat
+#   sheet) — the metric checks each Q ties back to either a JD-extracted
+#   tech (for technical) or a competency (for behavioral).
+# JSON schema validation: 1.0 — the entire bundle must validate.
+
+interview_coach:
+  faithfulness_min: 0.70           # DeepEval default
+  json_schema_min: 1.0             # deterministic
+
+# ----------------------------------------------------------------------
+# CV Profiler — parse(PDF)
+# ----------------------------------------------------------------------
+# FaithfulnessMetric: same 0.7 cutoff. Profiler extracts named entities
+#   from a PDF; the judge checks that extracted skills/years/etc.
+#   actually appear in the source text.
+# Field-level: deterministic ratios — at least 80% of expected skills
+#   present, total_years_experience within ±1 of expected. These live
+#   in the eval test as constants, not here.
+
+cv_profiler:
+  faithfulness_min: 0.70           # DeepEval default
+  json_schema_min: 1.0             # deterministic

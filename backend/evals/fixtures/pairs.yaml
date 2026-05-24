@@ -1,0 +1,110 @@
+# Canonical CV × JD pairings for the eval suite.
+#
+# Each pair has a ``case`` tag describing the kind of match we expect
+# (strong / partial / weak). This lets us check that LLM-judge scores
+# track human intuition — strong matches should land above weak ones.
+#
+# IMPORTANT: bump ``schema_version`` whenever the OptimizedCV or
+# ParsedCVData Pydantic schemas change. The deterministic eval
+# ``test_*_schema_fingerprint_is_recorded`` reads this version to
+# guard against silent fixture-vs-schema drift.
+
+schema_version: 1
+
+# Mix of clear matches, near-misses, and intentional mismatches.
+# 15 pairs total = 5 JDs × 3 CVs each on average. We deliberately keep
+# some weak matches in the suite so the LLM judge has signal to
+# discriminate; an eval set of only strong matches would saturate at 1.0.
+pairs:
+  # ----- Strong matches (CV background aligns well with JD ask) -----
+  - id: mid_backend_python__senior_python_backend
+    cv: mid_backend_python
+    jd: senior_python_backend
+    case: strong
+    notes: 4 yrs FastAPI/Postgres vs JD asking 5+; under-leveled but tech aligned.
+
+  - id: senior_devops__devops_sre
+    cv: senior_devops
+    jd: devops_sre
+    case: strong
+    notes: 8 yrs K8s/Terraform/AWS — overqualified but bullseye stack.
+
+  - id: senior_ml_engineer__ml_engineer
+    cv: senior_ml_engineer
+    jd: ml_engineer
+    case: strong
+    notes: 7 yrs ML, PyTorch, two-tower experience — direct hit.
+
+  - id: mid_fullstack__fullstack_typescript
+    cv: mid_fullstack
+    jd: fullstack_typescript
+    case: strong
+    notes: 3 yrs TS/React/Node/Postgres in fintech-adjacent space.
+
+  - id: junior_frontend__react_frontend
+    cv: junior_frontend
+    jd: react_frontend
+    case: strong
+    notes: Junior but stack matches; JD asks 3 yrs so under-leveled.
+
+  # ----- Partial matches (some overlap, some stretch) -----
+  - id: senior_java__senior_python_backend
+    cv: senior_java
+    jd: senior_python_backend
+    case: partial
+    notes: Senior backend skills + Kafka match, but Java not Python.
+
+  - id: senior_java__devops_sre
+    cv: senior_java
+    jd: devops_sre
+    case: partial
+    notes: K8s exposure in current role, but no Terraform / pure-SRE depth.
+
+  - id: mid_backend_python__ml_engineer
+    cv: mid_backend_python
+    jd: ml_engineer
+    case: partial
+    notes: Python + Postgres overlap, no ML experience in CV.
+
+  - id: mid_fullstack__react_frontend
+    cv: mid_fullstack
+    jd: react_frontend
+    case: partial
+    notes: React strong but JD wants frontend specialist; full-stack is broader.
+
+  - id: senior_devops__senior_python_backend
+    cv: senior_devops
+    jd: senior_python_backend
+    case: partial
+    notes: Python tooling work, but not as primary discipline.
+
+  # ----- Weak matches (intentional mismatches to stress the suite) -----
+  - id: junior_data_analyst__senior_python_backend
+    cv: junior_data_analyst
+    jd: senior_python_backend
+    case: weak
+    notes: Junior level vs senior role; SQL-focused, not backend.
+
+  - id: junior_qa__react_frontend
+    cv: junior_qa
+    jd: react_frontend
+    case: weak
+    notes: QA familiar with React via Playwright, but not a builder.
+
+  - id: mid_mobile_ios__fullstack_typescript
+    cv: mid_mobile_ios
+    jd: fullstack_typescript
+    case: weak
+    notes: Mobile != web; transferable mindset but stack mismatch.
+
+  - id: senior_security__devops_sre
+    cv: senior_security
+    jd: devops_sre
+    case: weak
+    notes: Linux/AWS overlap, but security != SRE despite shared platform tooling.
+
+  - id: junior_frontend__ml_engineer
+    cv: junior_frontend
+    jd: ml_engineer
+    case: weak
+    notes: Almost zero overlap — present to anchor the bottom of the scale.

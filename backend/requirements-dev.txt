@@ -25,3 +25,13 @@ bandit==1.7.10
 # --- Development Tools ---
 pre-commit==4.0.1
 ipython==8.29.0
+
+# --- Agent Evals (Phase 3+: LLM-as-judge) ---
+# DeepEval brings pytest-native LLM evaluation metrics (Hallucination,
+# Faithfulness, AnswerRelevancy, G-Eval). Pinned to current stable line
+# so CI is reproducible; bump deliberately during dependency updates.
+deepeval==2.0.0
+# PyYAML — already a transitive dep of FastAPI/Alembic but pinned
+# explicitly so ``evals/conftest.py`` doesn't break if the transitive
+# install changes.
+pyyaml>=6.0,<7.0

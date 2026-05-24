@@ -1,0 +1,27 @@
+Senior Machine Learning Engineer — Recommendations Team — StreamMedia
+
+About us
+StreamMedia is a streaming platform serving 8M monthly users across 14 countries. The Recommendations team owns the algorithms that decide what every user sees on the home page. We are a 5-person team, fully remote, Europe-only.
+
+What you will do
+- Own end-to-end ML projects: dataset, model, offline eval, online A/B, monitoring.
+- Iterate on our two-tower retrieval model in PyTorch and our gradient-boosted ranker.
+- Improve the offline evaluation suite — currently the bottleneck for shipping speed.
+- Partner with data engineering on Spark feature pipelines and with infra on inference latency.
+- Mentor 1 mid-level engineer.
+
+Requirements
+- 5+ years in production ML, ideally on recommendations, search, or ranking.
+- Deep Python and PyTorch.
+- Comfort with offline-eval design (ranking metrics, partial credit, fairness).
+- Experience with at least one feature store and one experiment platform.
+- Strong written communication — we run async design reviews.
+
+Bonus
+- MLflow, Airflow, AWS SageMaker.
+- Published work or strong open-source contributions.
+- Experience scaling models to >100M users.
+
+Compensation
+- €90-120k base + meaningful equity.
+- 30 days off, conference budget, custom hardware setup.

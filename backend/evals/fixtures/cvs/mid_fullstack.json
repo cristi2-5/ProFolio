@@ -1,0 +1,37 @@
+{
+  "full_name": "Ioana Dumitrescu",
+  "email": "ioana.dumitrescu@example.com",
+  "phone": "+40 700 000 006",
+  "location": "Bucharest, Romania",
+  "summary": "Full-stack developer with 3 years on React + Node.js + PostgreSQL. Shipped 2 customer-facing features end-to-end at FintechStart, including the KYC onboarding flow currently processing 5k applications/month.",
+  "skills": ["End-to-End Ownership", "Async Collaboration", "Code Review", "Product Sense"],
+  "technologies": ["TypeScript", "JavaScript", "React", "Node.js", "Express", "PostgreSQL", "Redis", "Jest", "Docker", "Git"],
+  "experience": [
+    {
+      "role": "Full-Stack Developer",
+      "company": "FintechStart",
+      "period": "Jul 2022 - Present",
+      "description": "Built the KYC onboarding flow end-to-end (React + Node + Postgres). Reduced manual review time by 38% via automated risk scoring. Co-owner of the design system.",
+      "technologies": ["TypeScript", "React", "Node.js", "PostgreSQL"]
+    },
+    {
+      "role": "Frontend Developer",
+      "company": "AgencyOne",
+      "period": "Aug 2021 - Jun 2022",
+      "description": "Delivered 4 marketing sites in Next.js and 2 in WordPress. Built reusable form components used across 12 client projects.",
+      "technologies": ["JavaScript", "Next.js", "React"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "BSc Computer Science",
+      "institution": "University Politehnica of Bucharest",
+      "year": "2021",
+      "details": ""
+    }
+  ],
+  "certifications": [],
+  "languages": ["Romanian (native)", "English (C1)"],
+  "total_years_experience": 3,
+  "senior_technologies": ["React", "Node.js"]
+}

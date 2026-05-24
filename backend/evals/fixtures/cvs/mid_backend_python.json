@@ -1,0 +1,37 @@
+{
+  "full_name": "Andrei Popescu",
+  "email": "andrei.popescu@example.com",
+  "phone": "+40 700 000 002",
+  "location": "Cluj-Napoca, Romania",
+  "summary": "Backend engineer with 4 years building Python services on FastAPI and PostgreSQL. Owned the order-processing API at Acme — 99.95% SLO, 2k RPS peak. Strong on observability and async patterns.",
+  "skills": ["System Design", "Code Review", "Mentoring Juniors", "On-Call Ownership"],
+  "technologies": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker", "Kubernetes", "Prometheus", "Grafana", "Git", "REST APIs"],
+  "experience": [
+    {
+      "role": "Backend Engineer",
+      "company": "Acme Logistics",
+      "period": "Mar 2022 - Present",
+      "description": "Own the order-processing FastAPI service handling 2k RPS. Designed the idempotency layer that cut duplicate-charge incidents by 95%. Mentored 2 juniors.",
+      "technologies": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker"]
+    },
+    {
+      "role": "Backend Developer",
+      "company": "DataFlow SRL",
+      "period": "Jun 2020 - Feb 2022",
+      "description": "Built data ingestion pipelines in Python. Migrated a Django monolith to 6 FastAPI services. Set up Prometheus monitoring across the stack.",
+      "technologies": ["Python", "Django", "FastAPI", "PostgreSQL", "Prometheus"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "BSc Computer Science",
+      "institution": "Technical University of Cluj-Napoca",
+      "year": "2020",
+      "details": "Graduated with honors."
+    }
+  ],
+  "certifications": [],
+  "languages": ["Romanian (native)", "English (C2)"],
+  "total_years_experience": 4,
+  "senior_technologies": ["Python", "PostgreSQL", "FastAPI"]
+}

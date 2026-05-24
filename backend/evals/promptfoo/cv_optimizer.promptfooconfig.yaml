@@ -1,0 +1,127 @@
+# Promptfoo config — CV Optimizer evals via custom Python provider.
+#
+# Strategy
+#   * Provider = real ``CVOptimizerAgent`` (no prompt re-extraction).
+#   * Asserts are layered: cheap deterministic first (``is-json``,
+#     ``javascript`` checks on changes_summary), expensive LLM judge
+#     last (``llm-rubric`` for NO_FABRICATION semantics).
+#   * Two test cases — one strong-match pair, one partial-match pair.
+#     The pair anchors the bottom of the quality scale so the HTML
+#     report shows the LLM-judge's discrimination ability.
+#
+# Quota budget (must stay under free-tier 20 RPD / 5 RPM)
+#   2 test cases × (1 agent call + 1 llm-rubric judge call) = 4 calls.
+#   ``maxConcurrency: 1`` forces sequential execution → no RPM bursts.
+#
+# Running
+#   cd backend/evals/promptfoo
+#   npx promptfoo eval -c cv_optimizer.promptfooconfig.yaml
+#   npx promptfoo view              # opens HTML report in browser
+#
+# CI
+#   ``evals-llm`` job runs ``npx promptfoo eval --output ...`` and
+#   uploads the JSON result as an artifact.
+
+description: CV Optimizer — NO_FABRICATION + JD-keyword coverage evals
+
+providers:
+  # The agent itself. Custom Python provider — see provider file for
+  # details. ``maxConcurrency: 1`` is critical: the free-tier Gemini
+  # cap is 5 RPM, so any parallelism risks 429 chains.
+  - id: file://providers/cv_optimizer_provider.py
+    config:
+      maxConcurrency: 1
+      # 30000 ms delay before each call to this provider — keeps the
+      # rolling 60-s window at ≤4 LLM calls when paired with the
+      # llm-rubric judge that fires immediately after each provider
+      # call. Same maths as ``evals/deepeval/conftest.py``.
+      delay: 30000
+
+# Prompt is a no-op placeholder — the real input comes from
+# ``vars`` (cv_name + jd_name) which the provider uses to load
+# fixtures. Promptfoo requires this section to exist though.
+prompts:
+  - 'Optimize the CV for the {{jd_name}} role (CV: {{cv_name}}).'
+
+defaultTest:
+  # LLM-rubric grader — when an assertion uses ``type: llm-rubric``
+  # Promptfoo routes the rubric prompt through this provider. We
+  # reuse the same Gemini Flash via the OpenAI-compatible endpoint
+  # so the eval suite touches exactly one upstream model + API key.
+  options:
+    provider:
+      id: openai:chat:gemini-2.5-flash
+      config:
+        apiBaseUrl: https://generativelanguage.googleapis.com/v1beta/openai
+        apiKey: '{{ env.OPENAI_API_KEY }}'
+        temperature: 0.0
+  # Always-on asserts that don't burn judge quota. Failing any of
+  # these short-circuits the more expensive llm-rubric call.
+  assert:
+    - type: is-json
+      # Cheap structural gate — if the output isn't valid JSON there's
+      # no point asking the rubric judge to evaluate it.
+    - type: javascript
+      # The NO_FABRICATION contract mandates a non-empty
+      # ``changes_summary`` audit trail. Cheap deterministic check.
+      value: |
+        const parsed = JSON.parse(output);
+        return Array.isArray(parsed.changes_summary) && parsed.changes_summary.length > 0;
+
+tests:
+  - description: 'Strong match — mid backend Python × senior Python role'
+    vars:
+      cv_name: mid_backend_python
+      jd_name: senior_python_backend
+    assert:
+      - type: llm-rubric
+        value: |
+          The provided output is an optimized CV in JSON form for a senior Python
+          backend role. Evaluate the following criteria:
+
+          1. EVERY skill, technology, tool, company, year, and achievement
+             appearing in the output is also present (or directly implied) in
+             the original CV provided as context below.
+          2. The ``changes_summary`` field lists modifications made for review.
+          3. The output is valid JSON conforming to OptimizedCV schema.
+
+          Original CV (source of truth):
+          ```json
+          {
+            "summary": "Backend engineer with 4 years building Python services on FastAPI and PostgreSQL.",
+            "skills": ["System Design", "Code Review", "Mentoring Juniors", "On-Call Ownership"],
+            "technologies": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker", "Kubernetes", "Prometheus", "Grafana", "Git", "REST APIs"],
+            "experience": "Backend Engineer at Acme Logistics (2022-Present); Backend Developer at DataFlow SRL (2020-2022)",
+            "total_years_experience": 4
+          }
+          ```
+
+          Output PASSES if all three criteria hold. Output FAILS if any new
+          skill / technology / company / year appears that isn't in the
+          original CV.
+
+  - description: 'Partial match — senior Java × senior Python role (cross-language stretch)'
+    vars:
+      cv_name: senior_java
+      jd_name: senior_python_backend
+    assert:
+      - type: llm-rubric
+        value: |
+          The provided output is an optimized CV in JSON form. The candidate's
+          background is Java/Spring; the target role is Python/FastAPI.
+          Evaluate:
+
+          1. The output does NOT claim Python or FastAPI experience the
+             candidate does not have. (Generic transferable backend skills
+             are acceptable; specific Python frameworks are NOT.)
+          2. Java + Spring + Kafka experience is preserved and emphasised
+             as transferable.
+          3. The ``changes_summary`` field is populated.
+
+          Output PASSES if all three criteria hold. The hardest failure mode
+          to catch is the model claiming Python proficiency that isn't there —
+          mark FAIL if you see ``"Python"`` or ``"FastAPI"`` appearing in
+          ``skills`` / ``technologies`` arrays.
+
+# Output reporting
+outputPath: ../reports/promptfoo-cv-optimizer.json

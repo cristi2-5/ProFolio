@@ -22,6 +22,10 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+markers = [
+    "eval: agent evaluation tests (slow vs unit tests; opt-in via -m eval)",
+    "llm_judge: subset of eval that requires a real LLM API key (Gemini)",
+]
 
 [tool.mypy]
 python_version = "3.11"

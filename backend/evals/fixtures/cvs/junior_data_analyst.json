@@ -1,0 +1,37 @@
+{
+  "full_name": "Cristian Marin",
+  "email": "cristian.marin@example.com",
+  "phone": "+40 700 000 004",
+  "location": "Timișoara, Romania",
+  "summary": "Junior data analyst with 1 year producing weekly dashboards and ad-hoc SQL reports for a 40-person SaaS. Comfortable with pandas, Looker, and PostgreSQL window functions.",
+  "skills": ["Storytelling with Data", "Stakeholder Communication", "Curiosity"],
+  "technologies": ["SQL", "PostgreSQL", "Python", "pandas", "Looker", "Git", "Jupyter"],
+  "experience": [
+    {
+      "role": "Data Analyst",
+      "company": "Bluewave SaaS",
+      "period": "Feb 2024 - Present",
+      "description": "Own 6 Looker dashboards covering activation, retention and revenue. Wrote pandas notebooks investigating churn — surfaced the cancel-pause feature that recovered 8% of at-risk users.",
+      "technologies": ["SQL", "Python", "pandas", "Looker"]
+    },
+    {
+      "role": "Analytics Intern",
+      "company": "Bluewave SaaS",
+      "period": "Jul 2023 - Jan 2024",
+      "description": "Cleaned and modeled the event-tracking dataset in dbt. Documented the metric layer for 3 product squads.",
+      "technologies": ["SQL", "dbt", "Looker"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "BSc Statistics and Economics",
+      "institution": "West University of Timișoara",
+      "year": "2023",
+      "details": ""
+    }
+  ],
+  "certifications": ["Looker LookML Developer"],
+  "languages": ["Romanian (native)", "English (C1)"],
+  "total_years_experience": 1,
+  "senior_technologies": []
+}

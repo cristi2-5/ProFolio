@@ -1,0 +1,37 @@
+{
+  "full_name": "Maria Ionescu",
+  "email": "maria.ionescu@example.com",
+  "phone": "+40 700 000 001",
+  "location": "Bucharest, Romania",
+  "summary": "Junior frontend developer with 1 year of professional React experience. Comfortable building responsive UIs from Figma designs and integrating REST APIs.",
+  "skills": ["Problem Solving", "Communication", "Agile", "Pair Programming"],
+  "technologies": ["JavaScript", "React", "HTML", "CSS", "Git", "Vite", "REST APIs"],
+  "experience": [
+    {
+      "role": "Frontend Developer",
+      "company": "WebStart SRL",
+      "period": "Jan 2024 - Present",
+      "description": "Built and maintained 4 React components for an e-commerce dashboard. Migrated 3 legacy class components to hooks. Wrote unit tests with Vitest.",
+      "technologies": ["React", "JavaScript", "Vitest", "CSS"]
+    },
+    {
+      "role": "Frontend Intern",
+      "company": "WebStart SRL",
+      "period": "Jul 2023 - Dec 2023",
+      "description": "Pair-programmed with senior engineers on customer-facing screens. Fixed accessibility issues flagged by Lighthouse.",
+      "technologies": ["React", "HTML", "CSS"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "BSc Computer Science",
+      "institution": "University of Bucharest",
+      "year": "2023",
+      "details": "Bachelor thesis on accessibility-first design patterns."
+    }
+  ],
+  "certifications": [],
+  "languages": ["Romanian (native)", "English (C1)"],
+  "total_years_experience": 1,
+  "senior_technologies": []
+}
