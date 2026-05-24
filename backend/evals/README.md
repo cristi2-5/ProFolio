@@ -33,11 +33,16 @@ backend/evals/
 cd backend
 
 # Deterministic only — no API key required (uses mock mode).
+# Works out of the box after ``pip install -r requirements-dev.txt``.
 pytest evals/ -c evals/pytest.ini -v -m "eval and not llm_judge"
 
-# Future (Phase 3): full LLM-judge layer.
-# Requires a real OPENAI_API_KEY (Gemini key works — we use the
-# OpenAI-compatible Gemini endpoint).
+# LLM-judge layer (Phase 3+). Requires:
+#   1. DeepEval installed on-demand (kept out of requirements-dev.txt
+#      because its dependency pins conflict with the repo's pydantic /
+#      tenacity production pins — see requirements-dev.txt comment).
+#   2. A real OPENAI_API_KEY (Gemini key works — we use the
+#      OpenAI-compatible Gemini endpoint).
+pip install 'deepeval>=4.0,<5.0'
 export OPENAI_API_KEY="<your-gemini-key>"
 pytest evals/ -c evals/pytest.ini -v -m "llm_judge"
 ```

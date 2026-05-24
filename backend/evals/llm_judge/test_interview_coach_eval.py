@@ -34,13 +34,18 @@ from __future__ import annotations
 
 import pytest
 
+# DeepEval is installed on-demand in the ``evals-llm`` CI job only —
+# see ``requirements-dev.txt`` for why. ``importorskip`` makes pytest
+# collection survive on machines (and CI jobs) that don't have it.
+pytest.importorskip("deepeval", reason="deepeval optional; install for LLM-judge layer")
+
 from app.agents.interview_coach import InterviewCoachAgent
 from deepeval import assert_test
 from deepeval.metrics import FaithfulnessMetric
 from deepeval.test_case import LLMTestCase
 
 from evals.conftest import load_cv_fixture, load_jd_fixture, load_thresholds
-from evals.deepeval.judge import build_judge
+from evals.llm_judge.judge import build_judge
 
 
 SKIP_REASON = (

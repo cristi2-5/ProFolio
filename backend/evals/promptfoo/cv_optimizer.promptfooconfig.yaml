@@ -34,7 +34,7 @@ providers:
       # 30000 ms delay before each call to this provider — keeps the
       # rolling 60-s window at ≤4 LLM calls when paired with the
       # llm-rubric judge that fires immediately after each provider
-      # call. Same maths as ``evals/deepeval/conftest.py``.
+      # call. Same maths as ``evals.llm_judge/conftest.py``.
       delay: 30000
 
 # Prompt is a no-op placeholder — the real input comes from

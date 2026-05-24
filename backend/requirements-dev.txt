@@ -26,16 +26,22 @@ bandit==1.7.10
 pre-commit==4.0.1
 ipython==8.29.0
 
-# --- Agent Evals (Phase 3+: LLM-as-judge) ---
-# DeepEval brings pytest-native LLM evaluation metrics (Hallucination,
-# Faithfulness, AnswerRelevancy, G-Eval). Pinned to the 4.x line because
-# 2.x requires ``tenacity~=8.4.1`` which conflicts with the repo's
-# ``tenacity==9.0.0`` (production dependency). 4.x supports tenacity 9.
-# Range pin instead of exact so security patches land without churning
-# the lockfile; bump the upper bound deliberately on major version
-# upgrades.
-deepeval>=4.0,<5.0
+# --- Agent Evals (Phase 1+2 deterministic layer) ---
 # PyYAML — already a transitive dep of FastAPI/Alembic but pinned
 # explicitly so ``evals/conftest.py`` doesn't break if the transitive
 # install changes.
 pyyaml>=6.0,<7.0
+
+# --- Agent Evals (Phase 3+ LLM-as-judge) — installed ON-DEMAND ---
+# DeepEval is NOT installed here because every released version
+# conflicts with the repo's pinned production dependencies:
+#   * deepeval 2.x → requires tenacity~=8.4.1 (repo has tenacity==9.0.0)
+#   * deepeval 4.x → requires pydantic>=2.11.7 (repo has pydantic==2.10.5)
+# Upgrading those pins repo-wide would risk regressions in the agent
+# code paths (pydantic validators changed subtly in 2.11). Instead,
+# deepeval is installed only in the ``evals-llm`` CI job that needs it,
+# and each ``evals/deepeval/test_*.py`` uses ``pytest.importorskip`` so
+# pytest collection passes even when deepeval is absent.
+#
+# To run LLM-judge evals locally:
+#   pip install 'deepeval>=4.0,<5.0'

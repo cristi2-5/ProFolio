@@ -30,14 +30,19 @@ from pathlib import Path
 
 import pytest
 
+# DeepEval is installed on-demand in the ``evals-llm`` CI job only —
+# see ``requirements-dev.txt`` for why. ``importorskip`` makes pytest
+# collection survive on machines (and CI jobs) that don't have it.
+pytest.importorskip("deepeval", reason="deepeval optional; install for LLM-judge layer")
+
 from app.agents.cv_profiler import CVProfilerAgent, ParsedCVData
 from deepeval import assert_test
 from deepeval.metrics import FaithfulnessMetric
 from deepeval.test_case import LLMTestCase
 
 from evals.conftest import load_thresholds
-from evals.deepeval.judge import build_judge
-from evals.deepeval.metrics.json_schema_metric import JSONSchemaMetric
+from evals.llm_judge.judge import build_judge
+from evals.llm_judge.metrics.json_schema_metric import JSONSchemaMetric
 from evals.fixtures.golden_pdfs import (
     EXPECTED_FIELDS,
     GOLDEN_CV_BODIES,

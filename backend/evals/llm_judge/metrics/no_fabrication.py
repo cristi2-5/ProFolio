@@ -25,7 +25,7 @@ from typing import Any
 from deepeval.metrics import GEval
 from deepeval.test_case import SingleTurnParams
 
-from evals.deepeval.judge import build_judge
+from evals.llm_judge.judge import build_judge
 
 
 def NoFabricationGEval(*, threshold: float, model: Any | None = None) -> GEval:

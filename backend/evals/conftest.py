@@ -53,11 +53,14 @@ def pytest_collection_modifyitems(
     DeepEval layer. Deterministic tests must opt in to ``eval`` explicitly
     so we don't accidentally include unrelated helpers in the suite.
     """
-    deepeval_root = EVALS_DIR / "deepeval"
+    # Folder is named ``llm_judge/`` (not ``deepeval/``) deliberately —
+    # ``import deepeval`` would otherwise shadow the real pip package
+    # via pytest's auto-path-insertion of the test directory.
+    llm_judge_root = EVALS_DIR / "llm_judge"
     for item in items:
         item_path = Path(str(item.fspath)).resolve()
         try:
-            item_path.relative_to(deepeval_root)
+            item_path.relative_to(llm_judge_root)
         except ValueError:
             continue
         item.add_marker(pytest.mark.llm_judge)

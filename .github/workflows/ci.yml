@@ -279,6 +279,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      - name: Install DeepEval (on-demand)
+        # DeepEval lives outside requirements-dev.txt because its 4.x
+        # line bumps pydantic to >=2.11.7 (repo pins 2.10.5) and 2.x
+        # bumps tenacity (repo pins 9.0.0). Both upgrades would risk
+        # subtle regressions across the agent code paths. We isolate
+        # the pin to this job only — pip resolver may upgrade pydantic
+        # transitively here, but that affects only this ephemeral
+        # runner, not production.
+        run: pip install 'deepeval>=4.0,<5.0'
+
       - name: Run DeepEval LLM-judge suite
         run: |
           echo "::group::DeepEval Suite"
