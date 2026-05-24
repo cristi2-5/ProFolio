@@ -86,15 +86,19 @@ async def test_idor_other_user_job_endpoints_reject(client, test_session):
     # Patch service methods to BLOW UP if reached — should never be called when 403'd
     sentinel = AssertionError("auth check should reject before reaching LLM")
 
-    with patch(
-        "app.services.cv_optimizer_service.CVOptimizerService.optimize_cv_for_job",
-        new=AsyncMock(side_effect=sentinel),
-    ), patch(
-        "app.services.cv_optimizer_service.CVOptimizerService.generate_cover_letter",
-        new=AsyncMock(side_effect=sentinel),
-    ), patch(
-        "app.services.interview_coach_service.InterviewCoachService.generate_interview_prep_materials",
-        new=AsyncMock(side_effect=sentinel),
+    with (
+        patch(
+            "app.services.cv_optimizer_service.CVOptimizerService.optimize_cv_for_job",
+            new=AsyncMock(side_effect=sentinel),
+        ),
+        patch(
+            "app.services.cv_optimizer_service.CVOptimizerService.generate_cover_letter",
+            new=AsyncMock(side_effect=sentinel),
+        ),
+        patch(
+            "app.services.interview_coach_service.InterviewCoachService.generate_interview_prep_materials",
+            new=AsyncMock(side_effect=sentinel),
+        ),
     ):
         # POST /api/cv-optimizer/optimize
         r = await client.post(
@@ -136,9 +140,7 @@ async def test_idor_other_user_job_endpoints_reject(client, test_session):
         assert r.status_code == 403, r.text
 
         # GET /api/jobs/{job_id}/interview-prep
-        r = await client.get(
-            f"/api/jobs/{job_id}/interview-prep", headers=headers
-        )
+        r = await client.get(f"/api/jobs/{job_id}/interview-prep", headers=headers)
         assert r.status_code == 403, r.text
 
         # PATCH /api/jobs/{job_id}/interview-prep

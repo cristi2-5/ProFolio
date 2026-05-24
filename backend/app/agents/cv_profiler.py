@@ -60,7 +60,8 @@ class Experience(BaseModel):
     role: str = Field(default="", description="Job title or role name")
     company: str = Field(default="", description="Company or organization name")
     period: str = Field(
-        default="", description="Employment period (e.g., '2020-2023', 'Jan 2020 - Present')"
+        default="",
+        description="Employment period (e.g., '2020-2023', 'Jan 2020 - Present')",
     )
     description: str = Field(
         default="", description="Brief description of responsibilities and achievements"
@@ -79,7 +80,9 @@ class Education(BaseModel):
         default="",
         description="Degree type and field (e.g., 'Bachelor of Science in Computer Science')",
     )
-    institution: str = Field(default="", description="School, university, or institution name")
+    institution: str = Field(
+        default="", description="School, university, or institution name"
+    )
     year: str = Field(
         default="", description="Graduation year or period (e.g., '2020', '2018-2022')"
     )
@@ -308,15 +311,22 @@ class CVProfilerAgent:
             json_data = json.loads(response_content)
         except json.JSONDecodeError:
             import re
+
             match = re.search(r"\{.*\}", response_content, re.DOTALL)
             if match:
                 try:
                     json_data = json.loads(match.group())
                 except json.JSONDecodeError as e2:
-                    logger.error("Cannot extract JSON for %s | raw=%r", filename, response_content[:600])
+                    logger.error(
+                        "Cannot extract JSON for %s | raw=%r",
+                        filename,
+                        response_content[:600],
+                    )
                     raise CVProfilerError("LLM returned malformed CV data") from e2
             else:
-                logger.error("No JSON found for %s | raw=%r", filename, response_content[:600])
+                logger.error(
+                    "No JSON found for %s | raw=%r", filename, response_content[:600]
+                )
                 raise CVProfilerError("LLM returned malformed CV data")
 
         # Normalise list fields that a model might return as comma-separated strings
@@ -328,7 +338,13 @@ class CVProfilerAgent:
             return []
 
         if isinstance(json_data, dict):
-            for list_field in ("skills", "technologies", "certifications", "languages", "senior_technologies"):
+            for list_field in (
+                "skills",
+                "technologies",
+                "certifications",
+                "languages",
+                "senior_technologies",
+            ):
                 if list_field in json_data:
                     json_data[list_field] = _to_list(json_data[list_field])
 
@@ -339,7 +355,11 @@ class CVProfilerAgent:
                 "Pydantic validation failed for %s: %s | keys=%s | raw=%r",
                 filename,
                 e,
-                list(json_data.keys()) if isinstance(json_data, dict) else type(json_data),
+                (
+                    list(json_data.keys())
+                    if isinstance(json_data, dict)
+                    else type(json_data)
+                ),
                 response_content[:800],
             )
             # Last resort: build a minimal ParsedCVData from whatever we can salvage
@@ -357,7 +377,9 @@ class CVProfilerAgent:
 
         logger.info(
             "Successfully parsed CV %s: %d skills, %d jobs",
-            filename, len(parsed_data.skills), len(parsed_data.experience),
+            filename,
+            len(parsed_data.skills),
+            len(parsed_data.experience),
         )
         return parsed_data
 

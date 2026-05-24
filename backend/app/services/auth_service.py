@@ -114,9 +114,7 @@ class AuthService:
                 raise DuplicateError("User", "email")
 
         # Cross-field validation: mid/senior require niche.
-        new_seniority = update_dict.get(
-            "seniority_level", current_user.seniority_level
-        )
+        new_seniority = update_dict.get("seniority_level", current_user.seniority_level)
         new_niche = update_dict.get("niche", current_user.niche)
         if new_seniority in ("mid", "senior") and not new_niche:
             raise ValueError(

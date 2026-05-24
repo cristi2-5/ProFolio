@@ -213,8 +213,13 @@ class TestCVProfilerAgent:
 
     @pytest.mark.asyncio
     async def test_cv_profiler_initialization(self, cv_agent):
-        """CV Profiler should initialize correctly."""
-        assert cv_agent.model == "gpt-4o-mini"
+        """CV Profiler should initialize correctly.
+
+        Migrated to Gemini in commit 2cb2acf (phases 5-7) — the agent now
+        exposes ``models`` (tuple of fallback chain) instead of a single
+        ``model`` attr; first entry is the primary.
+        """
+        assert cv_agent.models[0] == "gemini-2.5-flash"
         assert cv_agent.max_tokens == 2000
         assert cv_agent.temperature == 0.1
 
@@ -309,7 +314,9 @@ class TestCVProfilerAgent:
         assert "model" in stats
         assert "api_configured" in stats
         assert "last_health_check" in stats
-        assert stats["model"] == "gpt-4o-mini"
+        # Stats expose the primary (first) model of the fallback chain —
+        # was ``gpt-4o-mini`` pre-Gemini-migration; now ``gemini-2.5-flash``.
+        assert stats["model"] == "gemini-2.5-flash"
 
 
 # =====================================================================

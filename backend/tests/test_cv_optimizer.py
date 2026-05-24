@@ -175,7 +175,9 @@ John Doe"""
         cv_optimizer.client.chat.completions.create.assert_called_once()
         call_args = cv_optimizer.client.chat.completions.create.call_args
 
-        assert call_args.kwargs["model"] == "gemini-2.5-flash"  # primary model in fallback chain
+        assert (
+            call_args.kwargs["model"] == "gemini-2.5-flash"
+        )  # primary model in fallback chain
         assert call_args.kwargs["response_format"] == {"type": "json_object"}
         assert len(call_args.kwargs["messages"]) == 2
         assert call_args.kwargs["messages"][0]["role"] == "system"
@@ -216,7 +218,9 @@ John Doe"""
         cv_optimizer.client.chat.completions.create.assert_called_once()
         call_args = cv_optimizer.client.chat.completions.create.call_args
 
-        assert call_args.kwargs["model"] == "gemini-2.5-flash"  # primary model in fallback chain
+        assert (
+            call_args.kwargs["model"] == "gemini-2.5-flash"
+        )  # primary model in fallback chain
         assert call_args.kwargs["max_tokens"] == 1500
         assert call_args.kwargs["temperature"] == 0.4
 

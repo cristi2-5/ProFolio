@@ -326,16 +326,29 @@ class TestMatchJobsToUser:
     """Tests for the job matching / scoring logic."""
 
     @pytest.mark.asyncio
-    async def test_no_resume_returns_empty(self, service, mock_user, mock_scraped_job):
-        """Without an active resume, no user-job associations are created."""
+    async def test_no_resume_still_creates_user_job(
+        self, service, mock_user, mock_scraped_job
+    ):
+        """Without an active resume, jobs are still associated with score 0.
+
+        Changed in commit 6eceb10 (fix(ux+scanner)) — the matcher used to
+        skip users without a resume (returning an empty list), but that
+        meant first-time users who scanned saw "Found N jobs!" followed
+        by an empty UI list. ``min_match_score`` was lowered from 30 to 0
+        so jobs always appear, sorted by score.
+        """
         db = AsyncMock(spec=AsyncSession)
         db.execute = AsyncMock(
             return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
         )
+        db.add = MagicMock()
+        db.flush = AsyncMock()
 
         result = await service.match_jobs_to_user(mock_user, [mock_scraped_job], db)
 
-        assert result == []
+        assert len(result) == 1
+        assert result[0].match_score == 0
+        db.add.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_high_score_creates_user_job(
@@ -362,10 +375,16 @@ class TestMatchJobsToUser:
         db.add.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_low_score_skips_user_job(
+    async def test_low_score_still_creates_user_job(
         self, service, mock_user, mock_scraped_job, mock_active_resume
     ):
-        """Jobs scoring below the threshold do NOT get a UserJob record."""
+        """Low match scores still produce a UserJob — threshold is 0.
+
+        Changed in commit 6eceb10 (fix(ux+scanner)) — the 30-point
+        cutoff used to silently drop low-scoring jobs, leaving the UI
+        empty. The score is now retained on the row as a sort key
+        rather than acting as a filter.
+        """
         db = AsyncMock(spec=AsyncSession)
         resume_result = MagicMock(
             scalar_one_or_none=MagicMock(return_value=mock_active_resume)
@@ -375,14 +394,14 @@ class TestMatchJobsToUser:
         db.add = MagicMock()
         db.flush = AsyncMock()
 
-        # Force a score below the 30-point threshold
         with patch.object(service, "_calculate_match_score", return_value=10):
             user_jobs = await service.match_jobs_to_user(
                 mock_user, [mock_scraped_job], db
             )
 
-        assert user_jobs == []
-        db.add.assert_not_called()
+        assert len(user_jobs) == 1
+        assert user_jobs[0].match_score == 10
+        db.add.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_existing_user_job_is_skipped(

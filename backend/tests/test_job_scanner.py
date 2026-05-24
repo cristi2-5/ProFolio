@@ -92,7 +92,11 @@ class TestBuildSearchQuery:
         initial Adzuna query.
         """
         mock_preferences.keywords = [
-            "fastapi", "postgresql", "docker", "aws", "kubernetes",
+            "fastapi",
+            "postgresql",
+            "docker",
+            "aws",
+            "kubernetes",
         ]
         result = agent._build_search_query(mock_preferences)
         assert result == "Python Developer"
