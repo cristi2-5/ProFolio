@@ -225,7 +225,7 @@ function Login() {
               marginBottom: 'var(--space-2)',
             }}
           >
-            <span className="text-gradient">Auto</span>Apply
+            <span className="text-gradient">Pro</span>Folio
           </h1>
           <p style={{ color: 'var(--color-text-secondary)' }}>
             {isRegister

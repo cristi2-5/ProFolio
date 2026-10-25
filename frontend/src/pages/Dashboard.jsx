@@ -158,16 +158,18 @@ function Dashboard() {
 
   /**
    * Handle successful preferences save.
+   *
+   * Optimistically marks preferencesSet=true so the onboarding checklist
+   * updates immediately instead of waiting for the refetch. Then we refetch
+   * to reconcile server truth, and auto-trigger the first scan if the user
+   * already has a CV uploaded.
    */
-  const handlePreferencesSaved = () => {
+  const handlePreferencesSaved = async () => {
     setShowPreferences(false);
-    fetchStats();
-
-    // Automatically trigger job scan after preferences are set
-    if (stats.resumeUploaded) {
-      setTimeout(() => {
-        triggerJobScan();
-      }, 1000);
+    setStats((prev) => ({ ...prev, preferencesSet: true }));
+    await fetchStats();
+    if (stats.resumeUploaded && !firstScanDone) {
+      triggerJobScan();
     }
   };
 
@@ -227,6 +229,21 @@ function Dashboard() {
             onClick={() => navigate('/resumes')}
           >
             📄 Manage Resumes
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowPreferences((v) => !v)}
+            title={
+              stats.preferencesSet
+                ? 'Edit your job search preferences'
+                : 'Set your job search preferences'
+            }
+          >
+            {showPreferences
+              ? '✖ Close Preferences'
+              : stats.preferencesSet
+                ? '⚙️ Edit Preferences'
+                : '⚙️ Set Preferences'}
           </button>
           <button
             className="btn btn-primary"

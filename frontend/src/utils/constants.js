@@ -8,7 +8,7 @@
 export const API_BASE_URL = '/api';
 
 /** Application display name. */
-export const APP_NAME = 'Auto-Apply';
+export const APP_NAME = 'ProFolio';
 
 /** Application tagline. */
 export const APP_TAGLINE = 'Job Hunter & Interview Strategist';

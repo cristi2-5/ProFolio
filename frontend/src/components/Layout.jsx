@@ -61,7 +61,7 @@ function Layout() {
       >
         <div className="sidebar-logo">
           <h1>
-            <span className="text-gradient">Auto</span>Apply
+            <span className="text-gradient">Pro</span>Folio
           </h1>
         </div>
 
